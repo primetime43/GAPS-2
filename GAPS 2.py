@@ -1,4 +1,7 @@
+import webbrowser
+import json
 from flask import Flask, render_template, request, jsonify
+from plexapi.myplex import MyPlexPinLogin, MyPlexAccount
 
 app = Flask(__name__)
 
@@ -79,6 +82,75 @@ def save_tmdb_key():
 
     # Return a response
     return jsonify(result='Success')
+
+# Function to be called when the link plex account button is clicked
+tokens = {}
+
+@app.route('/link_plex_account', methods=['POST'])
+def link_plex_account():
+    print("link_plex_account")
+
+    try:
+        headers = {'X-Plex-Client-Identifier': 'your_unique_client_identifier'}
+        pinlogin = MyPlexPinLogin(headers=headers, oauth=True)
+        oauth_url = pinlogin.oauthUrl()
+        webbrowser.open(oauth_url)
+        pinlogin.run(timeout=120)
+        pinlogin.waitForLogin()
+        if pinlogin.token:
+            plex_account = MyPlexAccount(token=pinlogin.token)
+            username = plex_account.username  # Get the username
+            resources = [resource for resource in plex_account.resources() if resource.owned]
+            servers = [f"{resource.name} ({resource.connections[0].address})" for resource in resources]
+
+            print(f"servers: {servers}")
+ 
+            # Store tokens in the dictionary
+            for resource in resources:
+                server_name = f"{resource.name} ({resource.connections[0].address})"
+                tokens[server_name] = pinlogin.token
+
+            print(f'Logged In As {username}')
+            # Return the JSON response
+            return jsonify(servers=servers)  # directly return the list, jsonify will convert it to JSON
+        else:
+            print('Error', 'Could not log in to Plex account')
+    except Exception as e:
+        print('Error', f'Could not log in to Plex account: {str(e)}')
+
+    # Return an empty JSON response if there was an error
+    return jsonify(servers=[])
+
+@app.route('/fetch_libraries/<serverName>')
+def fetch_libraries(serverName):
+    # Fetch the Plex account using the token
+    token = tokens.get(serverName, None)
+    if token is None:
+        print("Token not found")
+        return jsonify(error="Token not found"), 404
+
+    print("Token: " + token)
+    plex_account = MyPlexAccount(token=token)
+
+    # Find the server with the matching serverName
+    server = None
+    for resource in plex_account.resources():
+        if f"{resource.name} ({resource.connections[0].address})" == serverName:
+            print(f"Attempting to connect to server {serverName}")
+            server = resource.connect()
+            break
+
+    if server is None:
+        print("Server not found")
+        return jsonify(error="Server not found"), 404
+
+    # Fetch the libraries
+    libraries = [section.title for section in server.library.sections()]
+
+    print(f"Libraries: {libraries}")
+
+    # Return the JSON response
+    return jsonify(libraries=libraries, token=token)
 
 if __name__ == '__main__':
     app.run(debug=True)
