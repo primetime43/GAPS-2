@@ -111,47 +111,6 @@
                 </script>
 
                 </form>
-
-                <div class="spinner-border text-primary gaps-hide top-margin" id="tmdbSpinner" role="status">
-                    <span class="sr-only">Loading...</span>
-                </div>
-
-                <div class="alert alert-dismissible alert-danger gaps-hide top-margin" id="tmdbTestError">
-                    <button class="close" data-hide="alert" type="button">&times;</button>
-                    <h4 class="alert-heading">Error!</h4>
-                    <p class="mb-0">Could not connect to The MovieDB. Check the key and logs and try again.</p>
-                </div>
-
-                <div class="alert alert-dismissible alert-success gaps-hide top-margin" id="tmdbTestSuccess">
-                    <button class="close" data-hide="alert" type="button">&times;</button>
-                    <h4 class="alert-heading">Success!</h4>
-                    <p class="mb-0">Your MovieDB key is valid.</p>
-                </div>
-
-                <div class="alert alert-dismissible alert-danger gaps-hide top-margin" id="tmdbSaveError">
-                    <button class="close" data-hide="alert" type="button">&times;</button>
-                    <h4 class="alert-heading">Error!</h4>
-                    <p class="mb-0">Could not save your MovieDB key. Check the logs and try again.</p>
-                </div>
-
-                <div class="alert alert-dismissible alert-success gaps-hide top-margin" id="tmdbSaveSuccess">
-                    <button class="close" data-hide="alert" type="button">&times;</button>
-                    <h4 class="alert-heading">Success!</h4>
-                    <p class="mb-0">Your MovieDB key saved successfully.</p>
-                </div>
-
-                <div class="alert alert-dismissible alert-danger gaps-hide top-margin" id="movieStatusSaveError">
-                    <button class="close" data-hide="alert" type="button">&times;</button>
-                    <h4 class="alert-heading">Error!</h4>
-                    <p class="mb-0">Could not save your movie status. Check the logs and try again.</p>
-                </div>
-
-                <div class="alert alert-dismissible alert-success gaps-hide top-margin" id="movieStatusSaveSuccess">
-                    <button class="close" data-hide="alert" type="button">&times;</button>
-                    <h4 class="alert-heading">Success!</h4>
-                    <p class="mb-0">Your movie status saved successfully.</p>
-                </div>
-
             </div>
             <div class="tab-pane fade top-margin" id="plex">
                 <form class="needs-validation" id="plexConfiguration" novalidate>
@@ -201,158 +160,26 @@
                         </div>
                         <small class="form-text text-muted" id="plexTokenLabel">Here is the token of the selected
                             server/device.</small>
+                        <button class="btn btn-primary mt-2" id="savePlexData">Save Plex Data</button>
                     </div>
                 </form>
-
-                <div class="tab-pane fade top-margin" id="schedule">
-                    <p>Gaps can be set to automatically run. This is through a cron job that will search for new Plex
-                        Libraries
-                        on each configured server, then search for all movies in each library, and produce a missing
-                        movie
-                        list.</p>
-
-                    <form class="needs-validation" id="scheduleConfiguration" novalidate th:object="${plexProperties}">
-                        <div class="form-group">
-                            <label for="setSchedule">Set Schedule</label>
-                            <select class="form-control" id="setSchedule">
-                                <div th:each="schedule : ${schedules}" th:remove="tag">
-                                    <option th:value="${schedule.id}" th:text="${schedule.message}"
-                                        th:selected="${plexProperties?.schedule?.getId().equals(schedule.id)?: false}">
-                                    </option>
-                                </div>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label for="scheduleEnabled">Schedule Agent</label>
-                            <select class="form-control" id="scheduleEnabled">
-                                <option value="false">Disabled</option>
-                                <option value="true" th:selected="${plexProperties?.schedule?.getEnabled() ?: false}">
-                                    Enabled</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <a class="btn btn-primary" href="javascript:void(0)" id="saveSchedule"
-                                onclick="saveSchedule();" type="button">Save</a>
-                        </div>
-                    </form>
-
-                    <div class="spinner-border text-primary gaps-hide top-margin" id="scheduleSpinner" role="status">
-                        <span class="sr-only">Loading...</span>
-                    </div>
-
-                    <div class="alert alert-dismissible alert-danger gaps-hide top-margin" id="scheduleSaveError">
-                        <button class="close" data-hide="alert" type="button">&times;</button>
-                        <h4 class="alert-heading">Error!</h4>
-                        <p class="mb-0">Could not save your schedule. Check the logs and try again.</p>
-                    </div>
-
-                    <div class="alert alert-dismissible alert-success gaps-hide top-margin" id="scheduleSaveSuccess">
-                        <button class="close" data-hide="alert" type="button">&times;</button>
-                        <h4 class="alert-heading">Success!</h4>
-                        <p class="mb-0">Your schedule saved successfully.</p>
-                    </div>
-                </div>
-                <div class="tab-pane fade top-margin" id="notification">
-                    <div th:insert="fragments/notifications :: discord"></div>
-                    <hr class="thin">
-                    <div th:insert="fragments/notifications :: email"></div>
-                    <hr class="thin">
-                    <div th:insert="fragments/notifications :: gotify"></div>
-                    <hr class="thin">
-                    <div th:insert="fragments/notifications :: push-bullet"></div>
-                    <hr class="thin">
-                    <div th:insert="fragments/notifications :: push-over"></div>
-                    <hr class="thin">
-                    <div th:insert="fragments/notifications :: slack"></div>
-                    <hr class="thin">
-                    <div th:insert="fragments/notifications :: telegram"></div>
-                </div>
-                <div class="tab-pane fade top-margin" id="folders">
-                    <p>folders</p>
-                </div>
-                <div class="tab-pane fade top-margin" id="network">
-
-                    <form class="needs-validation" id="networkConfiguration" novalidate>
-                        <h4 class="text-primary">Plex</h4>
-                        <div class="form-group">
-                            <label for="port">Plex Connection Timeout</label>
-                            <div class="input-group">
-                                <input aria-describedby="plexConnectionTimeoutHelp" class="form-control"
-                                    id="plexConnectionTimeout" required type="text" value="2500">
-                                <div class="invalid-feedback" id="emptyPlexConnectionTimeout">
-                                    Please enter a valid time.
-                                </div>
-                            </div>
-                            <small class="form-text text-muted" id="plexConnectionTimeoutHelp">Default connect timeout
-                                (in
-                                milliseconds).</small>
-                        </div>
-                        <div class="form-group">
-                            <label for="port">Plex Connection Timeout</label>
-                            <div class="input-group">
-                                <input aria-describedby="plexReaTimeoutHeldp" class="form-control" id="plexReadTimeout"
-                                    required type="text" value="2500">
-                                <div class="invalid-feedback" id="emptyPlexReadTimeout">
-                                    Please enter a valid time.
-                                </div>
-                            </div>
-                            <small class="form-text text-muted" id="plexReadTimeoutHelp">Default read timeout (in
-                                milliseconds).</small>
-                        </div>
-                        <div class="form-group">
-                            <label for="port">Plex Write Timeout</label>
-                            <div class="input-group">
-                                <input aria-describedby="plexWriteTimeoutHelp" class="form-control"
-                                    id="plexWriteTimeout" required type="text" value="2500">
-                                <div class="invalid-feedback" id="emptyPlexWriteTimeout">
-                                    Please enter a valid time.
-                                </div>
-                            </div>
-                            <small class="form-text text-muted" id="plexWriteTimeoutHelp">Default write timeout (in
-                                milliseconds).</small>
-                        </div>
-
-                        <a class="btn btn-primary" href="javascript:void(0)" id="updateNetwork"
-                            onclick="updateNetwork();" type="button">Update</a>
-
-                    </form>
-                </div>
-                <div class="tab-pane fade top-margin" id="advanced">
-
-                    <form class="needs-validation" id="advancedConfiguration" novalidate>
-                        <div class="form-group">
-                            <div class="form-check">
-                                <input type="checkbox" class="form-check-input" id="confirmDeleteAll"
-                                    onchange="setDeleteAllEnabledOrDisabled();">
-                                <label class="form-check-label" for="confirmDeleteAll">Delete All Stored Data</label>
-                            </div>
-                        </div>
-                        <button class="btn btn-primary" id="deleteAll" onclick="nuke();" disabled
-                            type="button">Delete</button>
-                    </form>
-
-                    <div class="alert alert-dismissible alert-danger gaps-hide top-margin" id="deleteAllError">
-                        <button class="close" data-hide="alert" type="button">&times;</button>
-                        <h4 class="alert-heading">Error!</h4>
-                        <p class="mb-0">Could not delete stored data. Check the logs and try again.</p>
-                    </div>
-
-                    <div class="alert alert-dismissible alert-success gaps-hide top-margin" id="deleteAllSuccess">
-                        <button class="close" data-hide="alert" type="button">&times;</button>
-                        <h4 class="alert-heading">Success!</h4>
-                        <p class="mb-0">Deleting stored data successful.</p>
-                    </div>
-                </div>
-
             </div>
         </div>
 
         <div th:insert="fragments/common :: contextPath"></div>
 
+        <div id="loading" style="display: none;">
+            <div class="spinner-border text-primary" role="status"></div>
+            <span>Loading Data...</span>
+        </div>
+
         <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
         <script>
             $(document).ready(function () {
                 $('#linkPlexAccountBtn').on('click', function () {
+                    // Show the loading text/spinner
+                    $('#loading').show();
+
                     $.post('/link_plex_account', function (response) {
                         // Update the dropdown options with the server data
                         var servers = response.servers; // No need to parse JSON, Flask's jsonify already does this.
@@ -362,6 +189,9 @@
                         servers.forEach(function (server) {
                             dropdown.append($('<option>').text(server).attr('value', server));
                         });
+
+                        // Hide the loading text/spinner
+                        $('#loading').hide();
                     });
                 });
 
@@ -369,6 +199,10 @@
                 $('#server').on('change', function () { // Change this to the correct id
                     var selectedServer = $(this).val();
                     if (selectedServer !== '') {
+
+                        // Show the loading text/spinner
+                        $('#loading').show();
+
                         // Extract the server name from the selected string
                         var serverName = selectedServer;
 
@@ -384,11 +218,21 @@
                             // Set the Plex token
                             var token = response.token; // Assuming the response has a "token" key
                             $('#plexToken').val(token);
+
+                            // Hide the loading text/spinner
+                            $('#loading').hide();
                         });
                     }
                 });
 
+                // Event listener for Save button click
+                $('#savePlexData').on('click', function () {
+                    var selectedServer = $('#server').val();
+                    var library = $('#library').val();
+                    var token = $('#plexToken').val();
 
+
+                });
             });
         </script>
 
