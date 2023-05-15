@@ -23,7 +23,6 @@
 
         <ul class="nav nav-tabs">
             <li class="nav-item">
-                <span class="badge badge-pill badge-primary" style="float:right;margin-bottom:-10px;">New</span>
                 <a class="nav-link active" data-toggle="tab" href="#tmdb" id="tmdbTab">TMDB</a>
             </li>
             <li class="nav-item">
@@ -134,7 +133,7 @@
                             signed in account.</small>
                     </div>
 
-                    <div class="form-group">
+                    <!-- <div class="form-group">
                         <label for="library">Plex Libraries</label>
                         <div class="input-group">
                             <select class="form-control" id="library" required>
@@ -146,7 +145,7 @@
                         </div>
                         <small class="form-text text-muted" id="libraryHelp">These are the libraries from the selected
                             Plex server.</small>
-                    </div>
+                    </div> -->
 
                     <div class="form-group">
                         <label for="plexToken">Plex Token</label>
@@ -160,7 +159,10 @@
                         </div>
                         <small class="form-text text-muted" id="plexTokenLabel">Here is the token of the selected
                             server/device.</small>
-                        <button class="btn btn-primary mt-2" id="savePlexData">Save Plex Data</button>
+                        <button class="btn btn-primary mt-2" id="savePlexData" onclick="savePlexServer(event);">Set As
+                            Active Plex Server</button>
+                        <button class="btn btn-primary mt-2" id="showActiveServerBtn"
+                            onclick="showActiveServerData(event);">Show Active Server</button>
                     </div>
                 </form>
             </div>
@@ -169,8 +171,13 @@
         <div th:insert="fragments/common :: contextPath"></div>
 
         <div id="loading" style="display: none;">
-            <div class="spinner-border text-primary" role="status"></div>
+            <div class="spinner-border text-primary" role="status" id="plexSpinner"></div>
             <span>Loading Data...</span>
+        </div>
+
+        <div id="saving" style="display: none;">
+            <div class="spinner-border text-primary" role="status" id="plexSpinner"></div>
+            <span>Saving Data...</span>
         </div>
 
         <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
@@ -183,20 +190,24 @@
                     $.post('/link_plex_account', function (response) {
                         // Update the dropdown options with the server data
                         var servers = response.servers; // No need to parse JSON, Flask's jsonify already does this.
-                        var dropdown = $('#server'); // Change this to the correct id
+                        var dropdown = $('#server');
                         dropdown.empty();
-                        dropdown.append($('<option>').text('Select a Plex server').attr('disabled', 'disabled').attr('selected', 'selected'));
                         servers.forEach(function (server) {
                             dropdown.append($('<option>').text(server).attr('value', server));
                         });
+
+                        // Set the Plex token
+                        var token = response.token; // Assuming the response has a "token" key
+                        $('#plexToken').val(token);
 
                         // Hide the loading text/spinner
                         $('#loading').hide();
                     });
                 });
 
+
                 // Event listener for dropdown selection change
-                $('#server').on('change', function () { // Change this to the correct id
+                /* $('#server').on('change', function () { // Change this to the correct id
                     var selectedServer = $(this).val();
                     if (selectedServer !== '') {
 
@@ -206,11 +217,10 @@
                         // Extract the server name from the selected string
                         var serverName = selectedServer;
 
-                        $.get('/fetch_libraries/' + serverName, function (response) {
+                         $.get('/fetch_libraries/' + serverName, function (response) {
                             var libraries = response.libraries; // No need to parse JSON, Flask's jsonify already does this.
                             var dropdown = $('#library');
                             dropdown.empty();
-                            dropdown.append($('<option>').text('Select a Plex library').attr('disabled', 'disabled').attr('selected', 'selected'));
                             libraries.forEach(function (library) {
                                 dropdown.append($('<option>').text(library).attr('value', library));
                             });
@@ -221,18 +231,15 @@
 
                             // Hide the loading text/spinner
                             $('#loading').hide();
-                        });
+                        }); 
                     }
-                });
+                }); */
 
                 // Event listener for Save button click
-                $('#savePlexData').on('click', function () {
+                /*$('#savePlexData').on('click', function () {
                     var selectedServer = $('#server').val();
-                    var library = $('#library').val();
                     var token = $('#plexToken').val();
-
-
-                });
+                });*/
             });
         </script>
 
@@ -247,8 +254,90 @@
                     $(this).text('Show');
                 }
             });
-
         </script>
+
+        <script>
+            function savePlexServer(event) {
+                event.preventDefault(); // Prevent the default form submission behavior
+
+                // Show the loading text/spinner
+                $('#saving').show();
+
+                var server = document.getElementById('server').value;
+                var token = document.getElementById('plexToken').value;
+
+                // Create the request body
+                var requestData = {
+                    server: server,
+                    token: token
+                };
+
+                // Send an AJAX request to save the data on the Python side
+                $.ajax({
+                    url: '/save_plex_data',
+                    type: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify(requestData),
+                    success: function (response) {
+                        // Handle success response here
+                        console.log('response: ' + response);
+                        alert('Data saved successfully');
+
+                        // Clear the form fields
+                        document.getElementById('server').value = '';
+                        document.getElementById('plexToken').value = '';
+
+                        // Hide the loading text/spinner
+                        $('#saving').hide();
+                    },
+                    error: function (error) {
+                        // Handle error response here
+                        console.log(error);
+
+                        // Hide the loading text/spinner
+                        $('#saving').hide();
+                    }
+                });
+            }
+
+
+            function showActiveServerData(event) {
+                event.preventDefault(); // Prevent the default form submission behavior
+
+                // Send an AJAX request to get the active server data from the Python side
+                $.ajax({
+                    url: '/get_active_server',
+                    type: 'GET',
+                    success: function (response) {
+                        // Handle success response here
+                        console.log(response);
+
+                        var server = response.server;
+                        var library = response.library;
+                        var token = response.token;
+
+                        if (server && library && token) {
+                            document.getElementById('server').value = server;
+                            document.getElementById('library').value = library;
+                            document.getElementById('plexToken').value = token;
+
+                            console.log('Active server: ' + server);
+                        } else {
+                            console.log('No active server data found');
+                            // Clear the form fields
+                            document.getElementById('server').value = '';
+                            document.getElementById('library').value = '';
+                            document.getElementById('plexToken').value = '';
+                        }
+                    },
+                    error: function (error) {
+                        // Handle error response here
+                        console.log(error);
+                    }
+                });
+            }
+        </script>
+
 
         <script src="{{ url_for('static', filename='js/libraries/jquery-3.4.1.min.js') }}"
             type="text/javascript"></script>

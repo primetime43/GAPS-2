@@ -1,7 +1,7 @@
-import webbrowser
-import json
+import json, webbrowser, requests
 from flask import Flask, render_template, request, jsonify
-from plexapi.myplex import MyPlexPinLogin, MyPlexAccount
+from plexapi.myplex import MyPlexPinLogin, MyPlexAccount, PlexServer
+from PlexAccountData import PlexAccountData
 
 app = Flask(__name__)
 
@@ -39,7 +39,13 @@ def error():
 
 @app.route('/libraries')
 def libraries():
-    return render_template('libraries.html')
+    if currentActiveServer.selected_server in stored_plexAccounts:
+        libraries = currentActiveServer.libraries
+        return render_template('libraries.html', plexServer=currentActiveServer.selected_server, libraries=libraries, currentActiveServer=currentActiveServer)
+    
+    # Handle case when PlexAccountData is not found
+    return render_template('error.html', error='Data not found')
+
 
 @app.route('/mislabeled')
 def mislabeled():
@@ -83,9 +89,6 @@ def save_tmdb_key():
     # Return a response
     return jsonify(result='Success')
 
-# Function to be called when the link plex account button is clicked
-tokens = {}
-
 @app.route('/link_plex_account', methods=['POST'])
 def link_plex_account():
     print("link_plex_account")
@@ -98,6 +101,7 @@ def link_plex_account():
         pinlogin.run(timeout=120)
         pinlogin.waitForLogin()
         if pinlogin.token:
+            plex_data = PlexAccountData()  # Create a new PlexAccountData object
             plex_account = MyPlexAccount(token=pinlogin.token)
             username = plex_account.username  # Get the username
             resources = [resource for resource in plex_account.resources() if resource.owned]
@@ -109,30 +113,39 @@ def link_plex_account():
             for resource in resources:
                 server_name = f"{resource.name} ({resource.connections[0].address})"
                 tokens[server_name] = pinlogin.token
+                print("server name: " + server_name + " token: " + pinlogin.token) 
+                plex_data.add_token(server_name, pinlogin.token)
 
             print(f'Logged In As {username}')
-            # Return the JSON response
-            return jsonify(servers=servers)  # directly return the list, jsonify will convert it to JSON
+            plex_data.set_servers(servers)
+
+            # Store the PlexAccountData object in the array
+            plex_data_array.append(plex_data)
+
+            # Return the JSON response with servers and token
+            return jsonify(servers=servers, token=pinlogin.token)
         else:
             print('Error', 'Could not log in to Plex account')
     except Exception as e:
         print('Error', f'Could not log in to Plex account: {str(e)}')
-
+    
     # Return an empty JSON response if there was an error
-    return jsonify(servers=[])
+    return jsonify(servers=[], token=None)
 
 @app.route('/fetch_libraries/<serverName>')
 def fetch_libraries(serverName):
-    # Fetch the Plex account using the token
-    token = tokens.get(serverName, None)
-    if token is None:
-        print("Token not found")
-        return jsonify(error="Token not found"), 404
+    # Find the PlexAccountData object with the matching serverName
+    plex_data = next((data for data in plex_data_array if serverName in data.tokens), None)
+
+    if plex_data is None:
+        print("PlexAccountData not found")
+        return jsonify(error="PlexAccountData not found"), 404
+
+    token = plex_data.tokens.get(serverName)
 
     print("Token: " + token)
     plex_account = MyPlexAccount(token=token)
 
-    # Find the server with the matching serverName
     server = None
     for resource in plex_account.resources():
         if f"{resource.name} ({resource.connections[0].address})" == serverName:
@@ -144,13 +157,97 @@ def fetch_libraries(serverName):
         print("Server not found")
         return jsonify(error="Server not found"), 404
 
-    # Fetch the libraries
     libraries = [section.title for section in server.library.sections()]
 
     print(f"Libraries: {libraries}")
 
+    plex_data.set_libraries(libraries)
+    
+    # Store the libraries in a global variable
+    global stored_libraries
+    stored_libraries[serverName] = libraries
+
     # Return the JSON response
     return jsonify(libraries=libraries, token=token)
+
+
+@app.route('/save_plex_data', methods=['POST'])
+def save_plex_data():
+    try:
+        # Extract data from request
+        data = request.get_json()
+        selectedServer = data.get('server')
+        token = data.get('token')
+
+        # Create a new PlexAccountData object
+        plex_data = PlexAccountData()
+
+        # Update the PlexAccountData object with the selected server information
+        plex_data.set_selected_server(selectedServer)
+        plex_data.set_token(token)
+
+        # Fetch the libraries for the selected server
+        fetch_libraries(selectedServer)
+
+        # Get the libraries from the response
+        libraries = stored_libraries
+
+        # Update the PlexAccountData object with the libraries
+        plex_data.set_libraries(libraries)
+
+        # Store the PlexAccountData object in the dictionary with the server name as the key
+        stored_plexAccounts[selectedServer] = plex_data
+
+        # Set the libraries to currentActiveServer.libraries
+        currentActiveServer.libraries = libraries
+
+        # Set the selected_server and token when saving
+        currentActiveServer.selected_server = selectedServer
+        currentActiveServer.token = token
+
+        print('currentActiveServer:', currentActiveServer)  # Remove the conversion to string
+
+        return jsonify(result='Success')
+    except Exception as e:
+        return jsonify(result='Error', error=str(e))
+
+@app.route('/get_active_server', methods=['GET'])
+def get_active_server():
+    try:
+        global currentActiveServer
+        if currentActiveServer:
+            return jsonify(server=currentActiveServer.selected_server, library=currentActiveServer.selected_library, token=currentActiveServer.token)
+        else:
+            return jsonify(error='No active server found')
+    except Exception as e:
+        return jsonify(error=str(e))
+
+def get_movies_from_plex_library(token, server_name, library_name):
+    try:
+        # Connect to the Plex server using the token
+        server = PlexServer(token=token)
+        
+        # Get the library by name
+        library = server.library.section(library_name)
+        
+        # Retrieve all movies from the library
+        movies = library.search(libtype='movie')
+        
+        # Extract movie titles
+        movie_titles = [movie.title for movie in movies]
+        
+        return movie_titles
+    except Exception as e:
+        print('Error:', str(e))
+        return []
+
+stored_libraries = {} #dictionary to get the libraries later. Key is the Plex serverName
+stored_plexAccounts = {}
+tokens = {}
+# Create an array to store PlexAccountData objects
+plex_data_array = []
+# Create an instance of PlexAccountData as a global variable
+currentActiveServer = PlexAccountData()
 
 if __name__ == '__main__':
     app.run(debug=True)
