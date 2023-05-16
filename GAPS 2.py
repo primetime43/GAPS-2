@@ -2,6 +2,7 @@ import json, webbrowser, requests
 from flask import Flask, render_template, request, jsonify
 from plexapi.myplex import MyPlexPinLogin, MyPlexAccount, PlexServer
 from PlexAccountData import PlexAccountData
+import concurrent.futures
 
 app = Flask(__name__)
 
@@ -178,6 +179,7 @@ def save_plex_data():
         data = request.get_json()
         selectedServer = data.get('server')
         token = data.get('token')
+        libraries = data.get('libraries')
 
         # Create a new PlexAccountData object
         plex_data = PlexAccountData()
@@ -190,7 +192,7 @@ def save_plex_data():
         fetch_libraries(selectedServer)
 
         # Get the libraries from the response
-        libraries = stored_libraries
+        libraries = stored_libraries #this makes the key for libraries be the server name: stored_libraries[serverName] = libraries
 
         # Update the PlexAccountData object with the libraries
         plex_data.set_libraries(libraries)
@@ -198,14 +200,13 @@ def save_plex_data():
         # Store the PlexAccountData object in the dictionary with the server name as the key
         stored_plexAccounts[selectedServer] = plex_data
 
-        # Set the libraries to currentActiveServer.libraries
-        currentActiveServer.libraries = libraries
-
         # Set the selected_server and token when saving
         currentActiveServer.selected_server = selectedServer
         currentActiveServer.token = token
+        currentActiveServer.libraries = libraries
 
-        print('currentActiveServer:', currentActiveServer)  # Remove the conversion to string
+        #print('Calling get_movies_from_plex_library')
+        #get_movies_from_plex_library()
 
         return jsonify(result='Success')
     except Exception as e:
@@ -215,31 +216,60 @@ def save_plex_data():
 def get_active_server():
     try:
         global currentActiveServer
+        print(f"get_active_server libraries: {currentActiveServer.libraries}")
         if currentActiveServer:
-            return jsonify(server=currentActiveServer.selected_server, token=currentActiveServer.token)
+            return jsonify(server=currentActiveServer.selected_server, token=currentActiveServer.token, libraries=currentActiveServer.libraries)
         else:
             return jsonify(error='No active server found')
     except Exception as e:
         return jsonify(error=str(e))
 
-def get_movies_from_plex_library(token, server_name, library_name):
+@app.route('/get_movies', methods=['GET'])
+def get_movies_from_plex_library():
     try:
-        # Connect to the Plex server using the token
-        server = PlexServer(token=token)
-        
+        # Retrieve the library name from the query parameter
+        library_name = request.args.get('library_name')
+
+        # Connect to the Plex account using the token
+        plex_account = MyPlexAccount(token=currentActiveServer.token)
+
+        # Find the server resource associated with the selected server
+        server_resource = None
+        resources = [resource for resource in plex_account.resources() if resource.owned]
+        for resource in resources:
+            if f"{resource.name} ({resource.connections[0].address})" == currentActiveServer.selected_server:
+                print(f"resource: {resource.name} ({resource.connections[0].address}) == {currentActiveServer.selected_server}")
+                server_resource = resource
+                break
+
+        if server_resource is None:
+            return jsonify(error='Server resource not found')
+
+        # Connect to the server using the server resource
+        server = server_resource.connect()
+
         # Get the library by name
         library = server.library.section(library_name)
-        
-        # Retrieve all movies from the library
-        movies = library.search(libtype='movie')
-        
+
+        # Use a thread pool to retrieve movies asynchronously
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            # Retrieve all movies from the library in parallel
+            movies_future = executor.submit(library.search, libtype='movie')
+
+            # Wait for the movie retrieval to complete
+            movies = movies_future.result()
+
         # Extract movie titles
         movie_titles = [movie.title for movie in movies]
-        
-        return movie_titles
+
+        # Print each movie title
+        for title in movie_titles:
+            print('Movie:', title)
+
+        return jsonify(movies=movie_titles)
+
     except Exception as e:
-        print('Error:', str(e))
-        return []
+        return jsonify(error=str(e))
 
 stored_libraries = {} #dictionary to get the libraries later. Key is the Plex serverName
 stored_plexAccounts = {}

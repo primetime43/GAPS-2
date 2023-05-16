@@ -169,6 +169,7 @@
             <span>Saving Data...</span>
         </div>
 
+        <!-- Need to eventually use these to alert the user above success or fail -->
         <div class="alert alert-dismissible alert-success gaps-hide top-margin" id="savePlexDataSuccess"
             style="display: none;">
             <button class="close" data-hide="alert" type="button">&times;</button>
@@ -176,6 +177,7 @@
             <p class="mb-0">Data saved successfully.</p>
         </div>
 
+        <!-- Need to eventually use these to alert the user above success or fail -->
         <div class="alert alert-dismissible alert-danger gaps-hide top-margin" id="savePlexDataError"
             style="display: none;">
             <button class="close" data-hide="alert" type="button">&times;</button>
@@ -224,10 +226,27 @@
         </script>
 
         <script>
-            function displayActiveServerInfo(activeServer) {
+            function displayActiveServerInfo(activeServer, libraries) {
                 var activeServerInfo = document.getElementById('activeServerInfo');
-                activeServerInfo.innerHTML = '<h3>Current Active Server:</h3>' +
-                    '<p>' + activeServer + '</p>'
+                var librariesHTML = '';
+
+                if (libraries && libraries.hasOwnProperty(activeServer)) {
+                    librariesHTML += '<h3>Current Active Server:</h3>';
+                    librariesHTML += '<p>' + activeServer + '</p>';
+                    librariesHTML += '<ul>';
+
+                    var librariesList = libraries[activeServer];
+                    for (var i = 0; i < librariesList.length; i++) {
+                        librariesHTML += '<li>' + librariesList[i] + '</li>';
+                    }
+
+                    librariesHTML += '</ul>';
+                } else if (activeServer.length > 3) {
+                    librariesHTML += '<h3>Current Active Server:</h3>' +
+                        '<p>' + activeServer + '</p>'
+                    librariesHTML += '<p>No libraries found for the active server.</p>';
+                }
+                activeServerInfo.innerHTML = librariesHTML;
             }
 
             // Function to be called on page load
@@ -237,19 +256,17 @@
                     url: '/get_active_server',
                     type: 'GET',
                     success: function (response) {
-                        // Handle success response here
-                        console.log(response);
-
                         var server = response.server;
                         var token = response.token;
+                        var libraries = response.libraries;
 
                         if (server && token) {
                             //clear the textboxes
                             document.getElementById('server').value = '';
                             document.getElementById('plexToken').value = '';
-                            
+
                             // Call the displayActiveServerInfo function to update the displayed information
-                            displayActiveServerInfo(server, token);
+                            displayActiveServerInfo(server, libraries);
                         } else {
                             console.log('No active server data found');
                             // Clear the form fields
@@ -273,23 +290,13 @@
                 var server = document.getElementById('server').value;
                 var token = document.getElementById('plexToken').value;
 
-                // Create the request body
-                var requestData = {
-                    server: server,
-                    token: token
-                };
-
                 // Send an AJAX request to save the data on the Python side
                 $.ajax({
                     url: '/save_plex_data',
                     type: 'POST',
                     contentType: 'application/json',
-                    data: JSON.stringify(requestData),
+                    data: JSON.stringify({ server: server, token: token }),
                     success: function (response) {
-                        // Handle success response here
-                        //console.log('response: ' + response);
-                        //alert('Data saved successfully');
-
                         // Clear the form fields
                         document.getElementById('server').value = '';
                         document.getElementById('plexToken').value = '';
@@ -297,8 +304,6 @@
                         // Hide the loading text/spinner
                         $('#saving').hide();
 
-                        // Call the displayActiveServerInfo function to update the displayed information
-                        displayActiveServerInfo(requestData.server, requestData.token);
                     },
                     error: function (error) {
                         // Handle error response here
@@ -309,7 +314,6 @@
                     }
                 });
             }
-
 
             function showActiveServerData(event) {
                 event.preventDefault(); // Prevent the default form submission behavior
@@ -324,13 +328,14 @@
 
                         var server = response.server;
                         var token = response.token;
+                        var libraries = response.libraries
 
                         if (server && token) {
                             // Update the HTML elements with the active server information
                             document.getElementById('server').value = server;
                             document.getElementById('plexToken').value = token;
                             // Call the displayActiveServerInfo function to update the displayed information
-                            displayActiveServerInfo(server, token);
+                            displayActiveServerInfo(server, libraries);
                         } else {
                             console.log('No active server data found');
                             // Clear the form fields
