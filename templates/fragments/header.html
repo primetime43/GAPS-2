@@ -1,31 +1,72 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <title>Header</title>
 </head>
+
 <body>
-<header>
-    <nav class="navbar navbar-expand navbar-expand-lg navbar-dark bg-primary">
-        <a class="" href="{{ url_for('main_index') }}">
-            <img alt="" class="d-inline-block align-top" height="96" src="{{ url_for('static', filename='images/final-gaps.svg') }}" width="96">
-        </a>
-        <div class="collapse navbar-collapse" id="navbarColor01">
-            <ul class="navbar-nav mr-auto">
-                {% set activePage = activePage | default('') %}
-                {% for page in ['libraries', 'recommended', 'rss_check', 'configuration', 'updates', 'about'] %}
-                <li class="nav-item nav-button-padding {{ 'active' if activePage == page else '' }}">
-                    <a class="nav-link center-text nav-anchor-spacing" data-cy="{{ page }}" href="{{ url_for(page) }}">
-                        <div data-cy="{{ page }}Icon" class="icon {{ 'activePage' if activePage == page else 'default' }}"
-                             style="mask: url({{ url_for('static', filename='images/' + page + '.svg') }}) no-repeat center / contain; -webkit-mask: url({{ url_for('static', filename='images/' + page + '.svg') }}) no-repeat center / contain;">
-                        </div>
-                        {{ page_display_names[page] }} <!-- Display name from dictionary -->
-                    </a>
-                </li>
-                {% endfor %}
-            </ul>
-        </div>
-    </nav>
-</header>
+    <header>
+        <nav class="navbar navbar-expand navbar-expand-lg navbar-dark bg-primary">
+            <a class="" href="/">
+                <img alt="" class="d-inline-block align-top" height="96" src="/static/images/final-gaps.svg" width="96">
+            </a>
+            <div class="collapse navbar-collapse" id="navbarColor01">
+                <ul class="navbar-nav mr-auto">
+                    <li class="nav-item nav-button-padding {% if librariesPage %}active{% endif %}">
+                        <a class="nav-link center-text nav-anchor-spacing" data-cy="libraries" href="/libraries">
+                            <img alt="" class="d-inline-block align-top" src="/static/images/list-ul.svg" width="32"
+                                height="32">
+                            Libraries
+                        </a>
+                    </li>
+                    <li class="nav-item nav-button-padding {% if recommendedPage %}active{% endif %}">
+                        <a class="nav-link center-text nav-anchor-spacing" data-cy="recommended" href="/recommended">
+                            <img alt="" class="d-inline-block align-top" src="/static/images/collection-fill.svg"
+                                width="32" height="32">
+                            Missing
+                        </a>
+                    </li>
+                    <!--<li class="nav-item nav-button-padding {{ 'active' if mislabeledPage else '' }}" hidden>
+    <a data-cy="mislabeled" class="nav-link center-text nav-anchor-spacing" href="${gapsConfiguration.getBaseUrl()}/mislabeled">
+        <img alt="" class="d-inline-block align-top" src="/static/images/exclamation-triangle.svg" width="32" height="32">
+        Mislabeled
+    </a>
+</li>-->
+                    <li class="nav-item nav-button-padding {% if rssCheckPage %}active{% endif %}">
+                        <a class="nav-link center-text nav-anchor-spacing" data-cy="rssCheck" href="/rssCheck">
+                            <img alt="" class="d-inline-block align-top" src="/static/images/rss.svg" width="32"
+                                height="32">
+                            RSS
+                        </a>
+                    </li>
+                    <li class="nav-item nav-button-padding {% if configurationPage %}active{% endif %}">
+                        <a class="nav-link center-text nav-anchor-spacing" data-cy="configuration"
+                            href="/configuration">
+                            <img alt="" class="d-inline-block align-top" src="/static/images/gear.svg" width="32"
+                                height="32">
+                            Settings
+                        </a>
+                    </li>
+                    <li class="nav-item nav-button-padding {% if updatesPage %}active{% endif %}">
+                        <a class="nav-link center-text nav-anchor-spacing" data-cy="updates" href="/updates">
+                            <img alt="" class="d-inline-block align-top" src="/static/images/arrow-clockwise.svg"
+                                width="32" height="32">
+                            Updates
+                        </a>
+                    </li>
+                    <li class="nav-item nav-button-padding {% if aboutPage %}active{% endif %}">
+                        <a class="nav-link center-text nav-anchor-spacing" data-cy="about" href="/about">
+                            <img alt="" class="d-inline-block align-top" src="/static/images/info-circle.svg" width="32"
+                                height="32">
+                            About
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </nav>
+    </header>
 
 </body>
+
 </html>

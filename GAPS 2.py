@@ -216,7 +216,7 @@ def get_active_server():
     try:
         global currentActiveServer
         if currentActiveServer:
-            return jsonify(server=currentActiveServer.selected_server, library=currentActiveServer.selected_library, token=currentActiveServer.token)
+            return jsonify(server=currentActiveServer.selected_server, token=currentActiveServer.token)
         else:
             return jsonify(error='No active server found')
     except Exception as e:

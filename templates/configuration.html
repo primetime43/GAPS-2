@@ -133,20 +133,6 @@
                             signed in account.</small>
                     </div>
 
-                    <!-- <div class="form-group">
-                        <label for="library">Plex Libraries</label>
-                        <div class="input-group">
-                            <select class="form-control" id="library" required>
-                                <option value="" disabled selected>Select a Plex library</option>
-                            </select>
-                            <div class="invalid-feedback" id="plexLibraryLabel">
-                                Please select a Plex library.
-                            </div>
-                        </div>
-                        <small class="form-text text-muted" id="libraryHelp">These are the libraries from the selected
-                            Plex server.</small>
-                    </div> -->
-
                     <div class="form-group">
                         <label for="plexToken">Plex Token</label>
                         <div class="input-group">
@@ -164,6 +150,9 @@
                         <button class="btn btn-primary mt-2" id="showActiveServerBtn"
                             onclick="showActiveServerData(event);">Show Active Server</button>
                     </div>
+                    <h3 class="top-margin">Servers</h3>
+                    <hr class="white-line">
+                    <div id="activeServerInfo"></div>
                 </form>
             </div>
         </div>
@@ -178,6 +167,20 @@
         <div id="saving" style="display: none;">
             <div class="spinner-border text-primary" role="status" id="plexSpinner"></div>
             <span>Saving Data...</span>
+        </div>
+
+        <div class="alert alert-dismissible alert-success gaps-hide top-margin" id="savePlexDataSuccess"
+            style="display: none;">
+            <button class="close" data-hide="alert" type="button">&times;</button>
+            <h4 class="alert-heading">Success!</h4>
+            <p class="mb-0">Data saved successfully.</p>
+        </div>
+
+        <div class="alert alert-dismissible alert-danger gaps-hide top-margin" id="savePlexDataError"
+            style="display: none;">
+            <button class="close" data-hide="alert" type="button">&times;</button>
+            <h4 class="alert-heading">Error!</h4>
+            <p class="mb-0">Could not save data. Please try again.</p>
         </div>
 
         <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
@@ -204,42 +207,6 @@
                         $('#loading').hide();
                     });
                 });
-
-
-                // Event listener for dropdown selection change
-                /* $('#server').on('change', function () { // Change this to the correct id
-                    var selectedServer = $(this).val();
-                    if (selectedServer !== '') {
-
-                        // Show the loading text/spinner
-                        $('#loading').show();
-
-                        // Extract the server name from the selected string
-                        var serverName = selectedServer;
-
-                         $.get('/fetch_libraries/' + serverName, function (response) {
-                            var libraries = response.libraries; // No need to parse JSON, Flask's jsonify already does this.
-                            var dropdown = $('#library');
-                            dropdown.empty();
-                            libraries.forEach(function (library) {
-                                dropdown.append($('<option>').text(library).attr('value', library));
-                            });
-
-                            // Set the Plex token
-                            var token = response.token; // Assuming the response has a "token" key
-                            $('#plexToken').val(token);
-
-                            // Hide the loading text/spinner
-                            $('#loading').hide();
-                        }); 
-                    }
-                }); */
-
-                // Event listener for Save button click
-                /*$('#savePlexData').on('click', function () {
-                    var selectedServer = $('#server').val();
-                    var token = $('#plexToken').val();
-                });*/
             });
         </script>
 
@@ -257,6 +224,46 @@
         </script>
 
         <script>
+            function displayActiveServerInfo(activeServer) {
+                var activeServerInfo = document.getElementById('activeServerInfo');
+                activeServerInfo.innerHTML = '<h3>Current Active Server:</h3>' +
+                    '<p>' + activeServer + '</p>'
+            }
+
+            // Function to be called on page load
+            window.addEventListener('load', function () {
+                // Send an AJAX request to get the active server data from the Python side
+                $.ajax({
+                    url: '/get_active_server',
+                    type: 'GET',
+                    success: function (response) {
+                        // Handle success response here
+                        console.log(response);
+
+                        var server = response.server;
+                        var token = response.token;
+
+                        if (server && token) {
+                            //clear the textboxes
+                            document.getElementById('server').value = '';
+                            document.getElementById('plexToken').value = '';
+                            
+                            // Call the displayActiveServerInfo function to update the displayed information
+                            displayActiveServerInfo(server, token);
+                        } else {
+                            console.log('No active server data found');
+                            // Clear the form fields
+                            document.getElementById('server').value = '';
+                            document.getElementById('plexToken').value = '';
+                        }
+                    },
+                    error: function (error) {
+                        // Handle error response here
+                        console.log(error);
+                    }
+                });
+            });
+
             function savePlexServer(event) {
                 event.preventDefault(); // Prevent the default form submission behavior
 
@@ -280,8 +287,8 @@
                     data: JSON.stringify(requestData),
                     success: function (response) {
                         // Handle success response here
-                        console.log('response: ' + response);
-                        alert('Data saved successfully');
+                        //console.log('response: ' + response);
+                        //alert('Data saved successfully');
 
                         // Clear the form fields
                         document.getElementById('server').value = '';
@@ -289,6 +296,9 @@
 
                         // Hide the loading text/spinner
                         $('#saving').hide();
+
+                        // Call the displayActiveServerInfo function to update the displayed information
+                        displayActiveServerInfo(requestData.server, requestData.token);
                     },
                     error: function (error) {
                         // Handle error response here
@@ -313,20 +323,18 @@
                         console.log(response);
 
                         var server = response.server;
-                        var library = response.library;
                         var token = response.token;
 
-                        if (server && library && token) {
+                        if (server && token) {
+                            // Update the HTML elements with the active server information
                             document.getElementById('server').value = server;
-                            document.getElementById('library').value = library;
                             document.getElementById('plexToken').value = token;
-
-                            console.log('Active server: ' + server);
+                            // Call the displayActiveServerInfo function to update the displayed information
+                            displayActiveServerInfo(server, token);
                         } else {
                             console.log('No active server data found');
                             // Clear the form fields
                             document.getElementById('server').value = '';
-                            document.getElementById('library').value = '';
                             document.getElementById('plexToken').value = '';
                         }
                     },
@@ -336,8 +344,8 @@
                     }
                 });
             }
-        </script>
 
+        </script>
 
         <script src="{{ url_for('static', filename='js/libraries/jquery-3.4.1.min.js') }}"
             type="text/javascript"></script>

@@ -94,3 +94,11 @@ hr.thin {
     background-color: #333;
     width: 95%;
 }
+
+.white-line {
+    width: 75%;
+    height: 4px;
+    background-color: white;
+    margin-top: 10px;
+    margin-bottom: 10px;
+}
