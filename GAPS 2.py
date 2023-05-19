@@ -251,22 +251,38 @@ def get_movies_from_plex_library():
         # Get the library by name
         library = server.library.section(library_name)
 
-        # Use a thread pool to retrieve movies asynchronously
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            # Retrieve all movies from the library in parallel
-            movies_future = executor.submit(library.search, libtype='movie')
+        # Retrieve all movies from the library
+        movies = library.search(libtype='movie')
 
-            # Wait for the movie retrieval to complete
-            movies = movies_future.result()
+        # Extract movie data
+        movie_data = []
+        for movie in movies:
+            imdb_id = None
+            tmdb_id = None
+            tvdb_id = None
 
-        # Extract movie titles
-        movie_titles = [movie.title for movie in movies]
+            for guid in movie.guids:
+                if 'imdb' in guid.id:
+                    imdb_id = guid.id.replace('imdb://', '')
+                elif 'tmdb' in guid.id:
+                    tmdb_id = guid.id.replace('tmdb://', '')
+                elif 'tvdb' in guid.id:
+                    tvdb_id = guid.id.replace('tvdb://', '')
 
-        # Print each movie title
-        for title in movie_titles:
-            print('Movie:', title)
+            movie_info = {
+                'name': movie.title,
+                'year': movie.year,
+                'overview': movie.summary,
+                'posterUrl': movie.posterUrl,
+                'imdbId': imdb_id,
+                'tmdbId': tmdb_id,
+                'tvdbId': tvdb_id
+            }
+            movie_data.append(movie_info)
+            # Print each movie title
+            print('Movie:', movie.title)
 
-        return jsonify(movies=movie_titles)
+        return jsonify(movies=movie_data)
 
     except Exception as e:
         return jsonify(error=str(e))
