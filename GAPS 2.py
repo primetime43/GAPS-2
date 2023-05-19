@@ -226,9 +226,15 @@ def get_active_server():
 
 @app.route('/get_movies', methods=['GET'])
 def get_movies_from_plex_library():
+    global moviesFromSelectedLibrary  # Declare this variable as global
+
     try:
         # Retrieve the library name from the query parameter
         library_name = request.args.get('library_name')
+
+        # Check if data for the library already exists in global variable
+        if library_name in moviesFromSelectedLibrary:
+            return jsonify(movies=moviesFromSelectedLibrary[library_name])
 
         # Connect to the Plex account using the token
         plex_account = MyPlexAccount(token=currentActiveServer.token)
@@ -279,8 +285,11 @@ def get_movies_from_plex_library():
                 'tvdbId': tvdb_id
             }
             movie_data.append(movie_info)
-            # Print each movie title
-            print('Movie:', movie.title)
+
+        # store the data globally so if the html page is refreshed, 
+        # it doesnt have to make another request to get the data 
+        # (do this instead of storing locally as thats limited to 5 MB)
+        moviesFromSelectedLibrary[library_name] = movie_data
 
         return jsonify(movies=movie_data)
 
@@ -294,6 +303,7 @@ tokens = {}
 plex_data_array = []
 # Create an instance of PlexAccountData as a global variable
 currentActiveServer = PlexAccountData()
+moviesFromSelectedLibrary = {}
 
 if __name__ == '__main__':
     app.run(debug=True)
