@@ -295,6 +295,41 @@ def get_movies_from_plex_library():
 
     except Exception as e:
         return jsonify(error=str(e))
+    
+#Testing Here
+
+# Uses themoviedb api to get recommended movies, removes recommended mvoies already in the library
+@app.route('/recommendations', methods=['GET'])
+def get_recommendations():
+    global global_recommendations
+    movie_id = request.args.get('movieId', default = 11, type = int) 
+    api_key = ""  # Replace with your actual TMDb API key
+    url = f"https://api.themoviedb.org/3/movie/{movie_id}/recommendations"
+    params = {"api_key": api_key}
+    
+    response = requests.get(url, params=params)
+    data = response.json()
+
+    base_image_url = "https://image.tmdb.org/t/p/w500"
+    """ recommendations = [{'id': i['id'],
+                         'title': i['title'],
+                           'release_date': i['release_date'],
+                             'overview': i['overview'],
+                               'poster_path': base_image_url + i['poster_path']} for i in data['results']] """
+    recommendations = [{'tmdbId': i['id'], 
+                        'name': i['title'], 
+                        'year': i['release_date'][:4], 
+                        'posterUrl': base_image_url + i['poster_path'],
+                        'overview': i['overview']} for i in data['results']]
+    
+    global_recommendations = recommendations
+
+    return jsonify(recommendations)
+
+# Retrieve the recommended movies from python storage to use on the recommended page
+@app.route("/get_recommendated_movies", methods=["GET"])
+def get_recommendated_movies():
+    return jsonify(global_recommendations)
 
 stored_libraries = {} #dictionary to get the libraries later. Key is the Plex serverName
 stored_plexAccounts = {}

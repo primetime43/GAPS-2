@@ -27,16 +27,13 @@
     <div class="container">
         <h3 class="top-margin">Libraries</h3>
 
-        <div th:if="${plexServersFound}" th:remove="tag">
-            <h4 class="top-margin text-primary" data-cy="libraryTitle" id="libraryTitle"
-                th:data-key="*{plexLibrary.key}" th:data-machineIdentifier="*{plexServer.machineIdentifier}"
-                th:text="${plexServer.friendlyName} + ' - ' + ${plexLibrary.title}"></h4>
-
+        <div>
             <div class="dropdown show">
                 <a aria-expanded="false" aria-haspopup="true" class="btn btn-primary dropdown-toggle"
                     data-cy="dropdownMenu" data-toggle="dropdown" href="#" id="dropdownMenuLink"
                     role="button">Libraries</a>
 
+                <!-- When a library is selected in the dropdown, this will retrieve the movies in the selected library -->
                 <div aria-labelledby="dropdownMenuLink" class="dropdown-menu">
                     {% for library in libraries[currentActiveServer.selected_server] %}
                     <a class="dropdown-item" href="javascript:void(0)" data-cy="{{ library }}"
@@ -47,11 +44,10 @@
                 </div>
 
                 <!-- Display count dropdown and search box -->
-                <div style="display: flex; justify-content: space-between; align-items: center; display: none;"
-                    id="moviesOptions">
-                    <div>
+                <div class="d-flex justify-content-between align-items-center" id="moviesOptions">
+                    <div class="form-group">
                         <label for="movieDisplayCount">Display Count:</label>
-                        <select id="movieDisplayCount">
+                        <select id="movieDisplayCount" class="form-control" style="width: auto;">
                             <option value="10">10</option>
                             <option value="20">20</option>
                             <option value="30">30</option>
@@ -59,14 +55,12 @@
                             <option value="50">50</option>
                         </select>
                     </div>
-
-                    <div style="float: right;">
-                        <input type="text" id="movieSearchBox" placeholder="Search Movies">
+                
+                    <div class="form-group">
+                        <input type="text" id="movieSearchBox" placeholder="Search Movies" class="form-control">
                     </div>
-                </div>
+                </div>                
             </div>
-
-
 
             <div class="top-margin bottom-margin" id="noMovieContainer" style="display: none;">
                 <div class="card mx-auto" style="width: 24rem;">
@@ -120,6 +114,7 @@
 
     </div>
 
+    <!-- Shows after selecting a library in the dropdown and is retrieving the movies -->
     <div id="loading"
         style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.5); z-index: 9999;">
         <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%;">
@@ -128,32 +123,19 @@
         </div>
     </div>
 
-    <!--     <script id="movieCard" type="text/x-handlebars-template">
-        <div class="card">
-            <div class="row no-gutters">
-                <div class="col-12 col-md-auto">
-                    <img loading="lazy" style="height: auto; width: 225px; display: block;"
-                         src="{{posterUrl}}"
-                         class="card-img" alt="Plex Poster">
-                </div>
-                <div class="col-12 col-md">
-                    <div class="card-body">
-                        <h5 class="card-title">{{ name }} ({{ year }})</h5>
-                        <p class="card-text text-muted">{{ overview }}</p>
-                        <p>{{this}}</p>
-                    </div>                
-                </div>
-            </div>
-        </div>
-    </script> -->
-
-    <input id="plexServers" name="plexServers" th:value="${{plexServers}}" type="hidden" />
-    <input id="plexServer" name="plexServer" th:value="${{plexServer}}" type="hidden" />
-    <input id="plexProperties" name="plexProperties" th:value="${{plexProperties}}" type="hidden" />
-    {% if plexLibrary is defined %}
-    <input id="libraryKey" name="libraryKey" value="{{plexLibrary.key}}" type="hidden" />
-    {% endif %}
-    <div th:insert="fragments/common :: contextPath"></div>
+    <script>
+        function getRecommendations(movieId) {
+            //alert(movieId)
+            fetch('/recommendations?movieId=' + movieId)
+                .then(response => response.json())
+                .then(data => {
+                    window.location.href = '/recommended';
+                })
+                .catch((error) => {
+                    console.error('Error:', error);
+                });
+        }
+    </script>
 
     <script>
         // Declare a variable to store all movies
@@ -225,6 +207,7 @@
                             <div class="card-body">
                                 <h5 class="card-title">${movie.name} (${movie.year})</h5>
                                 <p class="card-text text-muted">${movie.overview}</p>
+                                <button onclick="getRecommendations('${movie.tmdbId.toString()}')" class="btn btn-primary" title="Click to get similar recommended movies">Get Recommendations</button>
                             </div>                
                         </div>
                     </div>
