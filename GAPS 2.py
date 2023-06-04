@@ -2,21 +2,15 @@ import json, webbrowser, requests
 from flask import Flask, render_template, request, jsonify
 from plexapi.myplex import MyPlexPinLogin, MyPlexAccount, PlexServer
 from PlexAccountData import PlexAccountData
-import concurrent.futures
 
 app = Flask(__name__)
 
+# Configuration
+app.config.from_pyfile('config.py')  # Assuming you have a config.py file
+
 @app.context_processor
 def inject_page_display_names():
-    page_display_names = {
-        'libraries': 'Libraries',
-        'recommended': 'Recommended',
-        'rss_check': 'RSS',  # Display as 'RSS' instead of 'rss_check'
-        'configuration': 'Configuration',
-        'updates': 'Updates',
-        'about': 'About'
-    }
-    return dict(page_display_names=page_display_names)
+    return dict(page_display_names=app.config['PAGE_DISPLAY_NAMES'])
 
 @app.route('/')
 def main_index():
@@ -45,20 +39,11 @@ def libraries():
         return render_template('libraries.html', plexServer=currentActiveServer.selected_server, libraries=libraries, currentActiveServer=currentActiveServer)
     
     # Handle case when PlexAccountData is not found
-    return render_template('error.html', error='Data not found')
-
-
-@app.route('/mislabeled')
-def mislabeled():
-    return render_template('mislabeled.html')
+    return render_template('error.html', error=app.config['RESPONSE_MESSAGES']['data_not_found'])
 
 @app.route('/recommended')
 def recommended():
     return render_template('recommended.html')
-
-@app.route('/rssCheck')
-def rss_check():
-    return render_template('rssCheck.html')
 
 @app.route('/updates')
 def updates():
@@ -72,9 +57,9 @@ def test_tmdb_key():
     response = requests.get(url)
 
     if response.status_code == 200:
-        return {'message': 'API key is working!'}, 200
+        return {'message': 'API key is working!'}
     else:
-        return {'message': 'Failed to connect to API, status code: ' + str(response.status_code)}, 400
+        return {'message': 'Failed to connect to API, status code: ' + str(response.status_code)}, response.status_code
 
 @app.route('/saveTmdbKey', methods=['POST'])
 def save_tmdb_key():
@@ -95,7 +80,7 @@ def link_plex_account():
     print("link_plex_account")
 
     try:
-        headers = {'X-Plex-Client-Identifier': 'your_unique_client_identifier'}
+        headers = {'X-Plex-Client-Identifier': app.config['PLEX_CLIENT_IDENTIFIER']}
         pinlogin = MyPlexPinLogin(headers=headers, oauth=True)
         oauth_url = pinlogin.oauthUrl()
         webbrowser.open(oauth_url)
@@ -157,7 +142,7 @@ def fetch_libraries(serverName):
 
     if server is None:
         print("Server not found")
-        return jsonify(error="Server not found"), 404
+        return jsonify(error=app.config['RESPONSE_MESSAGES']['server_not_found']), 404
 
     libraries = [section.title for section in server.library.sections()]
 
@@ -250,7 +235,7 @@ def get_movies_from_plex_library():
                 break
 
         if server_resource is None:
-            return jsonify(error='Server resource not found')
+            return jsonify(error=app.config['RESPONSE_MESSAGES']['server_resource_not_found'])
 
         # Connect to the server using the server resource
         server = server_resource.connect()
@@ -305,7 +290,7 @@ def get_recommendations():
     global global_recommendations
     movie_id = request.args.get('movieId', default = 11, type = int) 
     api_key = request.args.get('apiKey', default = "", type = str)
-    url = f"https://api.themoviedb.org/3/movie/{movie_id}/recommendations"
+    url = f"{app.config['TMDB_BASE_URL']}/movie/{movie_id}/recommendations"
     params = {"api_key": api_key}
     
     response = requests.get(url, params=params)

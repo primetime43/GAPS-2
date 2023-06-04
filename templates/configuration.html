@@ -6,7 +6,7 @@
     <meta content="text/html; charset=UTF-8" http-equiv="Content-Type" />
     <link rel="shortcut icon" href="{{ url_for('static', filename='images/gaps.ico') }}" />
     <link rel="stylesheet" href="{{ url_for('static', filename='css/libraries/bootstrap.min.css') }}" />
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/input.min.css') }}" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/input.css') }}" />
 
     <!--Let browser know website is optimized for mobile-->
     <meta content="width=device-width, initial-scale=1.0" name="viewport" />
@@ -137,7 +137,6 @@
                             onclick="showActiveServerData(event);">Show Active Server</button>
                     </div>
                     <h3 class="top-margin">Servers</h3>
-                    <hr class="white-line">
                     <div id="activeServerInfo"></div>
                 </form>
             </div>
@@ -348,7 +347,7 @@
             type="text/javascript"></script>
         <script src="{{ url_for('static', filename='js/libraries/handlebars-v4.7.6.min.js') }}"
             type="text/javascript"></script>
-        <script src="{{ url_for('static', filename='js/page/configuration.min.js') }}" type="module"></script>
+        <script src="{{ url_for('static', filename='js/page/configuration.js') }}" type="module"></script>
 </body>
 
 </html>
