@@ -38,19 +38,6 @@
 
                 <form class="needs-validation" id="tmdbConfiguration" novalidate th:object="${plexProperties}">
                     <div class="form-group">
-                        <label for="setMovieStatus">Show missing movies</label>
-                        <!-- Dropdown to select the movie status -->
-                        <select class="form-control" id="setMovieStatus" onChange="saveMovieStatus();">
-                            <!-- Iterating over movieStatuses and generating options dynamically -->
-                            <div th:each="movieStatus : ${movieStatuses}" th:remove="tag">
-                                <option th:value="${movieStatus.id}" th:text="${movieStatus.message}"
-                                    th:selected="${plexProperties?.movieStatus?.getId().equals(movieStatus.id)?: false}">
-                                </option>
-                            </div>
-                        </select>
-                    </div>
-
-                    <div class="form-group">
                         <label for="movieDbApiKey">Movie Database Api Key</label>
                         <div class="input-group">
                             <!-- Input field to enter the Movie Database API key -->
@@ -71,23 +58,20 @@
                 <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
                 <script>
                     function testTmdbKey() {
-                        const tmdbKey = document.getElementById('movieDbApiKey').value;
-
-                        fetch(`/testTmdbKey`, {
+                        const apiKey = document.getElementById('movieDbApiKey').value;  // Get the API key from the input field
+                        fetch('/testTmdbKey', {  // Send a POST request to the /testTmdbKey endpoint
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json'
                             },
-                            body: JSON.stringify({ key: tmdbKey })
+                            body: JSON.stringify({ api_key: apiKey })  // Include the API key in the request body
                         })
-                            .then(response => response.json())
+                            .then(response => response.json())  // Parse the response as JSON
                             .then(data => {
-                                // ... handle response ...
-                            })
-                            .catch(error => {
-                                console.error('Error:', error);
+                                alert(data.message);  // Show the message from the response in an alert box
                             });
                     }
+
 
                     function saveTmdbKey() {
                         const tmdbKey = document.getElementById('movieDbApiKey').value;
@@ -101,7 +85,9 @@
                         })
                             .then(response => response.json())
                             .then(data => {
-                                // ... handle response ...
+                                alert(data.message);
+                                // Store the API key in localStorage
+                                localStorage.setItem('tmdbApiKey', tmdbKey);
                             })
                             .catch(error => {
                                 console.error('Error:', error);

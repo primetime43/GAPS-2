@@ -66,16 +66,15 @@ def updates():
 
 @app.route('/testTmdbKey', methods=['POST'])
 def test_tmdb_key():
-    print("In test_tmdb_key")
+    api_key = request.json.get('api_key')  # Get the API key from the request body
+    url = f"https://api.themoviedb.org/3/configuration?api_key={api_key}"  # Include the API key in the URL
 
-    # Extract data from request
-    data = request.get_json()
+    response = requests.get(url)
 
-    # Perform operations using data
-    print(data)
-
-    # Return a response
-    return jsonify(result='Success')
+    if response.status_code == 200:
+        return {'message': 'API key is working!'}, 200
+    else:
+        return {'message': 'Failed to connect to API, status code: ' + str(response.status_code)}, 400
 
 @app.route('/saveTmdbKey', methods=['POST'])
 def save_tmdb_key():
@@ -88,7 +87,8 @@ def save_tmdb_key():
     print(data)
 
     # Return a response
-    return jsonify(result='Success')
+    api_key = data.get('key')
+    return jsonify(message=f'Successfully saved API key: {api_key}')
 
 @app.route('/link_plex_account', methods=['POST'])
 def link_plex_account():
@@ -304,7 +304,7 @@ def get_movies_from_plex_library():
 def get_recommendations():
     global global_recommendations
     movie_id = request.args.get('movieId', default = 11, type = int) 
-    api_key = ""  # Replace with your actual TMDb API key
+    api_key = request.args.get('apiKey', default = "", type = str)
     url = f"https://api.themoviedb.org/3/movie/{movie_id}/recommendations"
     params = {"api_key": api_key}
     

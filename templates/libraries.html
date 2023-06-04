@@ -126,7 +126,8 @@
     <script>
         function getRecommendations(movieId) {
             //alert(movieId)
-            fetch('/recommendations?movieId=' + movieId)
+            var apiKey = localStorage.getItem('tmdbApiKey');
+            fetch('/recommendations?movieId=' + movieId + '&apiKey=' + apiKey)
                 .then(response => response.json())
                 .then(data => {
                     window.location.href = '/recommended';
