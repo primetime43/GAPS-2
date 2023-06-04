@@ -105,17 +105,18 @@ def link_plex_account():
             plex_data = PlexAccountData()  # Create a new PlexAccountData object
             plex_account = MyPlexAccount(token=pinlogin.token)
             username = plex_account.username  # Get the username
-            resources = [resource for resource in plex_account.resources() if resource.owned]
-            servers = [f"{resource.name} ({resource.connections[0].address})" for resource in resources]
+            resources = [resource for resource in plex_account.resources() if resource.owned and resource.connections]
+            servers = [f"{resource.name} ({resource.connections[0].address})" for resource in resources if resource.connections]
 
             print(f"servers: {servers}")
  
             # Store tokens in the dictionary
             for resource in resources:
-                server_name = f"{resource.name} ({resource.connections[0].address})"
-                tokens[server_name] = pinlogin.token
-                print("server name: " + server_name + " token: " + pinlogin.token) 
-                plex_data.add_token(server_name, pinlogin.token)
+                if resource.connections:
+                    server_name = f"{resource.name} ({resource.connections[0].address})"
+                    tokens[server_name] = pinlogin.token
+                    print("server name: " + server_name + " token: " + pinlogin.token) 
+                    plex_data.add_token(server_name, pinlogin.token)
 
             print(f'Logged In As {username}')
             plex_data.set_servers(servers)
@@ -298,7 +299,7 @@ def get_movies_from_plex_library():
     
 #Testing Here
 
-# Uses themoviedb api to get recommended movies, removes recommended mvoies already in the library
+# Uses themoviedb api to get recommended movies, removes recommended movies already in the library
 @app.route('/recommendations', methods=['GET'])
 def get_recommendations():
     global global_recommendations
