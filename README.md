@@ -13,9 +13,11 @@ The GAPS 2 project aims to bring the same functionality with the simplicity and 
 
 ## TODO
 
-- Add the back end functionality
-- Fix/finish overall functionality that's missing from the original code
-- Fix bugs & add updates to refactor code for simplicity
+- [x] Add the back end functionality
+- [x] Fix/finish overall functionality that's missing from the original code
+- [ ] Need to add entire library recommendations
+- [ ] Need to remove existing movies in plex library from recommendations
+- [ ] Fix bugs & add updates to refactor code for simplicity
 
 ## Installation
 
