@@ -21,7 +21,7 @@ The GAPS 2 project aims to bring the same functionality with the simplicity and 
 
 ## Installation
 
-Run the python file and it will be locally hosted at http://127.0.0.1:5000/
+Run the python file (if running from source code) or run the exe from [releases](https://github.com/primetime43/GAPS-2/releases) and it will be locally hosted at http://127.0.0.1:5000/
 
 **Command on Windows for creating an exe out of the entire project from the main python file**
 ```
