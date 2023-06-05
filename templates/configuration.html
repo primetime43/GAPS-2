@@ -229,17 +229,23 @@
                     $('#loading').show();
 
                     $.post('/link_plex_account', function (response) {
-                        // Update the dropdown options with the server data
-                        var servers = response.servers; // No need to parse JSON, Flask's jsonify already does this.
-                        var dropdown = $('#server');
-                        dropdown.empty();
-                        servers.forEach(function (server) {
-                            dropdown.append($('<option>').text(server).attr('value', server));
-                        });
+                        // Check if there's a message in the response
+                        if (response.message) {
+                            // Show an alert with the message
+                            alert(response.message);
+                        } else {
+                            // Update the dropdown options with the server data
+                            var servers = response.servers;
+                            var dropdown = $('#server');
+                            dropdown.empty();
+                            servers.forEach(function (server) {
+                                dropdown.append($('<option>').text(server).attr('value', server));
+                            });
 
-                        // Set the Plex token
-                        var token = response.token; // Assuming the response has a "token" key
-                        $('#plexToken').val(token);
+                            // Set the Plex token
+                            var token = response.token;
+                            $('#plexToken').val(token);
+                        }
 
                         // Hide the loading text/spinner
                         $('#loading').hide();

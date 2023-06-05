@@ -135,12 +135,20 @@
         }
 
         function getRecommendations(movieId) {
-            //alert(movieId)
             var apiKey = localStorage.getItem('tmdbApiKey');
             fetch('/recommendations?movieId=' + movieId + '&apiKey=' + apiKey)
                 .then(response => response.json())
                 .then(data => {
-                    window.location.href = '/recommended';
+                    if (data.error) {
+                        // If there's an error in the response, show an alert
+                        alert(data.error);
+                    } else if (data.message) {
+                        // If there's a message in the response, show an alert
+                        alert(data.message);
+                    } else {
+                        // If there's no error or message, redirect as usual
+                        window.location.href = '/recommended';
+                    }
                 })
                 .catch((error) => {
                     console.error('Error:', error);

@@ -80,8 +80,6 @@ def save_tmdb_key():
 
 @app.route('/link_plex_account', methods=['POST'])
 def link_plex_account():
-    print("link_plex_account")
-
     try:
         headers = {'X-Plex-Client-Identifier': app.config['PLEX_CLIENT_IDENTIFIER']}
         pinlogin = MyPlexPinLogin(headers=headers, oauth=True)
@@ -96,17 +94,13 @@ def link_plex_account():
             resources = [resource for resource in plex_account.resources() if resource.owned and resource.connections]
             servers = [f"{resource.name} ({resource.connections[0].address})" for resource in resources if resource.connections]
 
-            print(f"servers: {servers}")
- 
             # Store tokens in the dictionary
             for resource in resources:
                 if resource.connections:
                     server_name = f"{resource.name} ({resource.connections[0].address})"
                     tokens[server_name] = pinlogin.token
-                    print("server name: " + server_name + " token: " + pinlogin.token) 
                     plex_data.add_token(server_name, pinlogin.token)
 
-            print(f'Logged In As {username}')
             plex_data.set_servers(servers)
 
             # Store the PlexAccountData object in the array
@@ -115,12 +109,9 @@ def link_plex_account():
             # Return the JSON response with servers and token
             return jsonify(servers=servers, token=pinlogin.token)
         else:
-            print('Error', 'Could not log in to Plex account')
+            return jsonify({'message': app.config['RESPONSE_MESSAGES']['plex_account_error'], 'servers': [], 'token': None})
     except Exception as e:
-        print('Error', f'Could not log in to Plex account: {str(e)}')
-    
-    # Return an empty JSON response if there was an error
-    return jsonify(servers=[], token=None)
+        return jsonify({'message': app.config['RESPONSE_MESSAGES']['plex_account_error'], 'servers': [], 'token': None})
 
 @app.route('/fetch_libraries/<serverName>')
 def fetch_libraries(serverName):
@@ -128,28 +119,28 @@ def fetch_libraries(serverName):
     plex_data = next((data for data in plex_data_array if serverName in data.tokens), None)
 
     if plex_data is None:
-        print("PlexAccountData not found")
-        return jsonify(error="PlexAccountData not found"), 404
+        #print("PlexAccountData not found")
+        return {'message': app.config['RESPONSE_MESSAGES']['plex_data_not_found']}
 
     token = plex_data.tokens.get(serverName)
 
-    print("Token: " + token)
+    #print("Token: " + token)
     plex_account = MyPlexAccount(token=token)
 
     server = None
     for resource in plex_account.resources():
         if f"{resource.name} ({resource.connections[0].address})" == serverName:
-            print(f"Attempting to connect to server {serverName}")
+            #print(f"Attempting to connect to server {serverName}")
             server = resource.connect()
             break
 
     if server is None:
-        print("Server not found")
+        #print("Server not found")
         return jsonify(error=app.config['RESPONSE_MESSAGES']['server_not_found']), 404
 
     libraries = [section.title for section in server.library.sections()]
 
-    print(f"Libraries: {libraries}")
+    #print(f"Libraries: {libraries}")
 
     plex_data.set_libraries(libraries)
     
@@ -205,7 +196,7 @@ def save_plex_data():
 def get_active_server():
     try:
         global currentActiveServer
-        print(f"get_active_server libraries: {currentActiveServer.libraries}")
+        #print(f"get_active_server libraries: {currentActiveServer.libraries}")
         if currentActiveServer:
             return jsonify(server=currentActiveServer.selected_server, token=currentActiveServer.token, libraries=currentActiveServer.libraries)
         else:
@@ -233,7 +224,7 @@ def get_movies_from_plex_library():
         resources = [resource for resource in plex_account.resources() if resource.owned]
         for resource in resources:
             if f"{resource.name} ({resource.connections[0].address})" == currentActiveServer.selected_server:
-                print(f"resource: {resource.name} ({resource.connections[0].address}) == {currentActiveServer.selected_server}")
+                #print(f"resource: {resource.name} ({resource.connections[0].address}) == {currentActiveServer.selected_server}")
                 server_resource = resource
                 break
 
@@ -291,10 +282,15 @@ def get_recommendations():
     global global_recommendations
     movie_id = request.args.get('movieId', default = 11, type = int) 
     api_key = request.args.get('apiKey', default = "", type = str)
+
     url = f"{app.config['TMDB_BASE_URL']}/movie/{movie_id}/recommendations"
     params = {"api_key": api_key}
     
     response = requests.get(url, params=params)
+
+    if response.status_code != 200:
+        return {'message': 'API request failed with status code ' + str(response.status_code)}, response.status_code
+
     data = response.json()
 
     base_image_url = "https://image.tmdb.org/t/p/w500"
@@ -328,4 +324,4 @@ currentActiveServer = PlexAccountData()
 moviesFromSelectedLibrary = {}
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=False)
