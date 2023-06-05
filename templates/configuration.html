@@ -35,7 +35,7 @@
                         href="https://www.themoviedb.org/settings/api" rel="noopener noreferrer" target="_blank">The
                         Movie DB</a>,
                     create an account, and make an API Key. Copy that key and paste it below.</p>
-
+        
                 <form class="needs-validation" id="tmdbConfiguration" novalidate th:object="${plexProperties}">
                     <div class="form-group">
                         <label for="movieDbApiKey">Movie Database Api Key</label>
@@ -53,6 +53,19 @@
                         type="button">Test</a>
                     <a class="btn btn-primary" href="javascript:void(0)" id="saveTmdbKey" onclick="saveTmdbKey();"
                         type="button">Save</a>
+        
+                    <br>
+                    <br>
+                    <label id="tmdbApiKeyLabel" for="tmdbApiKey" style="display: none;">Active TMDB API Key:</label>
+                    <div id="tmdbApiKeyInput" class="input-group" style="display: none;">
+                        <input class="form-control" id="tmdbApiKey" required type="password">
+                        <div class="input-group-append">
+                            <button id="toggleTMDBKeyVisibility" class="btn btn-outline-secondary" type="button">Show</button>
+                        </div>
+                    </div>
+
+                
+                
                 </form>
 
                 <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
@@ -83,16 +96,54 @@
                             },
                             body: JSON.stringify({ key: tmdbKey })
                         })
-                            .then(response => response.json())
+                            .then(response => {
+                                if (!response.ok) {
+                                    alert('API key was not successful.');
+                                    throw new Error('API key was not successful.');
+                                }
+                                return response.json();
+                            })
                             .then(data => {
                                 alert(data.message);
                                 // Store the API key in localStorage
                                 localStorage.setItem('tmdbApiKey', tmdbKey);
+
+                                // Show the elements that were hidden
+                                document.getElementById('tmdbApiKeyLabel').style.display = 'block';
+                                document.getElementById('tmdbApiKeyInput').style.display = 'flex';
+
+                                // Set the saved API key to the textbox
+                                document.getElementById('tmdbApiKey').value = tmdbKey;
                             })
                             .catch(error => {
                                 console.error('Error:', error);
                             });
                     }
+
+                    $('#toggleTMDBKeyVisibility').on('click', function () {
+                        var tmdbAPIKeyInput = $('#tmdbApiKey');
+                        if (tmdbAPIKeyInput.attr('type') === 'password') {
+                            tmdbAPIKeyInput.attr('type', 'text');
+                            $(this).text('Hide');
+                        } else {
+                            tmdbAPIKeyInput.attr('type', 'password');
+                            $(this).text('Show');
+                        }
+                    });
+
+                    window.onload = function () {
+                        const tmdbKey = localStorage.getItem('tmdbApiKey');
+                        if (tmdbKey) {
+                            // Show the elements
+                            document.getElementById('tmdbApiKeyLabel').style.display = 'block';
+                            document.getElementById('tmdbApiKeyInput').style.display = 'flex';
+
+                            // Set the saved API key to the textbox
+                            document.getElementById('tmdbApiKey').value = tmdbKey;
+                        }
+                    };
+
+
                 </script>
 
                 </form>

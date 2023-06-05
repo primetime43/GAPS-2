@@ -23,5 +23,6 @@ RESPONSE_MESSAGES = {
     "plex_data_not_found": "PlexAccountData not found",
     "server_not_found": "Server not found",
     "server_resource_not_found": "Server resource not found",
-    "invalid_token": "Invalid token"
+    "invalid_token": "Invalid token",
+    "api_key_saved":"Successfully saved API key"
 }

@@ -57,23 +57,26 @@ def test_tmdb_key():
     response = requests.get(url)
 
     if response.status_code == 200:
-        return {'message': 'API key is working!'}
+        return {'message': app.config['RESPONSE_MESSAGES']['api_key_success']}
     else:
-        return {'message': 'Failed to connect to API, status code: ' + str(response.status_code)}, response.status_code
+        return {'message': app.config['RESPONSE_MESSAGES']['api_key_failure'] + str(response.status_code)}, response.status_code
 
 @app.route('/saveTmdbKey', methods=['POST'])
 def save_tmdb_key():
-    print("In save_tmdb_key")
-
     # Extract data from request
     data = request.get_json()
 
-    # Perform operations using data
-    print(data)
-
-    # Return a response
+    # Test the API key
     api_key = data.get('key')
-    return jsonify(message=f'Successfully saved API key: {api_key}')
+    url = f"https://api.themoviedb.org/3/configuration?api_key={api_key}"
+    response = requests.get(url)
+
+    if response.status_code == 200:
+        # If the API key is valid, save it and return a success message
+        return {'message': app.config['RESPONSE_MESSAGES']['api_key_saved']}
+    else:
+        # If the API key is not valid, return an error message
+        return {'message': app.config['RESPONSE_MESSAGES']['api_key_failure'] + str(response.status_code)}, response.status_code
 
 @app.route('/link_plex_account', methods=['POST'])
 def link_plex_account():
@@ -281,10 +284,8 @@ def get_movies_from_plex_library():
 
     except Exception as e:
         return jsonify(error=str(e))
-    
-#Testing Here
 
-# Uses themoviedb api to get recommended movies, removes recommended movies already in the library
+# Uses themoviedb api to get recommended movies, removes movies from the recommended list already in the library
 @app.route('/recommendations', methods=['GET'])
 def get_recommendations():
     global global_recommendations
