@@ -28,6 +28,11 @@ Run the python file and it will be locally hosted at http://127.0.0.1:5000/
 pyinstaller --onefile --add-data "config.py;." --add-data "templates;templates" --add-data "static;static" "GAPS 2.py"
 ```
 
+## Images of v1.0.0
+![image](https://github.com/primetime43/GAPS-2/assets/12754111/a9ae50f3-5a9a-4f93-bfdb-a90b6783a47f)
+![image](https://github.com/primetime43/GAPS-2/assets/12754111/4466e0bf-70be-4ab7-b5c5-02140c31cae9)
+![image](https://github.com/primetime43/GAPS-2/assets/12754111/be56426e-7c5f-492a-a852-04e4fc076bd9)
+
 ## Development
 
 GAPS 2 is developed by [primetime43](https://github.com/primetime43). Contributions are welcome! Feel free to report bugs, suggest features, or contribute to the code.
