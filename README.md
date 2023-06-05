@@ -23,6 +23,13 @@ The GAPS 2 project aims to bring the same functionality with the simplicity and 
 
 Run the python file and it will be locally hosted at http://127.0.0.1:5000/
 
+**Command on Windows for creating an exe out of the entire project from the main python file**
+```
+pyinstaller --onefile --add-data "config.py;." --add-data "templates;templates" --add-data "static;static" "GAPS 2.py"
+```
+
 ## Development
 
 GAPS 2 is developed by [primetime43](https://github.com/primetime43). Contributions are welcome! Feel free to report bugs, suggest features, or contribute to the code.
+
+Please report any bugs encountered. You can see a log output in the python console window that is opened when running the exe.
