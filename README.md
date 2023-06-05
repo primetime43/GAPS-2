@@ -28,6 +28,13 @@ Run the python file (if running from source code) or run the exe from [releases]
 pyinstaller --onefile --add-data "config.py;." --add-data "templates;templates" --add-data "static;static" "GAPS 2.py"
 ```
 
+**Install the required packages
+```
+pip install -r requirements.txt
+```
+
+Requires Python 3.7 or newer
+
 ## Images of v1.0.0
 ![image](https://github.com/primetime43/GAPS-2/assets/12754111/a9ae50f3-5a9a-4f93-bfdb-a90b6783a47f)
 ![image](https://github.com/primetime43/GAPS-2/assets/12754111/4466e0bf-70be-4ab7-b5c5-02140c31cae9)
