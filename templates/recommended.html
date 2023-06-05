@@ -97,19 +97,19 @@
     var allRecommendedMovies = [];
 
     function displayRecommendedMovies(movies) {
-        // Get the number of movies to display from the dropdown
-        var displayCount = parseInt(document.getElementById('movieDisplayCount').value);
+            // Get the number of movies to display from the dropdown
+            var displayCount = parseInt(document.getElementById('movieDisplayCount').value);
 
-        // Clear the recommended movies container
-        var recommendedMoviesContainer = document.getElementById('recommendedMovies');
-        recommendedMoviesContainer.innerHTML = '';
+            // Clear the recommended movies container
+            var recommendedMoviesContainer = document.getElementById('recommendedMovies');
+            recommendedMoviesContainer.innerHTML = '';
 
-        // Update each recommended movie
-        movies.slice(0, displayCount).forEach(function (movie) {
-            console.log(movie); // Inspect the movie object here
+            // Update each recommended movie
+            movies.slice(0, displayCount).forEach(function (movie) {
+                console.log(movie); // Inspect the movie object here
 
-            // Create the HTML string for each recommended movie
-            var html = `
+                // Create the HTML string for each recommended movie
+                var html = `
                 <div class="card">
                     <div class="row no-gutters">
                         <div class="col-12 col-md-auto">
@@ -122,32 +122,46 @@
                                 <h5 class="card-title">${movie.name} (${movie.year})</h5>
                                 <p class="card-text text-muted">${movie.overview}</p>
                                 <button onclick="getRecommendations('${movie.tmdbId.toString()}')" class="btn btn-primary" title="Click to get similar recommended movies">Get Recommendations</button>
+                                <a href="https://www.themoviedb.org/movie/${movie.tmdbId.toString()}" target="_blank" class="btn btn-primary" title="Click to view movie on TMDB">View on TMDB</a>
                             </div>
                         </div>
                     </div>
                 </div>
             `;
 
-            // Add the created HTML to the recommended movies container
-            recommendedMoviesContainer.innerHTML += html;
-        });
-    }
-
-    function handleVisibility(response) {
-        var missingMoviesMessage = document.getElementById('missingMoviesMessage');
-        var recommendedMoviesContainer = document.getElementById('recommendedMovies');
-        var noMovieContainer = document.getElementById('noMovieContainer');
-
-        if (response.length === 0) {
-            missingMoviesMessage.style.display = "block";
-            recommendedMoviesContainer.style.display = "none";
-            noMovieContainer.style.display = "none";
-        } else {
-            missingMoviesMessage.style.display = "none";
-            recommendedMoviesContainer.style.display = "block";
-            noMovieContainer.style.display = "none";
+                // Add the created HTML to the recommended movies container
+                recommendedMoviesContainer.innerHTML += html;
+            });
         }
-    }
+
+        function getRecommendations(movieId) {
+            //alert(movieId)
+            var apiKey = localStorage.getItem('tmdbApiKey');
+            fetch('/recommendations?movieId=' + movieId + '&apiKey=' + apiKey)
+                .then(response => response.json())
+                .then(data => {
+                    window.location.href = '/recommended';
+                })
+                .catch((error) => {
+                    console.error('Error:', error);
+                });
+        }
+
+        function handleVisibility(response) {
+            var missingMoviesMessage = document.getElementById('missingMoviesMessage');
+            var recommendedMoviesContainer = document.getElementById('recommendedMovies');
+            var noMovieContainer = document.getElementById('noMovieContainer');
+
+            if (response.length === 0) {
+                missingMoviesMessage.style.display = "block";
+                recommendedMoviesContainer.style.display = "none";
+                noMovieContainer.style.display = "none";
+            } else {
+                missingMoviesMessage.style.display = "none";
+                recommendedMoviesContainer.style.display = "block";
+                noMovieContainer.style.display = "none";
+            }
+        }
 
     document.getElementById('movieDisplayCount').addEventListener('change', function () {
         // When the dropdown selection changes, update the display
