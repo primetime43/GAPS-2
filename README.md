@@ -28,7 +28,7 @@ Run the python file (if running from source code) or run the exe from [releases]
 pyinstaller --onefile --add-data "config.py;." --add-data "templates;templates" --add-data "static;static" "GAPS 2.py"
 ```
 
-**Install the required packages
+**Install the required packages**
 ```
 pip install -r requirements.txt
 ```
