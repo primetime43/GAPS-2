@@ -1,3 +1,14 @@
+# Docker
+To build the docker image and run this command in the downloaded directory
+```
+docker build -t gaps-2 .
+```
+
+Once the image is created, run the image in a container using this command. If you want to modify which port to run on, you'll need to modify the wsgi.py file
+```
+docker run -p 5000:5000 gaps-2
+```
+
 # GAPS 2
 
 GAPS 2 is a rewrite of the original [GAPS](https://github.com/JasonHHouse/gaps) project, now written in Python instead of Java. GAPS (Gaps A Plex Server) finds movies you're missing in your Plex Server. It's a great way to find additional movies that you might be interested in based on collections from movies in your Plex Server.
