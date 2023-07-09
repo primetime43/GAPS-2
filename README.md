@@ -21,7 +21,7 @@ The GAPS 2 project aims to bring the same functionality with the simplicity and 
 
 ## Installation
 
-Run the python file (if running from source code) or run the exe from [releases](https://github.com/primetime43/GAPS-2/releases) and it will be locally hosted at http://127.0.0.1:5000/
+Run the python file (if running from source code) or run the exe from [releases](https://github.com/primetime43/GAPS-2/releases) and it will be locally hosted at http://127.0.0.1:5000/ or a LAN IP Address
 
 **Command on Windows for creating an exe out of the entire project from the main python file**
 ```
@@ -32,8 +32,18 @@ pyinstaller --onefile --add-data "config.py;." --add-data "templates;templates" 
 ```
 pip install -r requirements.txt
 ```
-
 Requires Python 3.7 or newer
+
+# Docker
+To build the docker image and run this command in the downloaded directory
+```
+docker build -t gaps-2 .
+```
+
+Once the image is created, run the image in a container using this command. If you want to modify which port to run on, you'll need to modify the wsgi.py file
+```
+docker run -p 5000:5000 gaps-2
+```
 
 ## Images of v1.0.0
 ![image](https://github.com/primetime43/GAPS-2/assets/12754111/a9ae50f3-5a9a-4f93-bfdb-a90b6783a47f)
