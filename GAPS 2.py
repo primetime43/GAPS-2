@@ -78,40 +78,39 @@ def save_tmdb_key():
         # If the API key is not valid, return an error message
         return {'message': app.config['RESPONSE_MESSAGES']['api_key_failure'] + str(response.status_code)}, response.status_code
 
-@app.route('/link_plex_account', methods=['POST'])
-def link_plex_account():
-    try:
-        headers = {'X-Plex-Client-Identifier': app.config['PLEX_CLIENT_IDENTIFIER']}
-        pinlogin = MyPlexPinLogin(headers=headers, oauth=True)
-        oauth_url = pinlogin.oauthUrl()
-        webbrowser.open(oauth_url)
-        pinlogin.run(timeout=120)
-        pinlogin.waitForLogin()
-        if pinlogin.token:
-            plex_data = PlexAccountData()  # Create a new PlexAccountData object
-            plex_account = MyPlexAccount(token=pinlogin.token)
-            username = plex_account.username  # Get the username
-            resources = [resource for resource in plex_account.resources() if resource.owned and resource.connections]
-            servers = [f"{resource.name} ({resource.connections[0].address})" for resource in resources if resource.connections]
+@app.route('/fetch_servers', methods=['POST'])
+def fetch_servers():
+    if globalPin.checkLogin():  # Assumes that checkLogin() returns True if the user is authenticated
+        plex_data = PlexAccountData()  # Create a new PlexAccountData object
+        plex_account = MyPlexAccount(token=globalPin.token)
+        username = plex_account.username  # Get the username
+        resources = [resource for resource in plex_account.resources() if resource.owned and resource.connections]
+        servers = [f"{resource.name} ({resource.connections[0].address})" for resource in resources if resource.connections]
 
-            # Store tokens in the dictionary
-            for resource in resources:
-                if resource.connections:
-                    server_name = f"{resource.name} ({resource.connections[0].address})"
-                    tokens[server_name] = pinlogin.token
-                    plex_data.add_token(server_name, pinlogin.token)
+        # Store tokens in the dictionary
+        for resource in resources:
+            if resource.connections:
+                server_name = f"{resource.name} ({resource.connections[0].address})"
+                tokens[server_name] = globalPin.token
+                plex_data.add_token(server_name, globalPin.token)
 
-            plex_data.set_servers(servers)
+        plex_data.set_servers(servers)
 
-            # Store the PlexAccountData object in the array
-            plex_data_array.append(plex_data)
+        # Store the PlexAccountData object in the array
+        plex_data_array.append(plex_data)
 
-            # Return the JSON response with servers and token
-            return jsonify(servers=servers, token=pinlogin.token)
-        else:
-            return jsonify({'message': app.config['RESPONSE_MESSAGES']['plex_account_error'], 'servers': [], 'token': None})
-    except Exception as e:
-        return jsonify({'message': app.config['RESPONSE_MESSAGES']['plex_account_error'], 'servers': [], 'token': None})
+        # Return the JSON response with servers and token
+        return jsonify(servers=servers, token=globalPin.token)
+    else:
+        return jsonify({'message': 'User is not authenticated', 'servers': [], 'token': None})
+
+globalPin = None
+@app.route('/authenticate_plex_acc', methods=['POST'])
+def authenticate_plex_acc():
+    global globalPin
+    globalPin = MyPlexPinLogin(oauth=True)
+    oauth_url = globalPin.oauthUrl()
+    return jsonify({'oauth_url': oauth_url})
 
 @app.route('/fetch_libraries/<serverName>')
 def fetch_libraries(serverName):

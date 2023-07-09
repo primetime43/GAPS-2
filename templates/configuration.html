@@ -160,9 +160,13 @@
                 <form class="needs-validation" id="plexConfiguration" novalidate>
 
                     <div class="form-group mt-3">
-                        <button class="btn btn-primary" type="button" id="linkPlexAccountBtn">Link Plex Account</button>
-                    </div>
-
+                        <div>
+                            <button class="btn btn-primary" type="button" id="authPlexAccountBtn">Authenticate Plex Account</button>
+                        </div>
+                        <div class="mt-3">
+                            <button id="fetchServersBtn" class="btn btn-primary" type="button">Fetch Servers</button>
+                        </div>
+                    </div>                                  
 
                     <div class="form-group">
                         <label for="server">Plex Server</label>
@@ -265,37 +269,19 @@
         </div>
 
         <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+
+        <!-- Authenticates the user's account -->
         <script>
             $(document).ready(function () {
-                $('#linkPlexAccountBtn').on('click', function () {
-                    // Show the loading text/spinner
-                    $('#loading').show();
-
-                    $.post('/link_plex_account', function (response) {
-                        // Check if there's a message in the response
-                        if (response.message) {
-                            // Show an alert with the message
-                            alert(response.message);
-                        } else {
-                            // Update the dropdown options with the server data
-                            var servers = response.servers;
-                            var dropdown = $('#server');
-                            dropdown.empty();
-                            servers.forEach(function (server) {
-                                dropdown.append($('<option>').text(server).attr('value', server));
-                            });
-
-                            // Set the Plex token
-                            var token = response.token;
-                            $('#plexToken').val(token);
-                        }
-
-                        // Hide the loading text/spinner
-                        $('#loading').hide();
+                $('#authPlexAccountBtn').on('click', function () {
+                    // Send a POST request to the /authenticate_plex_acc endpoint
+                    $.post('/authenticate_plex_acc', function (response) {
+                        // Open the OAuth URL in a new tab
+                        window.open(response.oauth_url, '_blank');
                     });
                 });
             });
-        </script>
+        </script>        
 
         <script>
             $('#togglePlexTokenVisibility').on('click', function () {
@@ -307,6 +293,33 @@
                     plexTokenInput.attr('type', 'password');
                     $(this).text('Show');
                 }
+            });
+        </script>
+
+        <!-- Fetches the servers after the user has been authenticated -->
+        <script>
+            $('#fetchServersBtn').on('click', function () {
+                // Show the loading text/spinner
+                $('#loading').show();
+                $.post('/fetch_servers', function (response) {
+                    if (response.message) {
+                        alert(response.message);
+                    } else {
+                        // Update the dropdown options with the server data
+                        var servers = response.servers;
+                        var dropdown = $('#server');
+                        dropdown.empty();
+                        servers.forEach(function (server) {
+                            dropdown.append($('<option>').text(server).attr('value', server));
+                        });
+
+                        // Set the Plex token
+                        var token = response.token;
+                        $('#plexToken').val(token);
+                    }
+                    // Hide the loading text/spinner
+                    $('#loading').hide();
+                });
             });
         </script>
 
@@ -336,6 +349,10 @@
 
             // Function to be called on page load
             window.addEventListener('load', function () {
+                // Hide the Jellyfin & emby tab
+                $('#jellyfinTab').hide();
+                $('#embyTab').hide();
+
                 // Send an AJAX request to get the active server data from the Python side
                 $.ajax({
                     url: '/get_active_server',
@@ -388,7 +405,7 @@
 
                         // Hide the loading text/spinner
                         $('#saving').hide();
-
+                        showActiveServerData(event);
                     },
                     error: function (error) {
                         // Handle error response here
