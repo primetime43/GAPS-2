@@ -28,8 +28,15 @@
             <li class="nav-item">
                 <a class="nav-link" data-toggle="tab" href="#plex" id="plexTab">Plex</a>
             </li>
+            <li class="nav-item">
+                <a class="nav-link" data-toggle="tab" href="#jellyfin" id="jellyfinTab">Jellyfin</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" data-toggle="tab" href="#emby" id="embyTab">Emby</a>
+            </li>
         </ul>
         <div class="tab-content top-margin" id="myTabContent">
+            <!-- TMdb tab -->
             <div class="tab-pane fade show active top-margin" id="tmdb">
                 <p>To use Gaps, you'll need a MovieDB api key. Navigate over to <a
                         href="https://www.themoviedb.org/settings/api" rel="noopener noreferrer" target="_blank">The
@@ -148,6 +155,7 @@
 
                 </form>
             </div>
+            <!-- Plex tab -->
             <div class="tab-pane fade top-margin" id="plex">
                 <form class="needs-validation" id="plexConfiguration" novalidate>
 
@@ -190,6 +198,41 @@
                     <h3 class="top-margin">Servers</h3>
                     <div id="activeServerInfo"></div>
                 </form>
+            </div>
+            <!-- Jellyfin tab -->
+            <div class="tab-pane fade top-margin" id="jellyfin">
+                <form class="needs-validation" id="jellyfinConfiguration" novalidate>
+                    <div class="form-group">
+                        <label for="jellyfinServer">Jellyfin Server Address</label>
+                        <input class="form-control" id="jellyfinServer" required type="text">
+                        <div class="invalid-feedback">
+                            Please enter your Jellyfin server address.
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="jellyfinUsername">Jellyfin Username</label>
+                        <input class="form-control" id="jellyfinUsername" required type="text">
+                        <div class="invalid-feedback">
+                            Please enter your Jellyfin username.
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="jellyfinPassword">Jellyfin Password</label>
+                        <div class="input-group">
+                            <input class="form-control" id="jellyfinPassword" required type="password">
+                            <div class="input-group-append">
+                                <button id="toggleJellyfinPasswordVisibility" class="btn btn-outline-secondary" type="button">Show</button>
+                            </div>
+                        </div>
+                        <div class="invalid-feedback">
+                            Please enter your Jellyfin password.
+                        </div>
+                    </div>                    
+                    <button class="btn btn-primary" type="submit">Save</button>
+                </form>
+            </div>            
+            <!-- Emby tab -->
+            <div class="tab-pane fade top-margin" id="emby">
             </div>
         </div>
 
@@ -392,6 +435,42 @@
                 });
             }
 
+        </script>
+
+        <!-- Jellyfin Scripts -->
+        <script>
+            $('#jellyfinConfiguration').on('submit', function (event) {
+                event.preventDefault();
+
+                var server = $('#jellyfinServer').val();
+                var username = $('#jellyfinUsername').val();
+                var password = $('#jellyfinPassword').val();
+
+                $.ajax({
+                    url: '/save_jellyfin_data',
+                    type: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify({ server: server, username: username, password: password }),
+                    success: function (response) {
+                        console.log('Jellyfin data saved successfully');
+                    },
+                    error: function (error) {
+                        console.log('Failed to save Jellyfin data');
+                    }
+                });
+            });
+
+            // Show/hide the password button
+            $('#toggleJellyfinPasswordVisibility').on('click', function () {
+                var jellyfinPasswordInput = $('#jellyfinPassword');
+                if (jellyfinPasswordInput.attr('type') === 'password') {
+                    jellyfinPasswordInput.attr('type', 'text');
+                    $(this).text('Hide');
+                } else {
+                    jellyfinPasswordInput.attr('type', 'password');
+                    $(this).text('Show');
+                }
+            });
         </script>
 
         <script src="{{ url_for('static', filename='js/libraries/jquery-3.4.1.min.js') }}"
