@@ -28,8 +28,15 @@
             <li class="nav-item">
                 <a class="nav-link" data-toggle="tab" href="#plex" id="plexTab">Plex</a>
             </li>
+            <li class="nav-item">
+                <a class="nav-link" data-toggle="tab" href="#jellyfin" id="jellyfinTab">Jellyfin</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" data-toggle="tab" href="#emby" id="embyTab">Emby</a>
+            </li>
         </ul>
         <div class="tab-content top-margin" id="myTabContent">
+            <!-- TMdb tab -->
             <div class="tab-pane fade show active top-margin" id="tmdb">
                 <p>To use Gaps, you'll need a MovieDB api key. Navigate over to <a
                         href="https://www.themoviedb.org/settings/api" rel="noopener noreferrer" target="_blank">The
@@ -148,13 +155,18 @@
 
                 </form>
             </div>
+            <!-- Plex tab -->
             <div class="tab-pane fade top-margin" id="plex">
                 <form class="needs-validation" id="plexConfiguration" novalidate>
 
                     <div class="form-group mt-3">
-                        <button class="btn btn-primary" type="button" id="linkPlexAccountBtn">Link Plex Account</button>
-                    </div>
-
+                        <div>
+                            <button class="btn btn-primary" type="button" id="authPlexAccountBtn">Authenticate Plex Account</button>
+                        </div>
+                        <div class="mt-3">
+                            <button id="fetchServersBtn" class="btn btn-primary" type="button">Fetch Servers</button>
+                        </div>
+                    </div>                                  
 
                     <div class="form-group">
                         <label for="server">Plex Server</label>
@@ -191,6 +203,41 @@
                     <div id="activeServerInfo"></div>
                 </form>
             </div>
+            <!-- Jellyfin tab -->
+            <div class="tab-pane fade top-margin" id="jellyfin">
+                <form class="needs-validation" id="jellyfinConfiguration" novalidate>
+                    <div class="form-group">
+                        <label for="jellyfinServer">Jellyfin Server Address</label>
+                        <input class="form-control" id="jellyfinServer" required type="text">
+                        <div class="invalid-feedback">
+                            Please enter your Jellyfin server address.
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="jellyfinUsername">Jellyfin Username</label>
+                        <input class="form-control" id="jellyfinUsername" required type="text">
+                        <div class="invalid-feedback">
+                            Please enter your Jellyfin username.
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="jellyfinPassword">Jellyfin Password</label>
+                        <div class="input-group">
+                            <input class="form-control" id="jellyfinPassword" required type="password">
+                            <div class="input-group-append">
+                                <button id="toggleJellyfinPasswordVisibility" class="btn btn-outline-secondary" type="button">Show</button>
+                            </div>
+                        </div>
+                        <div class="invalid-feedback">
+                            Please enter your Jellyfin password.
+                        </div>
+                    </div>                    
+                    <button class="btn btn-primary" type="submit">Save</button>
+                </form>
+            </div>            
+            <!-- Emby tab -->
+            <div class="tab-pane fade top-margin" id="emby">
+            </div>
         </div>
 
         <div th:insert="fragments/common :: contextPath"></div>
@@ -222,37 +269,19 @@
         </div>
 
         <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+
+        <!-- Authenticates the user's account -->
         <script>
             $(document).ready(function () {
-                $('#linkPlexAccountBtn').on('click', function () {
-                    // Show the loading text/spinner
-                    $('#loading').show();
-
-                    $.post('/link_plex_account', function (response) {
-                        // Check if there's a message in the response
-                        if (response.message) {
-                            // Show an alert with the message
-                            alert(response.message);
-                        } else {
-                            // Update the dropdown options with the server data
-                            var servers = response.servers;
-                            var dropdown = $('#server');
-                            dropdown.empty();
-                            servers.forEach(function (server) {
-                                dropdown.append($('<option>').text(server).attr('value', server));
-                            });
-
-                            // Set the Plex token
-                            var token = response.token;
-                            $('#plexToken').val(token);
-                        }
-
-                        // Hide the loading text/spinner
-                        $('#loading').hide();
+                $('#authPlexAccountBtn').on('click', function () {
+                    // Send a POST request to the /authenticate_plex_acc endpoint
+                    $.post('/authenticate_plex_acc', function (response) {
+                        // Open the OAuth URL in a new tab
+                        window.open(response.oauth_url, '_blank');
                     });
                 });
             });
-        </script>
+        </script>        
 
         <script>
             $('#togglePlexTokenVisibility').on('click', function () {
@@ -264,6 +293,33 @@
                     plexTokenInput.attr('type', 'password');
                     $(this).text('Show');
                 }
+            });
+        </script>
+
+        <!-- Fetches the servers after the user has been authenticated -->
+        <script>
+            $('#fetchServersBtn').on('click', function () {
+                // Show the loading text/spinner
+                $('#loading').show();
+                $.post('/fetch_servers', function (response) {
+                    if (response.message) {
+                        alert(response.message);
+                    } else {
+                        // Update the dropdown options with the server data
+                        var servers = response.servers;
+                        var dropdown = $('#server');
+                        dropdown.empty();
+                        servers.forEach(function (server) {
+                            dropdown.append($('<option>').text(server).attr('value', server));
+                        });
+
+                        // Set the Plex token
+                        var token = response.token;
+                        $('#plexToken').val(token);
+                    }
+                    // Hide the loading text/spinner
+                    $('#loading').hide();
+                });
             });
         </script>
 
@@ -293,6 +349,10 @@
 
             // Function to be called on page load
             window.addEventListener('load', function () {
+                // Hide the Jellyfin & emby tab
+                $('#jellyfinTab').hide();
+                $('#embyTab').hide();
+
                 // Send an AJAX request to get the active server data from the Python side
                 $.ajax({
                     url: '/get_active_server',
@@ -345,7 +405,7 @@
 
                         // Hide the loading text/spinner
                         $('#saving').hide();
-
+                        showActiveServerData(event);
                     },
                     error: function (error) {
                         // Handle error response here
@@ -392,6 +452,42 @@
                 });
             }
 
+        </script>
+
+        <!-- Jellyfin Scripts -->
+        <script>
+            $('#jellyfinConfiguration').on('submit', function (event) {
+                event.preventDefault();
+
+                var server = $('#jellyfinServer').val();
+                var username = $('#jellyfinUsername').val();
+                var password = $('#jellyfinPassword').val();
+
+                $.ajax({
+                    url: '/save_jellyfin_data',
+                    type: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify({ server: server, username: username, password: password }),
+                    success: function (response) {
+                        console.log('Jellyfin data saved successfully');
+                    },
+                    error: function (error) {
+                        console.log('Failed to save Jellyfin data');
+                    }
+                });
+            });
+
+            // Show/hide the password button
+            $('#toggleJellyfinPasswordVisibility').on('click', function () {
+                var jellyfinPasswordInput = $('#jellyfinPassword');
+                if (jellyfinPasswordInput.attr('type') === 'password') {
+                    jellyfinPasswordInput.attr('type', 'text');
+                    $(this).text('Hide');
+                } else {
+                    jellyfinPasswordInput.attr('type', 'password');
+                    $(this).text('Show');
+                }
+            });
         </script>
 
         <script src="{{ url_for('static', filename='js/libraries/jquery-3.4.1.min.js') }}"

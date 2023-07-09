@@ -12,7 +12,6 @@ PAGE_DISPLAY_NAMES = {
 # Define the base URLs
 TMDB_BASE_URL = "https://api.themoviedb.org/3"
 TMDB_IMAGE_BASE_URL = "https://image.tmdb.org/t/p/w500"
-PLEX_CLIENT_IDENTIFIER = "your_unique_client_identifier"
 
 # Define the response messages
 RESPONSE_MESSAGES = {
