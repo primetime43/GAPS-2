@@ -1,5 +1,17 @@
 # GAPS 2
 
+Table of Contents
+
+- [GAPS 2](#gaps-2)
+  - [Features](#features)
+  - [TODO](#todo)
+  - [Installation](#installation)
+- [Docker](#docker)
+- [Images of v1.0.0](#images-of-v100)
+- [Development](#development)
+
+# GAPS 2
+
 GAPS 2 is a rewrite of the original [GAPS](https://github.com/JasonHHouse/gaps) project, now written in Python instead of Java. GAPS (Gaps A Plex Server) finds movies you're missing in your Plex Server. It's a great way to find additional movies that you might be interested in based on collections from movies in your Plex Server.
 
 The GAPS 2 project aims to bring the same functionality with the simplicity and versatility of Python.
