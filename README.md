@@ -47,7 +47,11 @@ pip install -r requirements.txt
 Requires Python 3.7 or newer
 
 # Docker
-To build the docker image and run this command in the downloaded directory
+You can pull the docker image from [here](https://hub.docker.com/repository/docker/primetime43/gaps-2/general)
+
+or do it manually with the steps below.
+
+To build the docker image, run this command in the latest downloaded tag's source code directory
 ```
 docker build -t gaps-2 .
 ```
