@@ -124,7 +124,10 @@
     </div>
 
     <script>
-        function getRecommendations(movieId) {
+        function getRecommendations(movieId, movieName) {
+            // Store the movie name in local storage
+            localStorage.setItem('recommendedMovieName', movieName);
+
             var apiKey = localStorage.getItem('tmdbApiKey');
             fetch('/recommendations?movieId=' + movieId + '&apiKey=' + apiKey)
                 .then(response => response.json())
@@ -216,7 +219,7 @@
                             <div class="card-body">
                                 <h5 class="card-title">${movie.name} (${movie.year})</h5>
                                 <p class="card-text text-muted">${movie.overview}</p>
-                                <button onclick="getRecommendations('${movie.tmdbId.toString()}')" class="btn btn-primary" title="Click to get similar recommended movies">Get Recommendations</button>
+                                <button onclick="getRecommendations('${movie.tmdbId.toString()}', '${movie.name.replace(/'/g, "\\'")}')" class="btn btn-primary" title="Click to get similar recommended movies">Get Recommendations</button>
                             </div>                
                         </div>
                     </div>
