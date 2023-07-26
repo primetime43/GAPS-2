@@ -148,6 +148,10 @@
                             // Set the saved API key to the textbox
                             document.getElementById('tmdbApiKey').value = tmdbKey;
                         }
+                        else {
+                            // If there's no key in the local storage, clear the textbox
+                            document.getElementById('tmdbApiKey').value = '';
+                        }
                     };
 
 
