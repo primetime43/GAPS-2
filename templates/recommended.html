@@ -141,7 +141,9 @@
             localStorage.setItem('recommendedMovieName', movieName);
 
             var apiKey = localStorage.getItem('tmdbApiKey');
-            fetch('/recommendations?movieId=' + movieId + '&apiKey=' + apiKey)
+            var libraryName = localStorage.getItem('loadedLibraryName');
+            var showExistingMovies = localStorage.getItem('showExistingMovies');
+            fetch('/recommendations?movieId=' + movieId + '&apiKey=' + apiKey + '&libraryName=' + libraryName + '&showExisting=' + showExistingMovies)
                 .then(response => response.json())
                 .then(data => {
                     if (data.error) {

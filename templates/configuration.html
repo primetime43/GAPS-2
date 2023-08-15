@@ -34,6 +34,9 @@
             <li class="nav-item">
                 <a class="nav-link" data-toggle="tab" href="#emby" id="embyTab">Emby</a>
             </li>
+            <li class="nav-item">
+                <a class="nav-link" data-toggle="tab" href="#userPref" id="userPrefTab">User Preferences</a>
+            </li>
         </ul>
         <div class="tab-content top-margin" id="myTabContent">
             <!-- TMdb tab -->
@@ -242,6 +245,19 @@
             <!-- Emby tab -->
             <div class="tab-pane fade top-margin" id="emby">
             </div>
+            <!-- User Preferences tab -->
+            <div class="tab-pane fade top-margin" id="userPref" hidden="true">
+                <fieldset>
+                    <legend>Movie Preferences</legend>
+                    <div class="form-check">
+                        <!-- Need to eventually get this configuration working -->
+                        <input class="form-check-input" type="checkbox" value="" id="showExistingMoviesCheck" checked>
+                        <label class="form-check-label" for="showExistingMoviesCheck">
+                            Show recommended movies that already exist in loaded library
+                        </label>
+                    </div>
+                </fieldset>
+            </div>                      
         </div>
 
         <div th:insert="fragments/common :: contextPath"></div>
@@ -356,6 +372,24 @@
                 // Hide the Jellyfin & emby tab
                 $('#jellyfinTab').hide();
                 $('#embyTab').hide();
+
+                // Check for stored preference in local storage and set the checkbox accordingly
+                var showExistingMovies = localStorage.getItem('showExistingMovies');
+                var checkbox = document.getElementById('showExistingMoviesCheck');
+
+                if (showExistingMovies === null) {
+                    // If there is no existing preference in localStorage, set it to true
+                    localStorage.setItem('showExistingMovies', true);
+                    checkbox.checked = true;
+                } else {
+                    // If there is an existing preference, use it
+                    checkbox.checked = (showExistingMovies === 'true');
+                }
+
+                // Add event listener to checkbox
+                checkbox.addEventListener('change', function () {
+                    localStorage.setItem('showExistingMovies', this.checked);
+                });
 
                 // Send an AJAX request to get the active server data from the Python side
                 $.ajax({

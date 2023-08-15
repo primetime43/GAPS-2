@@ -241,6 +241,7 @@ def get_movies_from_plex_library():
 
         # Extract movie data
         movie_data = []
+        tmdb_ids = []
         for movie in movies:
             imdb_id = None
             tmdb_id = None
@@ -250,7 +251,7 @@ def get_movies_from_plex_library():
                 if 'imdb' in guid.id:
                     imdb_id = guid.id.replace('imdb://', '')
                 elif 'tmdb' in guid.id:
-                    tmdb_id = guid.id.replace('tmdb://', '')
+                    tmdb_id = int(guid.id.replace('tmdb://', ''))
                 elif 'tvdb' in guid.id:
                     tvdb_id = guid.id.replace('tvdb://', '')
 
@@ -264,11 +265,16 @@ def get_movies_from_plex_library():
                 'tvdbId': tvdb_id
             }
             movie_data.append(movie_info)
+            if tmdb_id:
+                tmdb_ids.append(tmdb_id)
 
         # store the data globally so if the html page is refreshed, 
         # it doesnt have to make another request to get the data 
         # (do this instead of storing locally as thats limited to 5 MB)
-        moviesFromSelectedLibrary[library_name] = movie_data
+        moviesFromSelectedLibrary[library_name] = {
+            'movies': movie_data,
+            'tmdbIds': tmdb_ids
+        }
 
         return jsonify(movies=movie_data)
 
@@ -281,6 +287,8 @@ def get_recommendations():
     global global_recommendations
     movie_id = request.args.get('movieId', default = 11, type = int) 
     api_key = request.args.get('apiKey', default = "", type = str)
+    library_name = request.args.get('libraryName')  # Get the library name from the request
+    showExistingMovies = request.args.get('showExisting')
 
     url = f"{app.config['TMDB_BASE_URL']}/movie/{movie_id}/recommendations"
     params = {"api_key": api_key}
@@ -292,6 +300,13 @@ def get_recommendations():
 
     data = response.json()
 
+    if not showExistingMovies: 
+        # Get the list of TMDB IDs from the current library
+        library = moviesFromSelectedLibrary.get(library_name, {'tmdbIds': []})
+        existing_tmdb_ids = set(library['tmdbIds'])
+    else:
+        existing_tmdb_ids = set()  # Set to empty set
+
     base_image_url = "https://image.tmdb.org/t/p/w500"
     """ recommendations = [{'id': i['id'],
                          'title': i['title'],
@@ -302,7 +317,8 @@ def get_recommendations():
                         'name': i['title'], 
                         'year': i['release_date'][:4], 
                         'posterUrl': base_image_url + i['poster_path'],
-                        'overview': i['overview']} for i in data['results']]
+                        'overview': i['overview']} 
+                        for i in data['results'] if i['id'] not in existing_tmdb_ids]
     
     global_recommendations = recommendations
 
