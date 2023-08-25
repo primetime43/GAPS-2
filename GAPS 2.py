@@ -84,15 +84,18 @@ def fetch_servers():
         plex_data = PlexAccountData()  # Create a new PlexAccountData object
         plex_account = MyPlexAccount(token=globalPin.token)
         username = plex_account.username  # Get the username
-        resources = [resource for resource in plex_account.resources() if resource.owned and resource.connections]
-        servers = [f"{resource.name} ({resource.connections[0].address})" for resource in resources if resource.connections]
+
+        # Filter resources by 'owned', 'connections', and 'provides=server'
+        resources = [resource for resource in plex_account.resources() if resource.owned and resource.connections and resource.provides == 'server']
+
+        # Construct server names
+        servers = [f"{resource.name} ({resource.connections[0].address})" for resource in resources]
 
         # Store tokens in the dictionary
         for resource in resources:
-            if resource.connections:
-                server_name = f"{resource.name} ({resource.connections[0].address})"
-                tokens[server_name] = globalPin.token
-                plex_data.add_token(server_name, globalPin.token)
+            server_name = f"{resource.name} ({resource.connections[0].address})"
+            tokens[server_name] = globalPin.token
+            plex_data.add_token(server_name, globalPin.token)
 
         plex_data.set_servers(servers)
 

@@ -178,7 +178,7 @@
                 success: function (response) {
                     $('#loading').hide();
 
-                    console.log(response);
+                    //console.log(response);
 
                     // Store all movies
                     allMovies = response.movies;
@@ -215,7 +215,7 @@
 
             // Update each movie
             moviesArray.slice(0, displayCount).forEach(function (movie) {
-                console.log(movie); // Inspect the movie object here
+                //console.log(movie); // Inspect the movie object here
 
                 // Create the HTML string for each movie
                 var html = `

@@ -176,9 +176,9 @@
                     </div>                                  
 
                     <div class="form-group">
-                        <label for="server">Plex Server</label>
+                        <label for="serverList">Plex Server</label>
                         <div class="input-group">
-                            <select class="form-control" id="server" required>
+                            <select class="form-control" id="serverList" required>
                                 <option value="" disabled selected>Select a Plex server</option>
                             </select>
                             <div class="invalid-feedback" id="emptyPlexServerLabel">
@@ -201,9 +201,9 @@
                         </div>
                         <small class="form-text text-muted" id="plexTokenLabel">Here is the token of the selected
                             server/device.</small>
-                        <button class="btn btn-primary mt-2" id="savePlexData" onclick="savePlexServer(event);">Set As
+                        <button style="display: none;" class="btn btn-primary mt-2" id="savePlexData" onclick="savePlexServer(event);">Set As
                             Active Plex Server</button>
-                        <button class="btn btn-primary mt-2" id="showActiveServerBtn"
+                        <button style="display: none;" class="btn btn-primary mt-2" id="showActiveServerBtn"
                             onclick="showActiveServerData(event);">Show Active Server</button>
                     </div>
                     <h3 class="top-margin">Servers</h3>
@@ -253,7 +253,7 @@
                         <!-- Need to eventually get this configuration working -->
                         <input class="form-check-input" type="checkbox" value="" id="showExistingMoviesCheck" checked>
                         <label class="form-check-label" for="showExistingMoviesCheck">
-                            Show recommended movies that already exist in loaded library
+                            Recommended movies that already exist in loaded library
                         </label>
                     </div>
                 </fieldset>
@@ -327,11 +327,18 @@
                     } else {
                         // Update the dropdown options with the server data
                         var servers = response.servers;
-                        var dropdown = $('#server');
+                        var dropdown = $('#serverList');
                         dropdown.empty();
                         servers.forEach(function (server) {
                             dropdown.append($('<option>').text(server).attr('value', server));
                         });
+
+                        if(servers.length > 0)
+                        {
+                            // Show the buttons
+                            document.getElementById("savePlexData").style.display = "inline-block";
+                            document.getElementById("showActiveServerBtn").style.display = "inline-block";
+                        }
 
                         // Set the Plex token
                         var token = response.token;
@@ -402,7 +409,7 @@
 
                         if (server && token) {
                             //clear the textboxes
-                            document.getElementById('server').value = '';
+                            document.getElementById('serverList').value = '';
                             document.getElementById('plexToken').value = '';
 
                             // Call the displayActiveServerInfo function to update the displayed information
@@ -410,7 +417,7 @@
                         } else {
                             console.log('No active server data found');
                             // Clear the form fields
-                            document.getElementById('server').value = '';
+                            document.getElementById('serverList').value = '';
                             document.getElementById('plexToken').value = '';
                         }
                     },
@@ -427,7 +434,7 @@
                 // Show the loading text/spinner
                 $('#saving').show();
 
-                var server = document.getElementById('server').value;
+                var server = document.getElementById('serverList').value;
                 var token = document.getElementById('plexToken').value;
 
                 // Send an AJAX request to save the data on the Python side
@@ -438,7 +445,7 @@
                     data: JSON.stringify({ server: server, token: token }),
                     success: function (response) {
                         // Clear the form fields
-                        document.getElementById('server').value = '';
+                        document.getElementById('serverList').value = '';
                         document.getElementById('plexToken').value = '';
 
                         // Hide the loading text/spinner
@@ -464,7 +471,7 @@
                     type: 'GET',
                     success: function (response) {
                         // Handle success response here
-                        console.log(response);
+                        //console.log(response);
 
                         var server = response.server;
                         var token = response.token;
@@ -472,14 +479,14 @@
 
                         if (server && token) {
                             // Update the HTML elements with the active server information
-                            document.getElementById('server').value = server;
+                            document.getElementById('serverList').value = server;
                             document.getElementById('plexToken').value = token;
                             // Call the displayActiveServerInfo function to update the displayed information
                             displayActiveServerInfo(server, libraries);
                         } else {
                             console.log('No active server data found');
                             // Clear the form fields
-                            document.getElementById('server').value = '';
+                            document.getElementById('serverList').value = '';
                             document.getElementById('plexToken').value = '';
                         }
                     },
