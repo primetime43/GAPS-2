@@ -34,7 +34,7 @@
                 </select>
             </div>
 
-            <div id="selectedMovieName"></div>
+            <div id="centerText"></div>
         
             <div class="form-group">
                 <input type="text" id="movieSearchBox" placeholder="Search Movies" class="form-control">
@@ -208,12 +208,18 @@
             .catch(error => console.error(error));
 
         var movieName = localStorage.getItem('recommendedMovieName');
+        var libraryName = localStorage.getItem('loadedLibraryName');
+        var showExisting = localStorage.getItem('showExistingMovies');
         if (movieName) {
-            // Display the movie name somewhere on the page
-            document.getElementById('selectedMovieName').innerText = 'Recommendations for: ' + movieName;
+            let textToDisplay = 'Recommendations for: ' + movieName;
 
-            // Clear the movie name from local storage
-            localStorage.removeItem('recommendedMovieName');
+            if (showExisting === "false") {
+                textToDisplay += " | Not showing existing movies in " + libraryName;
+            } else {
+                textToDisplay += " | Showing existing movies in " + libraryName;
+            }
+
+            document.getElementById('centerText').innerText = textToDisplay;
         }
     }
 </script>
