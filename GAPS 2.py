@@ -289,6 +289,8 @@ def get_recommendations():
     api_key = request.args.get('apiKey', default = "", type = str)
     library_name = request.args.get('libraryName')  # Get the library name from the request
     showExistingMovies = request.args.get('showExisting')
+    # Convert to boolean
+    showExistingMovies_bool = showExistingMovies.lower() == 'true'
 
     url = f"{app.config['TMDB_BASE_URL']}/movie/{movie_id}/recommendations"
     params = {"api_key": api_key}
@@ -300,7 +302,7 @@ def get_recommendations():
 
     data = response.json()
 
-    if not showExistingMovies: 
+    if not showExistingMovies_bool: #If False, remove movies already existing in the library from the recommendations
         # Get the list of TMDB IDs from the current library
         library = moviesFromSelectedLibrary.get(library_name, {'tmdbIds': []})
         existing_tmdb_ids = set(library['tmdbIds'])
@@ -313,12 +315,22 @@ def get_recommendations():
                            'release_date': i['release_date'],
                              'overview': i['overview'],
                                'poster_path': base_image_url + i['poster_path']} for i in data['results']] """
-    recommendations = [{'tmdbId': i['id'], 
-                        'name': i['title'], 
-                        'year': i['release_date'][:4], 
-                        'posterUrl': base_image_url + i['poster_path'],
-                        'overview': i['overview']} 
-                        for i in data['results'] if i['id'] not in existing_tmdb_ids]
+    
+    recommendations = []
+
+    for i in data['results']:
+        if i['id'] not in existing_tmdb_ids:
+            #print(f"Movie ID {i['id']} is not in existing_tmdb_ids, adding to recommendations.")
+            recommendations.append({
+                'tmdbId': i['id'],
+                'name': i['title'],
+                'year': i['release_date'][:4] if 'release_date' in i and i['release_date'] else 'N/A',
+                'posterUrl': base_image_url + i['poster_path'] if 'poster_path' in i and i['poster_path'] else 'N/A',
+                'overview': i['overview'] if 'overview' in i else 'N/A'
+            })
+        #else:
+            #print(f"Movie ID {i['id']} already exists in existing_tmdb_ids, skipping.")
+
     
     global_recommendations = recommendations
 
