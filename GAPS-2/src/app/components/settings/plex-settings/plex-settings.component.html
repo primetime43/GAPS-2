@@ -1,0 +1,41 @@
+<div class="tab-pane fade top-margin" id="plex">
+  <form class="needs-validation" (ngSubmit)="savePlexServer()" novalidate>
+      <div class="form-group mt-3">
+          <div>
+              <button class="btn btn-primary" type="button" (click)="authenticatePlexAccount()">Authenticate Plex Account</button>
+          </div>
+          <div class="mt-3">
+              <button class="btn btn-primary" type="button" (click)="fetchServers()">Fetch Servers</button>
+          </div>
+      </div>
+
+      <div class="form-group">
+          <label for="serverList">Plex Server</label>
+          <div class="input-group">
+              <select class="form-control" name="serverList" required>
+                  <option value="" disabled selected>Select a Plex server</option>
+                  <option *ngFor="let server of servers" [value]="server">{{server}}</option>
+              </select>
+              <div class="invalid-feedback">
+                  Please select a Plex server.
+              </div>
+          </div>
+          <small class="form-text text-muted">These are Plex servers/devices on the signed-in account.</small>
+      </div>
+
+      <div class="form-group">
+          <label for="plexToken">Plex Token</label>
+          <div class="input-group">
+              <input aria-describedby="tokenHelp" class="form-control" name="plexToken" required type="password">
+              <div class="input-group-append">
+                  <button class="btn btn-outline-secondary" type="button" (click)="togglePlexTokenVisibility()">Show</button>
+              </div>
+          </div>
+          <small class="form-text text-muted">Here is the token of the selected server/device.</small>
+          <button class="btn btn-primary mt-2" (click)="setAsActivePlexServer()" *ngIf="showSavePlexData">Set As Active Plex Server</button>
+          <button class="btn btn-primary mt-2" (click)="showActiveServer()" *ngIf="showActiveServerBtn">Show Active Server</button>
+      </div>
+      <h3 class="top-margin">Servers</h3>
+      <div>{{activeServerInfo}}</div>
+  </form>
+</div>

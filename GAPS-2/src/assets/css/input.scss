@@ -1,0 +1,94 @@
+/* Change the white to any color ;) */
+.top-margin {
+    margin-top: 16px;
+}
+
+.all-padding {
+    padding: 16px;
+}
+
+.gaps-hide {
+    display: none;
+}
+
+.thumbnail {
+    max-width: 96px;
+    height: auto;
+}
+
+.bottom-margin {
+    margin-top: 16px;
+}
+
+.word-break {
+    word-break: break-all;
+}
+
+.center {
+    display: block;
+    margin-left: auto;
+    margin-right: auto;
+    width: 50%;
+}
+
+.center-text {
+    text-align: center;
+}
+
+.center-parent {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.nav-button-padding {
+    padding-top: 8px;
+    display: block;
+    width: 96px;
+}
+
+.nav-anchor-spacing {
+    display: block;
+    width: 96px;
+}
+
+.icon {
+    width: 48px;
+    height: 48px;
+    margin-bottom: 4px;
+    display: block;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.default {
+    background-color: #fafafa; /* defines the background color of the image */
+}
+
+.activePage {
+    background-color: #00bc8c; /* defines the background color of the image */
+}
+
+.long-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 3; /* number of lines to show */
+    -webkit-box-orient: vertical;
+}
+
+hr.thin {
+    height: 1px;
+    border: 0;
+    color: #333;
+    background-color: #333;
+    width: 95%;
+}
+
+.white-line {
+    width: 75%;
+    height: 4px;
+    background-color: white;
+    margin-top: 10px;
+    margin-bottom: 10px;
+}

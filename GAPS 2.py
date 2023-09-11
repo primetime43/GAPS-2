@@ -2,8 +2,10 @@ import json, webbrowser, requests
 from flask import Flask, render_template, request, jsonify
 from plexapi.myplex import MyPlexPinLogin, MyPlexAccount, PlexServer
 from PlexAccountData import PlexAccountData
+from flask_cors import CORS
 
 app = Flask(__name__)
+CORS(app)
 
 # Configuration
 app.config.from_pyfile('config.py')  # Assuming you have a config.py file

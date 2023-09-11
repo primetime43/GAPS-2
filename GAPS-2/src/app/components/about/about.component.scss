@@ -1,0 +1,37 @@
+.default {
+  background-color: #fafafa;
+}
+
+.activePage {
+  background-color: #00bc8c;
+}
+
+.darkBackground{
+  background-color: #333;
+}
+
+.center {
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
+  width: 50%;
+}
+
+img {
+  vertical-align: middle;
+  border-style: none;
+}
+
+.top-margin {
+  margin-top: 16px;
+}
+
+.center-text {
+  text-align: center;
+}
+
+.center-parent {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}

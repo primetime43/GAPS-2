@@ -1,0 +1,23 @@
+<div class="container darkBackground">
+  <h3 class="top-margin">Settings</h3>
+  <ul class="nav nav-tabs">
+    <li class="nav-item">
+      <a class="nav-link active transparent-tab regular-text" [ngClass]="{'active': activeTab === 'tmdbTab'}" id="tmdbTab" (click)="activeTab = 'tmdbTab'" routerLink="/settings/tmdb">TMDB</a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link regular-text" [ngClass]="{'active': activeTab === 'plexTab'}" id="plexTab" (click)="activeTab = 'plexTab'" routerLink="/settings/plex">Plex</a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link regular-text" [ngClass]="{'active': activeTab === 'jellyfinTab'}" id="jellyfinTab" (click)="activeTab = 'jellyfinTab'" routerLink="/settings/jellyfin">Jellyfin</a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link regular-text" [ngClass]="{'active': activeTab === 'embyTab'}" id="embyTab" (click)="activeTab = 'embyTab'" routerLink="/settings/emby">Emby</a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link regular-text" [ngClass]="{'active': activeTab === 'userPrefTab'}" id="userPrefTab" (click)="activeTab = 'userPrefTab'" routerLink="/settings/user-preferences">User Preferences</a>
+    </li>
+  </ul>
+  <div class="tab-content top-margin">
+    <router-outlet></router-outlet>
+  </div>
+</div>
