@@ -24,7 +24,7 @@
         <label class="text-muted mb-1">Select a Library</label>
         <select class="form-select dark-select" [(ngModel)]="selectedLibrary" (ngModelChange)="onLibrarySelect()">
           <option value="" disabled>Choose a library...</option>
-          <option *ngFor="let lib of libraries" [value]="lib">{{ lib }}</option>
+          <option *ngFor="let lib of libraries" [value]="lib.title">{{ lib.title }}</option>
         </select>
       </div>
       <div class="col-md-6 d-flex align-items-end">

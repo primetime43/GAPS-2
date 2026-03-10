@@ -5,7 +5,7 @@ import { RecommendationService } from '../../services/recommendation.service';
 import { TmdbService } from '../../services/tmdb/tmdb.service';
 import { Movie } from '../../models/movie.model';
 import { Recommendation } from '../../models/recommendation.model';
-import { ActiveServerResponse } from '../../models/plex.model';
+import { ActiveServerResponse, PlexLibrary } from '../../models/plex.model';
 
 @Component({
     selector: 'app-recommended',
@@ -14,7 +14,7 @@ import { ActiveServerResponse } from '../../models/plex.model';
     standalone: false
 })
 export class RecommendedComponent implements OnInit {
-  libraries: string[] = [];
+  libraries: PlexLibrary[] = [];
   selectedLibrary = '';
   movies: Movie[] = [];
   filteredMovies: Movie[] = [];
@@ -41,7 +41,9 @@ export class RecommendedComponent implements OnInit {
       next: (res: ActiveServerResponse) => {
         if (res && res.server) {
           this.hasServer = true;
-          this.libraries = res.libraries ? Object.keys(res.libraries) : [];
+          this.libraries = Array.isArray(res.libraries)
+            ? res.libraries.filter((lib: PlexLibrary) => lib.type === 'movie')
+            : [];
         }
         this.loading = false;
       },
