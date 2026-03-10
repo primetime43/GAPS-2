@@ -1,5 +1,4 @@
 export const PAGE_DISPLAY_NAMES = {
-  libraries: 'Libraries',
   recommended: 'Recommended',
   settings: 'Settings',
   updates: 'Updates',

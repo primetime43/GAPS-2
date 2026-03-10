@@ -1,7 +1,6 @@
 import { NgModule } from '@angular/core';
 import { RouterModule, Routes } from '@angular/router';
 
-import { LibrariesComponent } from './components/libraries/libraries.component';
 import { RecommendedComponent } from './components/recommended/recommended.component';
 import { UpdatesComponent } from './components/updates/updates.component';
 import { AboutComponent } from './components/about/about.component';
@@ -17,7 +16,6 @@ import { SettingsComponent } from './components/settings/settings.component';
 
 const routes: Routes = [
   { path: '', redirectTo: '/index', pathMatch: 'full' },
-  { path: 'libraries', component: LibrariesComponent },
   { path: 'recommended', component: RecommendedComponent },
   { path: 'updates', component: UpdatesComponent },
   { path: 'about', component: AboutComponent },

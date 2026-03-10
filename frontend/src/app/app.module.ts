@@ -9,7 +9,6 @@ import { AppComponent } from './app.component';
 
 import { provideHttpClient, withInterceptorsFromDi } from '@angular/common/http';
 import { HeaderComponent } from './components/header/header.component';
-import { LibrariesComponent } from './components/libraries/libraries.component';
 import { RecommendedComponent } from './components/recommended/recommended.component';
 import { UpdatesComponent } from './components/updates/updates.component';
 import { AboutComponent } from './components/about/about.component';
@@ -24,7 +23,6 @@ import { SettingsComponent } from './components/settings/settings.component';
 @NgModule({ declarations: [
         AppComponent,
         HeaderComponent,
-        LibrariesComponent,
         RecommendedComponent,
         UpdatesComponent,
         AboutComponent,
