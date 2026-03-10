@@ -18,7 +18,9 @@ export class PlexSettingsComponent implements OnInit, OnDestroy {
   // Active server
   activeServer = '';
   activeLibraryCount = 0;
+  activeLibraries: PlexLibrary[] = [];
   hasActiveServer = false;
+  serverExpanded = false;
 
   // UI state
   step: 'idle' | 'authenticating' | 'waiting' | 'fetching' | 'selecting' | 'saving' = 'idle';
@@ -126,6 +128,8 @@ export class PlexSettingsComponent implements OnInit, OnDestroy {
     this.hasActiveServer = false;
     this.activeServer = '';
     this.activeLibraryCount = 0;
+    this.activeLibraries = [];
+    this.serverExpanded = false;
     this.step = 'idle';
     this.clearMessage();
   }
@@ -136,6 +140,8 @@ export class PlexSettingsComponent implements OnInit, OnDestroy {
         this.hasActiveServer = false;
         this.activeServer = '';
         this.activeLibraryCount = 0;
+        this.activeLibraries = [];
+        this.serverExpanded = false;
         this.step = 'idle';
         this.showMessage('Server removed.', 'success');
       },
@@ -155,6 +161,14 @@ export class PlexSettingsComponent implements OnInit, OnDestroy {
 
   get movieLibraries(): PlexLibrary[] {
     return this.libraries.filter(lib => lib.type === 'movie');
+  }
+
+  get activeMovieLibraries(): PlexLibrary[] {
+    return this.activeLibraries.filter(lib => lib.type === 'movie');
+  }
+
+  get activeOtherLibraries(): PlexLibrary[] {
+    return this.activeLibraries.filter(lib => lib.type !== 'movie');
   }
 
   private startPolling(): void {
@@ -185,7 +199,11 @@ export class PlexSettingsComponent implements OnInit, OnDestroy {
         if (res && res.server) {
           this.hasActiveServer = true;
           this.activeServer = res.server;
-          this.activeLibraryCount = Array.isArray(res.libraries) ? res.libraries.length : 0;
+          this.activeLibraries = Array.isArray(res.libraries) ? res.libraries : [];
+          this.activeLibraryCount = this.activeLibraries.length;
+          if (res.token) {
+            this.plexToken = res.token;
+          }
         }
       },
       error: () => {}

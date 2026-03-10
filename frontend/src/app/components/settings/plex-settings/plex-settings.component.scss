@@ -2,15 +2,47 @@
   padding-top: 12px;
 }
 
-/* Active server card */
-.active-server-card {
+/* Server accordion */
+.server-accordion {
+  border: 1px solid #00bc8c;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.server-accordion-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   background-color: #1e3a2f;
-  border: 1px solid #00bc8c;
-  border-radius: 8px;
   padding: 14px 18px;
+  cursor: pointer;
+  user-select: none;
+
+  &:hover {
+    background-color: #234a3a;
+  }
+}
+
+.accordion-right {
+  display: flex;
+  align-items: center;
+}
+
+.accordion-arrow {
+  color: #999;
+  font-size: 16px;
+  transition: transform 0.2s ease;
+  display: inline-block;
+
+  &.expanded {
+    transform: rotate(180deg);
+  }
+}
+
+.server-accordion-body {
+  background-color: #1a2e25;
+  border-top: 1px solid #00bc8c33;
+  padding: 16px 18px;
 }
 
 .active-server-info {
@@ -49,6 +81,21 @@
 .lib-count {
   color: #999;
   font-size: 13px;
+}
+
+/* Library groups */
+.lib-group {
+  margin-bottom: 10px;
+}
+
+.lib-group-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: #999;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin-bottom: 6px;
 }
 
 /* Setup flow */
@@ -104,6 +151,11 @@
   border-radius: 12px;
 }
 
+.lib-tag-movie {
+  border-color: #00bc8c66;
+  color: #a0e8d0;
+}
+
 /* Token */
 .token-row {
   display: flex;
@@ -128,19 +180,6 @@
   padding: 3px 8px;
   border-radius: 4px;
   word-break: break-all;
-}
-
-/* Inline spinner for buttons */
-.spinner-inline {
-  display: inline-block;
-  width: 14px;
-  height: 14px;
-  border: 2px solid rgba(255, 255, 255, 0.3);
-  border-top-color: #fff;
-  border-radius: 50%;
-  animation: spin 0.6s linear infinite;
-  margin-right: 6px;
-  vertical-align: middle;
 }
 
 /* Alert sizing */

@@ -1,17 +1,48 @@
 <div class="plex-settings">
 
-  <!-- Current active server card -->
-  <div class="active-server-card" *ngIf="hasActiveServer">
-    <div class="active-server-info">
-      <div class="active-badge">Connected</div>
-      <div class="active-details">
-        <span class="server-name">{{ activeServer }}</span>
-        <span class="lib-count">{{ activeLibraryCount }} libraries</span>
+  <!-- Current active server (accordion) -->
+  <div class="server-accordion" *ngIf="hasActiveServer">
+    <div class="server-accordion-header" (click)="serverExpanded = !serverExpanded">
+      <div class="active-server-info">
+        <div class="active-badge">Connected</div>
+        <div class="active-details">
+          <span class="server-name">{{ activeServer }}</span>
+          <span class="lib-count">{{ activeLibraryCount }} libraries</span>
+        </div>
+      </div>
+      <div class="accordion-right">
+        <span class="accordion-arrow" [class.expanded]="serverExpanded">&#9662;</span>
       </div>
     </div>
-    <div class="active-server-actions">
-      <button class="btn btn-sm btn-outline-secondary" (click)="disconnect()">Change Server</button>
-      <button class="btn btn-sm btn-outline-danger" (click)="removeServer()">Remove</button>
+
+    <div class="server-accordion-body" *ngIf="serverExpanded">
+      <!-- All libraries grouped by type -->
+      <div class="lib-group" *ngIf="activeMovieLibraries.length > 0">
+        <span class="lib-group-label">Movie Libraries</span>
+        <div class="libraries-row">
+          <span *ngFor="let lib of activeMovieLibraries" class="lib-tag lib-tag-movie">{{ lib.title }}</span>
+        </div>
+      </div>
+      <div class="lib-group" *ngIf="activeOtherLibraries.length > 0">
+        <span class="lib-group-label">Other Libraries</span>
+        <div class="libraries-row">
+          <span *ngFor="let lib of activeOtherLibraries" class="lib-tag">{{ lib.title }}</span>
+        </div>
+      </div>
+
+      <!-- Token -->
+      <div class="token-row mt-2" *ngIf="plexToken">
+        <a class="text-muted token-toggle" (click)="togglePlexTokenVisibility(); $event.stopPropagation()">
+          {{ tokenVisible ? 'Hide token' : 'Show token' }}
+        </a>
+        <code *ngIf="tokenVisible" class="token-value">{{ plexToken }}</code>
+      </div>
+
+      <!-- Actions -->
+      <div class="active-server-actions mt-3">
+        <button class="btn btn-sm btn-outline-secondary" (click)="disconnect(); $event.stopPropagation()">Change Server</button>
+        <button class="btn btn-sm btn-outline-danger" (click)="removeServer(); $event.stopPropagation()">Remove</button>
+      </div>
     </div>
   </div>
 
@@ -66,7 +97,7 @@
       <!-- Movie libraries found -->
       <div class="libraries-row mb-3" *ngIf="movieLibraries.length > 0">
         <span class="text-muted lib-label">Movie libraries:</span>
-        <span *ngFor="let lib of movieLibraries" class="lib-tag">{{ lib.title }}</span>
+        <span *ngFor="let lib of movieLibraries" class="lib-tag lib-tag-movie">{{ lib.title }}</span>
       </div>
       <div *ngIf="libraries.length > 0 && movieLibraries.length === 0" class="text-muted mb-3">
         No movie libraries found on this server.
