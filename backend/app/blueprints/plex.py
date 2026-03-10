@@ -9,6 +9,12 @@ def authenticate():
     return jsonify({'oauth_url': oauth_url})
 
 
+@plex_bp.route('/check-login', methods=['GET'])
+def check_login():
+    logged_in = current_app.plex_service.check_login()
+    return jsonify(authenticated=logged_in)
+
+
 @plex_bp.route('/fetch-servers', methods=['POST'])
 def fetch_servers():
     servers, token = current_app.plex_service.fetch_servers()

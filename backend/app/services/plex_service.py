@@ -52,32 +52,29 @@ class PlexService:
         # connect() tries all connection URLs (remote first, then local)
         # so it works regardless of network location
         server = resource.connect()
-        libraries = [section.title for section in server.library.sections()]
+        libraries = [
+            {'title': section.title, 'type': section.type}
+            for section in server.library.sections()
+        ]
 
         return libraries, self._token, None
 
     # -- Active Server --
 
-    def save_active_server(self, server: str, token: str, libraries: dict | list | None = None) -> tuple[bool, str | None]:
+    def save_active_server(self, server: str, token: str, libraries: list | None = None) -> tuple[bool, str | None]:
         try:
             plex_data = PlexAccountData()
             plex_data.set_selected_server(server)
             plex_data.set_token(token)
 
             # Use already-fetched libraries passed from the frontend
-            if libraries is not None:
-                if isinstance(libraries, list):
-                    lib_dict = {server: libraries}
-                else:
-                    lib_dict = libraries
-            else:
-                lib_dict = {}
+            lib_list = libraries if isinstance(libraries, list) else []
 
-            plex_data.set_libraries(lib_dict)
+            plex_data.set_libraries(lib_list)
 
             self._active_server.selected_server = server
             self._active_server.token = token
-            self._active_server.libraries = lib_dict
+            self._active_server.libraries = lib_list
 
             return True, None
         except Exception as e:

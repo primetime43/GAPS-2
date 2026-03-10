@@ -7,8 +7,13 @@ export interface PlexServersResponse {
   token: string;
 }
 
+export interface PlexLibrary {
+  title: string;
+  type: string;  // 'movie', 'show', 'artist', 'photo'
+}
+
 export interface ActiveServerResponse {
   server: string;
   token: string;
-  libraries: Record<string, string[]>;
+  libraries: PlexLibrary[];
 }

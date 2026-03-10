@@ -1,5 +1,6 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, OnDestroy } from '@angular/core';
 import { PlexService } from '../../../services/plex.service';
+import { PlexLibrary } from '../../../models/plex.model';
 
 @Component({
     selector: 'app-plex-settings',
@@ -7,12 +8,12 @@ import { PlexService } from '../../../services/plex.service';
     styleUrls: ['./plex-settings.component.scss'],
     standalone: false
 })
-export class PlexSettingsComponent implements OnInit {
+export class PlexSettingsComponent implements OnInit, OnDestroy {
   // State
   servers: string[] = [];
   selectedServer = '';
   plexToken = '';
-  libraries: string[] = [];
+  libraries: PlexLibrary[] = [];
 
   // Active server
   activeServer = '';
@@ -25,10 +26,16 @@ export class PlexSettingsComponent implements OnInit {
   statusMessage = '';
   statusType: 'success' | 'error' | '' = '';
 
+  private pollTimer: ReturnType<typeof setInterval> | null = null;
+
   constructor(private plexService: PlexService) {}
 
   ngOnInit(): void {
     this.loadActiveServer();
+  }
+
+  ngOnDestroy(): void {
+    this.stopPolling();
   }
 
   connectPlex(): void {
@@ -39,6 +46,7 @@ export class PlexSettingsComponent implements OnInit {
         if (res.oauth_url) {
           window.open(res.oauth_url, '_blank');
           this.step = 'waiting';
+          this.startPolling();
         }
       },
       error: () => {
@@ -62,8 +70,8 @@ export class PlexSettingsComponent implements OnInit {
             this.onServerSelect();
           }
         } else {
-          this.showMessage('No servers found. Complete the Plex login first.', 'error');
-          this.step = 'waiting';
+          this.showMessage('No servers found. Please try authenticating again.', 'error');
+          this.step = 'idle';
         }
       },
       error: () => {
@@ -78,7 +86,7 @@ export class PlexSettingsComponent implements OnInit {
     this.step = 'fetching';
     this.libraries = [];
     this.plexService.fetchLibraries(this.selectedServer).subscribe({
-      next: (res: any) => {
+      next: (res) => {
         if (res.libraries && Array.isArray(res.libraries)) {
           this.libraries = res.libraries;
         }
@@ -130,19 +138,39 @@ export class PlexSettingsComponent implements OnInit {
     return this.step === 'authenticating' || this.step === 'fetching' || this.step === 'saving';
   }
 
+  get movieLibraries(): PlexLibrary[] {
+    return this.libraries.filter(lib => lib.type === 'movie');
+  }
+
+  private startPolling(): void {
+    this.stopPolling();
+    this.pollTimer = setInterval(() => {
+      this.plexService.checkLogin().subscribe({
+        next: (res) => {
+          if (res.authenticated) {
+            this.stopPolling();
+            this.fetchServers();
+          }
+        },
+        error: () => {}
+      });
+    }, 2000);
+  }
+
+  private stopPolling(): void {
+    if (this.pollTimer) {
+      clearInterval(this.pollTimer);
+      this.pollTimer = null;
+    }
+  }
+
   private loadActiveServer(): void {
     this.plexService.getActiveServer().subscribe({
       next: (res) => {
         if (res && res.server) {
           this.hasActiveServer = true;
           this.activeServer = res.server;
-          // libraries is stored as {serverName: [lib1, lib2, ...]}
-          if (res.libraries && typeof res.libraries === 'object') {
-            const libs = Object.values(res.libraries).flat();
-            this.activeLibraryCount = libs.length;
-          } else {
-            this.activeLibraryCount = 0;
-          }
+          this.activeLibraryCount = Array.isArray(res.libraries) ? res.libraries.length : 0;
         }
       },
       error: () => {}

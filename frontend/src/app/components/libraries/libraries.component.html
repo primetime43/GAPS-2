@@ -22,8 +22,8 @@
     <!-- Library list (when no library selected) -->
     <div *ngIf="!selectedLibrary" class="row">
       <div *ngFor="let lib of libraries" class="col-md-4 col-sm-6 mb-3">
-        <div class="library-card" (click)="selectLibrary(lib)">
-          <h5>{{ lib }}</h5>
+        <div class="library-card" (click)="selectLibrary(lib.title)">
+          <h5>{{ lib.title }}</h5>
         </div>
       </div>
     </div>

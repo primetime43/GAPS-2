@@ -2,7 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { PlexService } from '../../services/plex.service';
 import { LibraryService } from '../../services/library.service';
 import { Movie } from '../../models/movie.model';
-import { ActiveServerResponse } from '../../models/plex.model';
+import { ActiveServerResponse, PlexLibrary } from '../../models/plex.model';
 
 @Component({
     selector: 'app-libraries',
@@ -12,7 +12,7 @@ import { ActiveServerResponse } from '../../models/plex.model';
 })
 export class LibrariesComponent implements OnInit {
   serverName = '';
-  libraries: string[] = [];
+  libraries: PlexLibrary[] = [];
   movies: Movie[] = [];
   filteredMovies: Movie[] = [];
   selectedLibrary = '';
@@ -33,7 +33,10 @@ export class LibrariesComponent implements OnInit {
         if (res && res.server) {
           this.hasServer = true;
           this.serverName = res.server;
-          this.libraries = res.libraries ? Object.keys(res.libraries) : [];
+          // Only show movie libraries
+          this.libraries = Array.isArray(res.libraries)
+            ? res.libraries.filter((lib: PlexLibrary) => lib.type === 'movie')
+            : [];
         }
         this.loading = false;
       },

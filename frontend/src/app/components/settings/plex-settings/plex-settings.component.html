@@ -30,13 +30,11 @@
       </button>
     </div>
 
-    <!-- Step 2: Waiting for auth -->
-    <div class="step-card" *ngIf="step === 'waiting'">
-      <p class="text-muted mb-3">Complete the sign-in in the Plex window, then click below.</p>
-      <button class="btn btn-primary" (click)="fetchServers()">
-        I've Signed In
-      </button>
-      <button class="btn btn-outline-secondary ms-2" (click)="connectPlex()">
+    <!-- Step 2: Waiting for auth (auto-polling) -->
+    <div class="step-card text-center" *ngIf="step === 'waiting'">
+      <div class="spinner"></div>
+      <p class="text-muted mt-2 mb-0">Waiting for Plex sign-in to complete...</p>
+      <button class="btn btn-outline-secondary btn-sm mt-3" (click)="connectPlex()">
         Retry Authentication
       </button>
     </div>
@@ -62,10 +60,13 @@
         </select>
       </div>
 
-      <!-- Libraries (compact) -->
-      <div class="libraries-row mb-3" *ngIf="libraries.length > 0">
-        <span class="text-muted lib-label">Libraries:</span>
-        <span *ngFor="let lib of libraries" class="lib-tag">{{ lib }}</span>
+      <!-- Movie libraries found -->
+      <div class="libraries-row mb-3" *ngIf="movieLibraries.length > 0">
+        <span class="text-muted lib-label">Movie libraries:</span>
+        <span *ngFor="let lib of movieLibraries" class="lib-tag">{{ lib.title }}</span>
+      </div>
+      <div *ngIf="libraries.length > 0 && movieLibraries.length === 0" class="text-muted mb-3">
+        No movie libraries found on this server.
       </div>
 
       <!-- Token (collapsible) -->
