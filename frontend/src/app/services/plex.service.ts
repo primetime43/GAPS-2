@@ -41,4 +41,8 @@ export class PlexService {
   getActiveServer(): Observable<ActiveServerResponse> {
     return this.http.get<ActiveServerResponse>(`${environment.apiUrl}/plex/active-server`);
   }
+
+  removeServer(): Observable<ApiResult> {
+    return this.http.delete<ApiResult>(`${environment.apiUrl}/plex/active-server`);
+  }
 }

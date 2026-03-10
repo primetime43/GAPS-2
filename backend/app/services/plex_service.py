@@ -1,4 +1,4 @@
-from plexapi.myplex import MyPlexPinLogin, MyPlexAccount, MyPlexResource
+from plexapi.myplex import MyPlexPinLogin
 from plexapi.server import PlexServer
 from plexapi import BASE_HEADERS
 import requests
@@ -10,9 +10,8 @@ class PlexService:
     def __init__(self):
         self._pin: MyPlexPinLogin | None = None
         self._token: str | None = None
-        self._account: MyPlexAccount | None = None
-        self._resources: dict = {}          # server_name -> MyPlexResource
-        self._server_conn: PlexServer | None = None  # cached server connection
+        self._resources: dict = {}          # server_name -> raw JSON from plex.tv
+        self._server_conn: PlexServer | None = None
         self._server_conn_name: str | None = None
         self._active_server: dict | None = None
         self._movies_cache: dict[str, dict] = {}
@@ -30,38 +29,28 @@ class PlexService:
             return True
         return self._pin.checkLogin()
 
-    # -- Account (lazy, cached) --
-
-    def _get_account(self) -> MyPlexAccount:
-        """Get or create a cached MyPlexAccount. Reused across calls that need it."""
-        if self._account is None or self._account._token != self._token:
-            self._account = MyPlexAccount(token=self._token)
-        return self._account
-
     # -- Servers --
+
+    def _fetch_resources(self) -> list[dict]:
+        """Fetch resources JSON directly from Plex.tv (single API call)."""
+        headers = {**BASE_HEADERS, 'Accept': 'application/json', 'X-Plex-Token': self._token}
+        resp = requests.get(self.RESOURCES_URL, headers=headers, timeout=10)
+        resp.raise_for_status()
+        return resp.json()
 
     def fetch_servers(self) -> tuple[list[str], str | None]:
         if not self._pin or not self._pin.token:
             return [], None
 
         self._token = self._pin.token
+        resources_json = self._fetch_resources()
 
-        # Fetch resources directly from Plex.tv, skipping the full account sign-in
-        headers = {**BASE_HEADERS, 'Accept': 'application/json', 'X-Plex-Token': self._token}
-        resp = requests.get(self.RESOURCES_URL, headers=headers, timeout=10)
-        resp.raise_for_status()
-        resources_json = resp.json()
-
-        # Build MyPlexResource objects so connect() works later.
-        # We need a MyPlexAccount for that, but we can defer it to when
-        # the user actually selects a server and needs to connect.
         self._resources = {}
         servers = []
         for r in resources_json:
             if r.get('owned') and r.get('connections') and 'server' in r.get('provides', ''):
                 name = r['name']
                 servers.append(name)
-                # Store raw JSON for deferred connection
                 self._resources[name] = r
 
         return servers, self._token
@@ -73,25 +62,48 @@ class PlexService:
         if self._server_conn and self._server_conn_name == server_name:
             return self._server_conn
 
-        resource_data = self._resources.get(server_name)
-        if resource_data is None:
-            return None
-
-        # If we have raw JSON, convert to MyPlexResource via the account
-        if isinstance(resource_data, dict):
-            account = self._get_account()
-            # Re-fetch resources through the account to get proper MyPlexResource objects
-            for r in account.resources():
-                if r.owned and r.name == server_name:
-                    resource_data = r
-                    self._resources[server_name] = r
-                    break
-            else:
+        resource = self._resources.get(server_name)
+        if resource is None:
+            # Try re-fetching resources if cache is empty
+            if self._token:
+                try:
+                    resources_json = self._fetch_resources()
+                    for r in resources_json:
+                        if r.get('owned') and r.get('name') == server_name:
+                            resource = r
+                            self._resources[server_name] = r
+                            break
+                except Exception:
+                    pass
+            if resource is None:
                 return None
 
-        self._server_conn = resource_data.connect()
-        self._server_conn_name = server_name
-        return self._server_conn
+        # Connect directly using connection URLs from the JSON.
+        # Try HTTPS connections first, then HTTP. Prioritize local, then remote.
+        token = resource.get('accessToken', self._token)
+        connections = resource.get('connections', [])
+
+        # Sort: local first, then remote; HTTPS preferred
+        def conn_priority(c):
+            is_local = c.get('local', False)
+            is_https = c.get('protocol', '') == 'https'
+            return (not is_local, not is_https)
+
+        connections.sort(key=conn_priority)
+
+        for conn in connections:
+            url = conn.get('uri')
+            if not url:
+                continue
+            try:
+                server = PlexServer(url, token, timeout=5)
+                self._server_conn = server
+                self._server_conn_name = server_name
+                return server
+            except Exception:
+                continue
+
+        return None
 
     # -- Libraries --
 
@@ -123,6 +135,12 @@ class PlexService:
             return self._active_server
         return None
 
+    def remove_active_server(self) -> None:
+        self._active_server = None
+        self._server_conn = None
+        self._server_conn_name = None
+        self._movies_cache = {}
+
     # -- Movies --
 
     def get_movies(self, library_name: str) -> tuple[list[dict] | None, str | None]:
@@ -139,7 +157,6 @@ class PlexService:
 
         try:
             library = server.library.section(library_name)
-            # Fetch all movies with guids included to avoid N+1 lazy loads
             movies = library.search(libtype='movie', includeGuids=True)
 
             base_url = server._baseurl
@@ -166,8 +183,6 @@ class PlexService:
                         elif gid.startswith('tvdb://'):
                             tvdb_id = gid[7:]
 
-                # Build poster URL directly instead of using movie.posterUrl
-                # which makes a network request per movie
                 poster_url = None
                 if movie.thumb:
                     poster_url = f"{base_url}{movie.thumb}?X-Plex-Token={token}"

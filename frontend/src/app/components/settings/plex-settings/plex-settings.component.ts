@@ -130,6 +130,21 @@ export class PlexSettingsComponent implements OnInit, OnDestroy {
     this.clearMessage();
   }
 
+  removeServer(): void {
+    this.plexService.removeServer().subscribe({
+      next: () => {
+        this.hasActiveServer = false;
+        this.activeServer = '';
+        this.activeLibraryCount = 0;
+        this.step = 'idle';
+        this.showMessage('Server removed.', 'success');
+      },
+      error: () => {
+        this.showMessage('Failed to remove server.', 'error');
+      }
+    });
+  }
+
   togglePlexTokenVisibility(): void {
     this.tokenVisible = !this.tokenVisible;
   }

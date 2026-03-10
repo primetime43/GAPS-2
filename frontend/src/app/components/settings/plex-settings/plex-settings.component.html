@@ -9,7 +9,10 @@
         <span class="lib-count">{{ activeLibraryCount }} libraries</span>
       </div>
     </div>
-    <button class="btn btn-sm btn-outline-secondary" (click)="disconnect()">Change Server</button>
+    <div class="active-server-actions">
+      <button class="btn btn-sm btn-outline-secondary" (click)="disconnect()">Change Server</button>
+      <button class="btn btn-sm btn-outline-danger" (click)="removeServer()">Remove</button>
+    </div>
   </div>
 
   <!-- Status message -->
