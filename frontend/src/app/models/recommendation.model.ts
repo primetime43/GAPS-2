@@ -1,7 +1,9 @@
-export interface Recommendation {
+export interface CollectionGap {
   tmdbId: number;
   name: string;
   year: string;
-  posterUrl: string;
+  posterUrl: string | null;
   overview: string;
+  collectionName: string;
+  owned: boolean;
 }

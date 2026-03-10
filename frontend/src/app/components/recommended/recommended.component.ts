@@ -2,10 +2,14 @@ import { Component, OnInit } from '@angular/core';
 import { PlexService } from '../../services/plex.service';
 import { LibraryService } from '../../services/library.service';
 import { RecommendationService } from '../../services/recommendation.service';
-import { TmdbService } from '../../services/tmdb/tmdb.service';
 import { Movie } from '../../models/movie.model';
-import { Recommendation } from '../../models/recommendation.model';
+import { CollectionGap } from '../../models/recommendation.model';
 import { ActiveServerResponse, PlexLibrary } from '../../models/plex.model';
+
+interface CollectionGroup {
+  name: string;
+  gaps: CollectionGap[];
+}
 
 @Component({
     selector: 'app-recommended',
@@ -17,23 +21,28 @@ export class RecommendedComponent implements OnInit {
   libraries: PlexLibrary[] = [];
   selectedLibrary = '';
   movies: Movie[] = [];
-  filteredMovies: Movie[] = [];
-  movieSearchTerm = '';
-  recommendations: Recommendation[] = [];
-  selectedMovie: Movie | null = null;
-  showExisting = false;
+  showOwned = false;
 
+  // All gaps from backend (always includes owned)
+  allGaps: CollectionGap[] = [];
+  // Filtered view
+  collectionGroups: CollectionGroup[] = [];
+  selectedMovie: Movie | null = null;
+  scanMode = false;
+
+  // UI
   loading = true;
   loadingMovies = false;
-  loadingRecommendations = false;
+  loadingGaps = false;
   hasServer = false;
   errorMessage = '';
+  totalOwned = 0;
+  missingCount = 0;
 
   constructor(
     private plexService: PlexService,
     private libraryService: LibraryService,
     private recommendationService: RecommendationService,
-    private tmdbService: TmdbService
   ) {}
 
   ngOnInit(): void {
@@ -58,16 +67,15 @@ export class RecommendedComponent implements OnInit {
     if (!this.selectedLibrary) return;
     this.loadingMovies = true;
     this.movies = [];
-    this.filteredMovies = [];
-    this.recommendations = [];
+    this.allGaps = [];
+    this.collectionGroups = [];
     this.selectedMovie = null;
-    this.movieSearchTerm = '';
+    this.scanMode = false;
     this.errorMessage = '';
 
     this.libraryService.getMovies(this.selectedLibrary).subscribe({
       next: (res: any) => {
         this.movies = Array.isArray(res) ? res : (res.movies || []);
-        this.filteredMovies = [...this.movies];
         this.loadingMovies = false;
       },
       error: () => {
@@ -77,56 +85,87 @@ export class RecommendedComponent implements OnInit {
     });
   }
 
-  filterMovies(): void {
-    const term = this.movieSearchTerm.toLowerCase();
-    this.filteredMovies = this.movies.filter(m =>
-      m.name.toLowerCase().includes(term)
-    );
-  }
-
-  selectMovie(movie: Movie): void {
-    if (!movie.tmdbId) {
-      this.errorMessage = 'This movie does not have a TMDB ID. Cannot fetch recommendations.';
-      return;
-    }
-
-    const apiKey = this.tmdbService.getApiKey();
-    if (!apiKey) {
-      this.errorMessage = 'No TMDB API key configured. Go to Settings > TMDB to add one.';
-      return;
-    }
-
-    this.selectedMovie = movie;
-    this.loadingRecommendations = true;
-    this.recommendations = [];
+  scanLibrary(): void {
+    this.scanMode = true;
+    this.selectedMovie = null;
+    this.loadingGaps = true;
+    this.allGaps = [];
+    this.collectionGroups = [];
     this.errorMessage = '';
 
-    this.recommendationService.getRecommendations(
-      movie.tmdbId,
-      apiKey,
-      this.selectedLibrary,
-      this.showExisting
-    ).subscribe({
-      next: (recs) => {
-        this.recommendations = recs;
-        this.loadingRecommendations = false;
+    // Always fetch with showExisting=true so we have the full data
+    this.recommendationService.scanLibrary(this.selectedLibrary, true).subscribe({
+      next: (res) => {
+        this.allGaps = res.gaps;
+        this.totalOwned = res.totalOwned;
+        this.applyFilter();
+        this.loadingGaps = false;
       },
-      error: () => {
-        this.errorMessage = 'Failed to load recommendations.';
-        this.loadingRecommendations = false;
+      error: (err) => {
+        this.errorMessage = err.error?.error || 'Failed to scan library.';
+        this.loadingGaps = false;
       }
     });
   }
 
-  refreshRecommendations(): void {
-    if (this.selectedMovie) {
-      this.selectMovie(this.selectedMovie);
+  selectMovie(movie: Movie): void {
+    if (!movie.tmdbId) {
+      this.errorMessage = 'This movie does not have a TMDB ID.';
+      return;
     }
+
+    this.selectedMovie = movie;
+    this.scanMode = false;
+    this.loadingGaps = true;
+    this.allGaps = [];
+    this.collectionGroups = [];
+    this.errorMessage = '';
+
+    // Always fetch with showExisting=true
+    this.recommendationService.getGapsForMovie(
+      movie.tmdbId,
+      this.selectedLibrary,
+      true
+    ).subscribe({
+      next: (gaps) => {
+        this.allGaps = gaps;
+        this.applyFilter();
+        this.loadingGaps = false;
+      },
+      error: () => {
+        this.errorMessage = 'Failed to find collection gaps.';
+        this.loadingGaps = false;
+      }
+    });
   }
 
-  clearMovie(): void {
+  onShowOwnedChange(): void {
+    this.applyFilter();
+  }
+
+  clearResults(): void {
     this.selectedMovie = null;
-    this.recommendations = [];
+    this.scanMode = false;
+    this.allGaps = [];
+    this.collectionGroups = [];
     this.errorMessage = '';
+  }
+
+  private applyFilter(): void {
+    const filtered = this.showOwned
+      ? this.allGaps
+      : this.allGaps.filter(g => !g.owned);
+
+    this.missingCount = this.allGaps.filter(g => !g.owned).length;
+
+    const groups = new Map<string, CollectionGap[]>();
+    for (const gap of filtered) {
+      const name = gap.collectionName;
+      if (!groups.has(name)) {
+        groups.set(name, []);
+      }
+      groups.get(name)!.push(gap);
+    }
+    this.collectionGroups = Array.from(groups.entries()).map(([name, gaps]) => ({ name, gaps }));
   }
 }

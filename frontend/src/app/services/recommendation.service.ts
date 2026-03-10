@@ -1,8 +1,9 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
+import { map } from 'rxjs/operators';
 import { environment } from '../../environments/environment';
-import { Recommendation } from '../models/recommendation.model';
+import { CollectionGap } from '../models/recommendation.model';
 
 @Injectable({
   providedIn: 'root'
@@ -11,21 +12,27 @@ export class RecommendationService {
 
   constructor(private http: HttpClient) {}
 
-  getRecommendations(
+  getGapsForMovie(
     movieId: number,
-    apiKey: string,
     libraryName: string,
     showExisting: boolean
-  ): Observable<Recommendation[]> {
+  ): Observable<CollectionGap[]> {
     const params = new HttpParams()
       .set('movieId', movieId.toString())
-      .set('apiKey', apiKey)
       .set('libraryName', libraryName)
       .set('showExisting', showExisting.toString());
-    return this.http.get<Recommendation[]>(`${environment.apiUrl}/recommendations`, { params });
+    return this.http.get<{ gaps: CollectionGap[] }>(
+      `${environment.apiUrl}/recommendations/movie`, { params }
+    ).pipe(map(res => res.gaps));
   }
 
-  getCachedRecommendations(): Observable<Recommendation[]> {
-    return this.http.get<Recommendation[]>(`${environment.apiUrl}/recommendations/cached`);
+  scanLibrary(
+    libraryName: string,
+    showExisting: boolean
+  ): Observable<{ gaps: CollectionGap[], totalOwned: number }> {
+    return this.http.post<{ gaps: CollectionGap[], totalOwned: number }>(
+      `${environment.apiUrl}/recommendations/scan`,
+      { libraryName, showExisting }
+    );
   }
 }

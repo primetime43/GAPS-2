@@ -17,27 +17,34 @@
   <!-- Main content -->
   <div *ngIf="!loading && hasServer">
     <h3 class="regular-text">Find Missing Movies</h3>
+    <p class="text-muted">Find gaps in your movie collections using TMDB data.</p>
 
-    <!-- Library selector -->
+    <!-- Library selector + controls -->
     <div class="row mb-3">
-      <div class="col-md-6">
+      <div class="col-md-5">
         <label class="text-muted mb-1">Select a Library</label>
         <select class="form-select dark-select" [(ngModel)]="selectedLibrary" (ngModelChange)="onLibrarySelect()">
           <option value="" disabled>Choose a library...</option>
           <option *ngFor="let lib of libraries" [value]="lib.title">{{ lib.title }}</option>
         </select>
       </div>
-      <div class="col-md-6 d-flex align-items-end">
+      <div class="col-md-4 d-flex align-items-end gap-3">
+        <button
+          class="btn btn-primary"
+          [disabled]="!selectedLibrary || loadingMovies || loadingGaps || movies.length === 0"
+          (click)="scanLibrary()">
+          Scan for Gaps
+        </button>
         <div class="form-check mt-2">
           <input
             class="form-check-input"
             type="checkbox"
-            id="showExisting"
-            [(ngModel)]="showExisting"
-            (ngModelChange)="refreshRecommendations()"
+            id="showOwned"
+            [(ngModel)]="showOwned"
+            (ngModelChange)="onShowOwnedChange()"
           >
-          <label class="form-check-label text-muted" for="showExisting">
-            Show movies already in library
+          <label class="form-check-label text-muted" for="showOwned">
+            Show owned
           </label>
         </div>
       </div>
@@ -46,26 +53,20 @@
     <!-- Loading movies -->
     <div *ngIf="loadingMovies" class="text-center mt-4">
       <div class="spinner"></div>
-      <p class="text-muted mt-2">Loading movies...</p>
+      <p class="text-muted mt-2">Loading library movies...</p>
     </div>
 
     <!-- Error -->
     <div *ngIf="errorMessage" class="alert alert-danger mt-3">{{ errorMessage }}</div>
 
-    <!-- Movie selection (no movie selected yet) -->
-    <div *ngIf="!loadingMovies && movies.length > 0 && !selectedMovie">
-      <div class="mb-3">
-        <input
-          type="text"
-          class="form-control search-input"
-          placeholder="Search movies..."
-          [(ngModel)]="movieSearchTerm"
-          (ngModelChange)="filterMovies()"
-        >
-      </div>
-      <p class="text-muted">Click a movie to find recommendations based on its collection.</p>
+    <!-- Movie picker (when library loaded, no scan/movie selected) -->
+    <div *ngIf="!loadingMovies && movies.length > 0 && !scanMode && !selectedMovie && !loadingGaps">
+      <p class="text-muted">
+        Click <strong>Scan for Gaps</strong> to check all {{ movies.length }} movies,
+        or click a movie below to check its collection.
+      </p>
       <div class="movie-grid">
-        <div *ngFor="let movie of filteredMovies" class="movie-card clickable" (click)="selectMovie(movie)">
+        <div *ngFor="let movie of movies" class="movie-card clickable" (click)="selectMovie(movie)">
           <img
             *ngIf="movie.posterUrl"
             [src]="movie.posterUrl"
@@ -80,47 +81,58 @@
           </div>
         </div>
       </div>
-      <p class="text-muted mt-3">{{ filteredMovies.length }} of {{ movies.length }} movies</p>
     </div>
 
-    <!-- Recommendations view -->
-    <div *ngIf="selectedMovie">
+    <!-- Loading gaps -->
+    <div *ngIf="loadingGaps" class="text-center mt-4">
+      <div class="spinner"></div>
+      <p class="text-muted mt-2">
+        <span *ngIf="scanMode">Scanning {{ movies.length }} movies for collection gaps... This may take a while.</span>
+        <span *ngIf="!scanMode">Finding collection gaps...</span>
+      </p>
+    </div>
+
+    <!-- Gaps results -->
+    <div *ngIf="!loadingGaps && (scanMode || selectedMovie) && collectionGroups.length > 0">
       <div class="d-flex align-items-center mb-3">
-        <button class="btn btn-sm btn-outline-light me-3" (click)="clearMovie()">
-          &larr; Back to Movies
+        <button class="btn btn-sm btn-outline-light me-3" (click)="clearResults()">
+          &larr; Back
         </button>
-        <h5 class="regular-text mb-0">Recommendations for: {{ selectedMovie.name }} ({{ selectedMovie.year }})</h5>
+        <h5 class="regular-text mb-0" *ngIf="scanMode">
+          Found {{ missingCount }} missing movies across {{ collectionGroups.length }} collections
+        </h5>
+        <h5 class="regular-text mb-0" *ngIf="selectedMovie">
+          Collection for: {{ selectedMovie.name }} ({{ selectedMovie.year }})
+        </h5>
       </div>
 
-      <!-- Loading recommendations -->
-      <div *ngIf="loadingRecommendations" class="text-center mt-4">
-        <div class="spinner"></div>
-        <p class="text-muted mt-2">Finding missing movies...</p>
-      </div>
-
-      <!-- Recommendations grid -->
-      <div *ngIf="!loadingRecommendations && recommendations.length > 0" class="rec-grid">
-        <div *ngFor="let rec of recommendations" class="rec-card">
-          <img
-            *ngIf="rec.posterUrl"
-            [src]="rec.posterUrl"
-            [alt]="rec.name"
-            class="rec-poster"
-            loading="lazy"
-          >
-          <div *ngIf="!rec.posterUrl" class="rec-poster-placeholder">No Image</div>
-          <div class="rec-info">
-            <div class="rec-title">{{ rec.name }}</div>
-            <div class="rec-year">{{ rec.year }}</div>
-            <div class="rec-overview">{{ rec.overview }}</div>
+      <!-- Collection groups -->
+      <div *ngFor="let group of collectionGroups" class="collection-group mb-4">
+        <h6 class="collection-name">{{ group.name }}</h6>
+        <div class="rec-grid">
+          <div *ngFor="let gap of group.gaps" class="rec-card" [class.owned]="gap.owned">
+            <div class="owned-badge" *ngIf="gap.owned">Owned</div>
+            <img
+              *ngIf="gap.posterUrl"
+              [src]="gap.posterUrl"
+              [alt]="gap.name"
+              class="rec-poster"
+              loading="lazy"
+            >
+            <div *ngIf="!gap.posterUrl" class="rec-poster-placeholder">No Image</div>
+            <div class="rec-info">
+              <div class="rec-title">{{ gap.name }}</div>
+              <div class="rec-year">{{ gap.year }}</div>
+            </div>
           </div>
         </div>
       </div>
+    </div>
 
-      <!-- No recommendations -->
-      <div *ngIf="!loadingRecommendations && recommendations.length === 0 && !errorMessage" class="text-muted mt-3">
-        No missing movies found for this title. Your collection may already be complete!
-      </div>
+    <!-- No gaps found -->
+    <div *ngIf="!loadingGaps && (scanMode || selectedMovie) && collectionGroups.length === 0 && !errorMessage" class="text-muted mt-3">
+      <span *ngIf="selectedMovie">This movie doesn't belong to a collection, or your collection is complete!</span>
+      <span *ngIf="scanMode">No collection gaps found. Your library is complete!</span>
     </div>
   </div>
 </div>
