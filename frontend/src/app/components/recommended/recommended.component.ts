@@ -21,8 +21,15 @@ export class RecommendedComponent implements OnInit {
   libraries: PlexLibrary[] = [];
   selectedLibrary = '';
   movies: Movie[] = [];
+  movieFilter = '';
   showOwned = false;
   searchFilter = '';
+
+  get filteredMovies(): Movie[] {
+    const query = this.movieFilter.trim().toLowerCase();
+    if (!query) return this.movies;
+    return this.movies.filter(m => m.name.toLowerCase().includes(query));
+  }
 
   // All gaps from backend (always includes owned)
   allGaps: CollectionGap[] = [];
@@ -69,6 +76,7 @@ export class RecommendedComponent implements OnInit {
     if (!this.selectedLibrary) return;
     this.loadingMovies = true;
     this.movies = [];
+    this.movieFilter = '';
     this.allGaps = [];
     this.collectionGroups = [];
     this.selectedMovie = null;

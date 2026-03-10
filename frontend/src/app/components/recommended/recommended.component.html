@@ -70,8 +70,14 @@
         Click <strong>Scan for Gaps</strong> to check all {{ movies.length }} movies,
         or click a movie below to check its collection.
       </p>
+      <input
+        class="form-control dark-input mb-3"
+        type="text"
+        placeholder="Filter movies by name..."
+        [(ngModel)]="movieFilter"
+      >
       <div class="movie-grid">
-        <div *ngFor="let movie of movies" class="movie-card clickable" (click)="selectMovie(movie)">
+        <div *ngFor="let movie of filteredMovies" class="movie-card clickable" (click)="selectMovie(movie)">
           <img
             *ngIf="movie.posterUrl"
             [src]="movie.posterUrl"
