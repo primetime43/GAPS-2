@@ -6,6 +6,17 @@ import { environment } from '../../environments/environment';
 import { CollectionGap } from '../models/recommendation.model';
 import { Movie } from '../models/movie.model';
 
+export interface ScanProgress {
+  status: 'idle' | 'scanning' | 'done' | 'error';
+  processed: number;
+  total: number;
+  current_movie: string;
+  collections_found: number;
+  gaps: CollectionGap[];
+  total_owned: number;
+  error: string | null;
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -40,14 +51,20 @@ export class RecommendationService {
     ).pipe(map(res => res.gaps));
   }
 
-  scanLibrary(
+  startScan(
     libraryName: string,
     showExisting: boolean,
     freshScan = false
-  ): Observable<{ gaps: CollectionGap[], totalOwned: number }> {
-    return this.http.post<{ gaps: CollectionGap[], totalOwned: number }>(
+  ): Observable<{ status: string; total: number }> {
+    return this.http.post<{ status: string; total: number }>(
       `${environment.apiUrl}/recommendations/scan`,
       { libraryName, showExisting, freshScan }
+    );
+  }
+
+  getScanProgress(): Observable<ScanProgress> {
+    return this.http.get<ScanProgress>(
+      `${environment.apiUrl}/recommendations/scan/progress`
     );
   }
 }

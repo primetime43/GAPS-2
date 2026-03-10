@@ -95,15 +95,37 @@
     </div>
 
     <!-- Loading gaps -->
-    <div *ngIf="loadingGaps" class="text-center mt-4">
-      <div class="spinner"></div>
-      <p class="text-muted mt-2">
-        <span *ngIf="scanMode && !freshScanActive">Scanning {{ movies.length }} movies for collection gaps... This may take a while.</span>
-        <span *ngIf="scanMode && freshScanActive">Fresh scan: re-fetching all {{ movies.length }} movies from TMDB... This will take a while.</span>
-        <span *ngIf="!scanMode">Finding collection gaps...</span>
-      </p>
-      <div *ngIf="freshScanActive" class="alert alert-warning d-inline-block mt-2">
-        Cache cleared. All data is being fetched fresh from TMDB.
+    <div *ngIf="loadingGaps" class="mt-4">
+      <!-- Single movie lookup (no progress needed) -->
+      <div *ngIf="!scanMode" class="text-center">
+        <div class="spinner"></div>
+        <p class="text-muted mt-2">Finding collection gaps...</p>
+      </div>
+
+      <!-- Library scan with progress -->
+      <div *ngIf="scanMode" class="scan-progress-container">
+        <div *ngIf="scanProgress" class="mb-3">
+          <div class="d-flex justify-content-between text-muted mb-1">
+            <span>Scanning movies... {{ scanProgress.processed }} / {{ scanProgress.total }}</span>
+            <span>{{ scanProgress.collections_found }} collections found</span>
+          </div>
+          <div class="progress-bar-track">
+            <div
+              class="progress-bar-fill"
+              [style.width.%]="scanProgress.total ? (scanProgress.processed / scanProgress.total * 100) : 0"
+            ></div>
+          </div>
+          <p class="text-muted mt-2 current-movie" *ngIf="scanProgress.current_movie">
+            Checking: {{ scanProgress.current_movie }}
+          </p>
+        </div>
+        <div *ngIf="!scanProgress" class="text-center">
+          <div class="spinner"></div>
+          <p class="text-muted mt-2">Starting scan...</p>
+        </div>
+        <div *ngIf="freshScanActive" class="fresh-scan-notice mt-2">
+          Cache cleared — all data is being fetched fresh from TMDB.
+        </div>
       </div>
     </div>
 

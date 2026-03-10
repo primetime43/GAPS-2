@@ -1,7 +1,7 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, OnDestroy } from '@angular/core';
 import { PlexService } from '../../services/plex.service';
 import { LibraryService } from '../../services/library.service';
-import { RecommendationService } from '../../services/recommendation.service';
+import { RecommendationService, ScanProgress } from '../../services/recommendation.service';
 import { Movie } from '../../models/movie.model';
 import { CollectionGap } from '../../models/recommendation.model';
 import { ActiveServerResponse, PlexLibrary } from '../../models/plex.model';
@@ -17,7 +17,7 @@ interface CollectionGroup {
     styleUrls: ['./recommended.component.scss'],
     standalone: false
 })
-export class RecommendedComponent implements OnInit {
+export class RecommendedComponent implements OnInit, OnDestroy {
   libraries: PlexLibrary[] = [];
   selectedLibrary = '';
   movies: Movie[] = [];
@@ -48,6 +48,12 @@ export class RecommendedComponent implements OnInit {
   totalOwned = 0;
   missingCount = 0;
 
+  // Scan progress
+  scanProgress: ScanProgress | null = null;
+  freshScanActive = false;
+  showFreshScanConfirm = false;
+  private pollTimer: ReturnType<typeof setInterval> | null = null;
+
   constructor(
     private plexService: PlexService,
     private libraryService: LibraryService,
@@ -70,6 +76,10 @@ export class RecommendedComponent implements OnInit {
         this.loading = false;
       }
     });
+  }
+
+  ngOnDestroy(): void {
+    this.stopPolling();
   }
 
   onLibrarySelect(): void {
@@ -95,9 +105,6 @@ export class RecommendedComponent implements OnInit {
     });
   }
 
-  freshScanActive = false;
-  showFreshScanConfirm = false;
-
   scanLibrary(freshScan = false): void {
     if (freshScan) {
       this.showFreshScanConfirm = true;
@@ -122,21 +129,53 @@ export class RecommendedComponent implements OnInit {
     this.loadingGaps = true;
     this.allGaps = [];
     this.collectionGroups = [];
+    this.scanProgress = null;
     this.errorMessage = '';
 
-    // Always fetch with showExisting=true so we have the full data
-    this.recommendationService.scanLibrary(this.selectedLibrary, true, freshScan).subscribe({
-      next: (res) => {
-        this.allGaps = res.gaps;
-        this.totalOwned = res.totalOwned;
-        this.applyFilter();
-        this.loadingGaps = false;
+    this.recommendationService.startScan(this.selectedLibrary, true, freshScan).subscribe({
+      next: () => {
+        this.startPolling();
       },
       error: (err) => {
-        this.errorMessage = err.error?.error || 'Failed to scan library.';
+        this.errorMessage = err.error?.error || 'Failed to start scan.';
         this.loadingGaps = false;
       }
     });
+  }
+
+  private startPolling(): void {
+    this.stopPolling();
+    this.pollTimer = setInterval(() => {
+      this.recommendationService.getScanProgress().subscribe({
+        next: (progress) => {
+          this.scanProgress = progress;
+
+          if (progress.status === 'done') {
+            this.stopPolling();
+            this.allGaps = progress.gaps;
+            this.totalOwned = progress.total_owned;
+            this.applyFilter();
+            this.loadingGaps = false;
+            this.scanProgress = null;
+          } else if (progress.status === 'error') {
+            this.stopPolling();
+            this.errorMessage = progress.error || 'Scan failed.';
+            this.loadingGaps = false;
+            this.scanProgress = null;
+          }
+        },
+        error: () => {
+          // Ignore transient polling errors
+        }
+      });
+    }, 1000);
+  }
+
+  private stopPolling(): void {
+    if (this.pollTimer) {
+      clearInterval(this.pollTimer);
+      this.pollTimer = null;
+    }
   }
 
   selectMovie(movie: Movie): void {

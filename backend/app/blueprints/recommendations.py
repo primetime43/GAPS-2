@@ -43,7 +43,7 @@ def get_gaps_for_movie():
 
 @recommendations_bp.route('/scan', methods=['POST'])
 def scan_library_gaps():
-    """Scan an entire library and find all collection gaps."""
+    """Start a library scan in the background."""
     data = request.get_json() or {}
     library_name = data.get('libraryName', '')
     show_existing = data.get('showExisting', False)
@@ -56,6 +56,11 @@ def scan_library_gaps():
     if not api_key:
         return jsonify(error='No TMDB API key configured'), 400
 
+    tmdb = current_app.tmdb_service
+
+    if tmdb.scan_progress.get('status') == 'scanning':
+        return jsonify(error='A scan is already in progress'), 409
+
     # Get movie data from the cache
     cache = current_app.plex_service.movies_cache
     library_data = cache.get(library_name, {})
@@ -66,16 +71,20 @@ def scan_library_gaps():
         return jsonify(error='No movies loaded for this library. Browse the library first to load movie data.'), 400
 
     if fresh_scan:
-        current_app.tmdb_service.clear_cache()
+        tmdb.clear_cache()
 
-    gaps, error = current_app.tmdb_service.find_collection_gaps(
+    tmdb.start_scan(
         api_key=api_key,
         owned_movies=owned_movies,
         owned_tmdb_ids=owned_ids,
         show_existing=show_existing,
     )
 
-    if error:
-        return jsonify(error=error), 500
+    return jsonify(status='started', total=len(owned_movies))
 
-    return jsonify(gaps=gaps, totalOwned=len(owned_ids))
+
+@recommendations_bp.route('/scan/progress', methods=['GET'])
+def scan_progress():
+    """Poll for scan progress."""
+    progress = current_app.tmdb_service.scan_progress
+    return jsonify(progress)

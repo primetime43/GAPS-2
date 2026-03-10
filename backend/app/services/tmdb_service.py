@@ -1,3 +1,4 @@
+import threading
 import requests
 from app.services import config_store
 
@@ -9,12 +10,21 @@ class TmdbService:
         self._api_key: str | None = config_store.get('tmdb_api_key')
 
         # In-memory caches to avoid redundant TMDB API calls
-        # Maps (imdb_id or "title|year") -> resolved TMDB ID
         self._id_cache: dict[str, int | None] = {}
-        # Maps tmdb_id -> collection_id (or None if no collection)
         self._movie_collection_cache: dict[int, int | None] = {}
-        # Maps collection_id -> full collection data dict
         self._collection_cache: dict[int, dict] = {}
+
+        # Scan progress tracking
+        self._scan_progress: dict = {
+            'status': 'idle',    # idle | scanning | done | error
+            'processed': 0,
+            'total': 0,
+            'current_movie': '',
+            'collections_found': 0,
+            'gaps': [],
+            'total_owned': 0,
+            'error': None,
+        }
 
     @property
     def api_key(self) -> str | None:
@@ -173,6 +183,56 @@ class TmdbService:
             })
         return entries
 
+    @property
+    def scan_progress(self) -> dict:
+        return dict(self._scan_progress)
+
+    def start_scan(
+        self,
+        api_key: str,
+        owned_movies: list[dict],
+        owned_tmdb_ids: set[int],
+        show_existing: bool = False,
+    ) -> None:
+        """Start a library scan in a background thread."""
+        if self._scan_progress['status'] == 'scanning':
+            return  # Already running
+
+        self._scan_progress = {
+            'status': 'scanning',
+            'processed': 0,
+            'total': len(owned_movies),
+            'current_movie': '',
+            'collections_found': 0,
+            'gaps': [],
+            'total_owned': len(owned_tmdb_ids),
+            'error': None,
+        }
+
+        thread = threading.Thread(
+            target=self._run_scan,
+            args=(api_key, owned_movies, owned_tmdb_ids, show_existing),
+            daemon=True,
+        )
+        thread.start()
+
+    def _run_scan(
+        self,
+        api_key: str,
+        owned_movies: list[dict],
+        owned_tmdb_ids: set[int],
+        show_existing: bool,
+    ) -> None:
+        """Background scan worker."""
+        try:
+            gaps, _ = self.find_collection_gaps(api_key, owned_movies, owned_tmdb_ids, show_existing)
+            self._scan_progress['gaps'] = gaps or []
+            self._scan_progress['total_owned'] = len(owned_tmdb_ids)
+            self._scan_progress['status'] = 'done'
+        except Exception as e:
+            self._scan_progress['error'] = str(e)
+            self._scan_progress['status'] = 'error'
+
     def find_collection_gaps(
         self,
         api_key: str,
@@ -188,8 +248,13 @@ class TmdbService:
         """
         seen_collections: set[int] = set()
         gaps = []
+        total = len(owned_movies)
 
-        for movie in owned_movies:
+        for i, movie in enumerate(owned_movies):
+            # Update progress
+            self._scan_progress['processed'] = i + 1
+            self._scan_progress['current_movie'] = movie.get('name', '')
+
             tmdb_id = self.resolve_tmdb_id(
                 api_key,
                 movie.get('tmdbId'),
@@ -206,6 +271,7 @@ class TmdbService:
             if not collection_id or collection_id in seen_collections:
                 continue
             seen_collections.add(collection_id)
+            self._scan_progress['collections_found'] = len(seen_collections)
 
             coll_data = self._get_collection(api_key, collection_id)
             if not coll_data:
