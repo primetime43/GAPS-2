@@ -21,12 +21,18 @@
   <form [formGroup]="tmdbForm" novalidate>
     <div class="form-group mb-3">
       <label for="movieDbApiKey" class="form-label">Movie Database API Key</label>
-      <input
-        class="form-control dark-input"
-        id="movieDbApiKey"
-        formControlName="movieDbApiKey"
-        placeholder="Enter your TMDB API key..."
-      >
+      <div class="input-group">
+        <input
+          class="form-control dark-input"
+          id="movieDbApiKey"
+          formControlName="movieDbApiKey"
+          [type]="showKey ? 'text' : 'password'"
+          placeholder="Enter your TMDB API key..."
+        >
+        <button class="btn btn-outline-secondary" type="button" (click)="showKey = !showKey">
+          {{ showKey ? 'Hide' : 'Show' }}
+        </button>
+      </div>
       <div *ngIf="tmdbForm.get('movieDbApiKey')?.invalid && tmdbForm.get('movieDbApiKey')?.touched"
            class="text-danger mt-1" style="font-size: 13px;">
         Please enter a Movie Database Key.

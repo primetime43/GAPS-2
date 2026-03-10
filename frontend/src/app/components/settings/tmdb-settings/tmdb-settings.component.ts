@@ -15,6 +15,7 @@ export class TmdbSettingsComponent implements OnInit {
   testing = false;
   saving = false;
   hasKey = false;
+  showKey = false;
 
   constructor(
     private fb: FormBuilder,
