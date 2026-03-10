@@ -2,6 +2,7 @@ from plexapi.myplex import MyPlexPinLogin
 from plexapi.server import PlexServer
 from plexapi import BASE_HEADERS
 import requests
+from app.services import config_store
 
 
 class PlexService:
@@ -15,6 +16,13 @@ class PlexService:
         self._server_conn_name: str | None = None
         self._active_server: dict | None = None
         self._movies_cache: dict[str, dict] = {}
+
+        # Restore persisted state
+        saved = config_store.get('plex', {})
+        if saved.get('token'):
+            self._token = saved['token']
+        if saved.get('active_server'):
+            self._active_server = saved['active_server']
 
     # -- Auth --
 
@@ -39,10 +47,12 @@ class PlexService:
         return resp.json()
 
     def fetch_servers(self) -> tuple[list[str], str | None]:
-        if not self._pin or not self._pin.token:
+        # Get token from OAuth pin or persisted state
+        if self._pin and self._pin.token:
+            self._token = self._pin.token
+        if not self._token:
             return [], None
 
-        self._token = self._pin.token
         resources_json = self._fetch_resources()
 
         self._resources = {}
@@ -128,6 +138,10 @@ class PlexService:
             'libraries': libraries if isinstance(libraries, list) else [],
         }
         self._token = token
+        config_store.put('plex', {
+            'token': token,
+            'active_server': self._active_server,
+        })
         return True, None
 
     def get_active_server(self) -> dict | None:
@@ -140,6 +154,7 @@ class PlexService:
         self._server_conn = None
         self._server_conn_name = None
         self._movies_cache = {}
+        config_store.remove('plex')
 
     # -- Movies --
 

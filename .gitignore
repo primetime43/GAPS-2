@@ -18,6 +18,9 @@ dist/
 *.swp
 *.swo
 
+# App data (user config, persisted state)
+backend/data/
+
 # OS
 .DS_Store
 Thumbs.db

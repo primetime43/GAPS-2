@@ -1,11 +1,12 @@
 import requests
+from app.services import config_store
 
 
 class TmdbService:
     def __init__(self, base_url: str, image_base_url: str):
         self._base_url = base_url
         self._image_base_url = image_base_url
-        self._api_key: str | None = None
+        self._api_key: str | None = config_store.get('tmdb_api_key')
 
     @property
     def api_key(self) -> str | None:
@@ -20,6 +21,7 @@ class TmdbService:
         valid, status_code = self.test_api_key(api_key)
         if valid:
             self._api_key = api_key
+            config_store.put('tmdb_api_key', api_key)
         return valid, status_code
 
     def find_collection_gaps(
