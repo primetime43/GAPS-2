@@ -26,7 +26,7 @@ if not exist "%BACKEND_DIR%\venv" (
 REM Install Python deps
 echo Installing Python dependencies...
 call "%BACKEND_DIR%\venv\Scripts\activate.bat"
-pip install -q -r "%BACKEND_DIR%\requirements.txt"
+pip install -q --disable-pip-version-check -r "%BACKEND_DIR%\requirements.txt"
 
 echo.
 echo === Setting up Frontend ===

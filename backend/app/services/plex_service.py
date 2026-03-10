@@ -5,9 +5,8 @@ from app.models.plex_account import PlexAccountData
 class PlexService:
     def __init__(self):
         self._pin: MyPlexPinLogin | None = None
-        self._plex_accounts: list[PlexAccountData] = []
-        self._stored_libraries: dict[str, list[str]] = {}
-        self._stored_plex_accounts: dict[str, PlexAccountData] = {}
+        self._token: str | None = None
+        self._resources: dict = {}  # server_name -> MyPlexResource
         self._active_server = PlexAccountData()
         self._movies_cache: dict[str, dict] = {}
 
@@ -26,70 +25,59 @@ class PlexService:
         if not self._pin or not self._pin.checkLogin():
             return [], None
 
-        plex_data = PlexAccountData()
-        plex_account = MyPlexAccount(token=self._pin.token)
+        self._token = self._pin.token
+        plex_account = MyPlexAccount(token=self._token)
 
         resources = [
             r for r in plex_account.resources()
             if r.owned and r.connections and r.provides == 'server'
         ]
 
-        servers = [f"{r.name} ({r.connections[0].address})" for r in resources]
+        # Cache resources so we don't need to re-fetch from Plex API later
+        self._resources = {}
+        servers = []
+        for r in resources:
+            servers.append(r.name)
+            self._resources[r.name] = r
 
-        for resource in resources:
-            server_name = f"{resource.name} ({resource.connections[0].address})"
-            plex_data.add_token(server_name, self._pin.token)
-
-        plex_data.set_servers(servers)
-        self._plex_accounts.append(plex_data)
-
-        return servers, self._pin.token
+        return servers, self._token
 
     # -- Libraries --
 
     def fetch_libraries(self, server_name: str) -> tuple[list[str] | None, str | None, str | None]:
-        plex_data = next(
-            (d for d in self._plex_accounts if server_name in d.tokens), None
-        )
-        if plex_data is None:
-            return None, None, 'PlexAccountData not found'
-
-        token = plex_data.tokens.get(server_name)
-        plex_account = MyPlexAccount(token=token)
-
-        server = None
-        for resource in plex_account.resources():
-            if f"{resource.name} ({resource.connections[0].address})" == server_name:
-                server = resource.connect()
-                break
-
-        if server is None:
+        resource = self._resources.get(server_name)
+        if resource is None:
             return None, None, 'Server not found'
 
+        # connect() tries all connection URLs (remote first, then local)
+        # so it works regardless of network location
+        server = resource.connect()
         libraries = [section.title for section in server.library.sections()]
-        plex_data.set_libraries(libraries)
-        self._stored_libraries[server_name] = libraries
 
-        return libraries, token, None
+        return libraries, self._token, None
 
     # -- Active Server --
 
-    def save_active_server(self, server: str, token: str) -> tuple[bool, str | None]:
+    def save_active_server(self, server: str, token: str, libraries: dict | list | None = None) -> tuple[bool, str | None]:
         try:
             plex_data = PlexAccountData()
             plex_data.set_selected_server(server)
             plex_data.set_token(token)
 
-            libraries, _, error = self.fetch_libraries(server)
-            if error:
-                return False, error
+            # Use already-fetched libraries passed from the frontend
+            if libraries is not None:
+                if isinstance(libraries, list):
+                    lib_dict = {server: libraries}
+                else:
+                    lib_dict = libraries
+            else:
+                lib_dict = {}
 
-            plex_data.set_libraries(self._stored_libraries)
-            self._stored_plex_accounts[server] = plex_data
+            plex_data.set_libraries(lib_dict)
 
             self._active_server.selected_server = server
             self._active_server.token = token
-            self._active_server.libraries = self._stored_libraries
+            self._active_server.libraries = lib_dict
 
             return True, None
         except Exception as e:
@@ -111,20 +99,22 @@ class PlexService:
             return self._movies_cache[library_name]['movies'], None
 
         try:
-            plex_account = MyPlexAccount(token=self._active_server.token)
+            # Use cached resource if available, otherwise re-fetch
+            server_name = self._active_server.selected_server
+            resource = self._resources.get(server_name)
 
-            server_resource = None
-            for resource in plex_account.resources():
-                if resource.owned:
-                    name = f"{resource.name} ({resource.connections[0].address})"
-                    if name == self._active_server.selected_server:
-                        server_resource = resource
+            if resource is None:
+                # Fallback: re-fetch resources if cache was lost (e.g. server restart)
+                plex_account = MyPlexAccount(token=self._active_server.token)
+                for r in plex_account.resources():
+                    if r.owned and r.name == server_name:
+                        resource = r
                         break
 
-            if server_resource is None:
+            if resource is None:
                 return None, 'Server resource not found'
 
-            server = server_resource.connect()
+            server = resource.connect()
             library = server.library.section(library_name)
             movies = library.search(libtype='movie')
 

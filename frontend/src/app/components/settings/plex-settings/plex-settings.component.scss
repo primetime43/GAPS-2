@@ -1,3 +1,64 @@
+.plex-settings {
+  padding-top: 12px;
+}
+
+/* Active server card */
+.active-server-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background-color: #1e3a2f;
+  border: 1px solid #00bc8c;
+  border-radius: 8px;
+  padding: 14px 18px;
+}
+
+.active-server-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.active-badge {
+  background-color: #00bc8c;
+  color: #111;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 3px 10px;
+  border-radius: 12px;
+}
+
+.active-details {
+  display: flex;
+  flex-direction: column;
+}
+
+.server-name {
+  color: #fff;
+  font-weight: 500;
+  font-size: 15px;
+}
+
+.lib-count {
+  color: #999;
+  font-size: 13px;
+}
+
+/* Setup flow */
+.setup-flow {
+  margin-top: 8px;
+}
+
+.step-card {
+  background-color: #2d2d2d;
+  border: 1px solid #444;
+  border-radius: 8px;
+  padding: 20px;
+}
+
+/* Dark select */
 .dark-select {
   background-color: #2d2d2d;
   border: 1px solid #444;
@@ -16,28 +77,69 @@
   }
 }
 
-.dark-input {
-  background-color: #2d2d2d;
-  border: 1px solid #444;
-  color: #fff;
+/* Libraries as tags */
+.libraries-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
 
-  &:focus {
-    background-color: #333;
-    border-color: #00bc8c;
-    color: #fff;
-    box-shadow: none;
+.lib-label {
+  font-size: 13px;
+  margin-right: 2px;
+}
+
+.lib-tag {
+  background-color: #383838;
+  border: 1px solid #555;
+  color: #ccc;
+  font-size: 12px;
+  padding: 2px 10px;
+  border-radius: 12px;
+}
+
+/* Token */
+.token-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.token-toggle {
+  font-size: 13px;
+  cursor: pointer;
+  text-decoration: none;
+
+  &:hover {
+    color: #00bc8c !important;
   }
 }
 
-.library-list {
-  list-style: none;
-  padding-left: 0;
+.token-value {
+  font-size: 12px;
+  color: #888;
+  background-color: #1a1a1a;
+  padding: 3px 8px;
+  border-radius: 4px;
+  word-break: break-all;
+}
 
-  li {
-    padding: 6px 12px;
-    background-color: #2d2d2d;
-    border: 1px solid #444;
-    border-radius: 4px;
-    margin-bottom: 4px;
-  }
+/* Inline spinner for buttons */
+.spinner-inline {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+/* Alert sizing */
+.alert-sm {
+  padding: 10px 14px;
+  font-size: 14px;
 }

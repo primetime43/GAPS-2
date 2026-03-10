@@ -34,8 +34,9 @@ def save_data():
     data = request.get_json()
     server = data.get('server')
     token = data.get('token')
+    libraries = data.get('libraries')
 
-    success, error = current_app.plex_service.save_active_server(server, token)
+    success, error = current_app.plex_service.save_active_server(server, token, libraries)
     if success:
         return jsonify(result='Success')
     return jsonify(result='Error', error=error)

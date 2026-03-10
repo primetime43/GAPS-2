@@ -26,7 +26,7 @@ export class PlexService {
     );
   }
 
-  saveData(server: string, token: string, libraries: string[] | Record<string, string[]>): Observable<ApiResult> {
+  saveData(server: string, token: string, libraries: string[]): Observable<ApiResult> {
     return this.http.post<ApiResult>(`${environment.apiUrl}/plex/save-data`, {
       server,
       token,

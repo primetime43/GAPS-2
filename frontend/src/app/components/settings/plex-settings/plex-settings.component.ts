@@ -8,17 +8,22 @@ import { PlexService } from '../../../services/plex.service';
     standalone: false
 })
 export class PlexSettingsComponent implements OnInit {
+  // State
   servers: string[] = [];
   selectedServer = '';
   plexToken = '';
-  tokenVisible = false;
   libraries: string[] = [];
-  librariesData: Record<string, string[]> = {};
-  showSavePlexData = false;
-  activeServerInfo = '';
+
+  // Active server
+  activeServer = '';
+  activeLibraryCount = 0;
+  hasActiveServer = false;
+
+  // UI state
+  step: 'idle' | 'authenticating' | 'waiting' | 'fetching' | 'selecting' | 'saving' = 'idle';
+  tokenVisible = false;
   statusMessage = '';
   statusType: 'success' | 'error' | '' = '';
-  loading = false;
 
   constructor(private plexService: PlexService) {}
 
@@ -26,105 +31,121 @@ export class PlexSettingsComponent implements OnInit {
     this.loadActiveServer();
   }
 
-  authenticatePlexAccount(): void {
-    this.loading = true;
+  connectPlex(): void {
+    this.step = 'authenticating';
     this.clearMessage();
     this.plexService.authenticate().subscribe({
       next: (res) => {
         if (res.oauth_url) {
           window.open(res.oauth_url, '_blank');
-          this.showMessage('Plex authentication window opened. Complete login, then click "Fetch Servers".', 'success');
+          this.step = 'waiting';
         }
-        this.loading = false;
       },
       error: () => {
-        this.showMessage('Failed to authenticate with Plex. Please try again.', 'error');
-        this.loading = false;
+        this.showMessage('Failed to start Plex authentication.', 'error');
+        this.step = 'idle';
       }
     });
   }
 
   fetchServers(): void {
-    this.loading = true;
+    this.step = 'fetching';
     this.clearMessage();
     this.plexService.fetchServers().subscribe({
       next: (res) => {
         this.servers = res.servers || [];
         this.plexToken = res.token || '';
         if (this.servers.length > 0) {
-          this.showMessage(`Found ${this.servers.length} server(s).`, 'success');
+          this.step = 'selecting';
+          if (this.servers.length === 1) {
+            this.selectedServer = this.servers[0];
+            this.onServerSelect();
+          }
         } else {
-          this.showMessage('No servers found. Make sure you have authenticated.', 'error');
+          this.showMessage('No servers found. Complete the Plex login first.', 'error');
+          this.step = 'waiting';
         }
-        this.loading = false;
       },
       error: () => {
-        this.showMessage('Failed to fetch servers. Authenticate first.', 'error');
-        this.loading = false;
+        this.showMessage('Failed to fetch servers. Try authenticating again.', 'error');
+        this.step = 'idle';
       }
     });
   }
 
   onServerSelect(): void {
     if (!this.selectedServer) return;
-    this.loading = true;
-    this.clearMessage();
+    this.step = 'fetching';
+    this.libraries = [];
     this.plexService.fetchLibraries(this.selectedServer).subscribe({
       next: (res: any) => {
         if (res.libraries && Array.isArray(res.libraries)) {
           this.libraries = res.libraries;
-        } else if (typeof res === 'object') {
-          this.librariesData = res;
-          this.libraries = Object.keys(res);
         }
         if (res.token) {
           this.plexToken = res.token;
         }
-        this.showSavePlexData = true;
-        this.showMessage(`Found ${this.libraries.length} library/libraries on ${this.selectedServer}.`, 'success');
-        this.loading = false;
+        this.step = 'selecting';
       },
       error: () => {
-        this.showMessage('Failed to fetch libraries for selected server.', 'error');
-        this.loading = false;
+        this.showMessage('Failed to fetch libraries.', 'error');
+        this.step = 'selecting';
       }
     });
+  }
+
+  setAsActive(): void {
+    if (!this.selectedServer || !this.plexToken) return;
+    this.step = 'saving';
+    this.clearMessage();
+    this.plexService.saveData(this.selectedServer, this.plexToken, this.libraries).subscribe({
+      next: () => {
+        this.showMessage('Server saved successfully!', 'success');
+        this.step = 'idle';
+        this.servers = [];
+        this.libraries = [];
+        this.selectedServer = '';
+        this.loadActiveServer();
+      },
+      error: () => {
+        this.showMessage('Failed to save server.', 'error');
+        this.step = 'selecting';
+      }
+    });
+  }
+
+  disconnect(): void {
+    this.hasActiveServer = false;
+    this.activeServer = '';
+    this.activeLibraryCount = 0;
+    this.step = 'idle';
+    this.clearMessage();
   }
 
   togglePlexTokenVisibility(): void {
     this.tokenVisible = !this.tokenVisible;
   }
 
-  setAsActivePlexServer(): void {
-    if (!this.selectedServer || !this.plexToken) return;
-    this.loading = true;
-    this.clearMessage();
-    this.plexService.saveData(this.selectedServer, this.plexToken, this.librariesData).subscribe({
-      next: () => {
-        this.showMessage(`${this.selectedServer} set as active Plex server!`, 'success');
-        this.loading = false;
-        this.loadActiveServer();
-      },
-      error: () => {
-        this.showMessage('Failed to save server data.', 'error');
-        this.loading = false;
-      }
-    });
+  get isLoading(): boolean {
+    return this.step === 'authenticating' || this.step === 'fetching' || this.step === 'saving';
   }
 
-  loadActiveServer(): void {
+  private loadActiveServer(): void {
     this.plexService.getActiveServer().subscribe({
       next: (res) => {
         if (res && res.server) {
-          const libCount = res.libraries ? Object.keys(res.libraries).length : 0;
-          this.activeServerInfo = `Active: ${res.server} (${libCount} libraries)`;
-        } else {
-          this.activeServerInfo = 'No active server configured.';
+          this.hasActiveServer = true;
+          this.activeServer = res.server;
+          // libraries is stored as {serverName: [lib1, lib2, ...]}
+          if (res.libraries && typeof res.libraries === 'object') {
+            const libs = Object.values(res.libraries).flat();
+            this.activeLibraryCount = libs.length;
+          } else {
+            this.activeLibraryCount = 0;
+          }
         }
       },
-      error: () => {
-        this.activeServerInfo = 'No active server configured.';
-      }
+      error: () => {}
     });
   }
 

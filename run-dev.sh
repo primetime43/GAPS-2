@@ -53,7 +53,7 @@ else
 fi
 
 echo "Installing Python dependencies..."
-pip install -q -r "$BACKEND_DIR/requirements.txt"
+pip install -q --disable-pip-version-check -r "$BACKEND_DIR/requirements.txt"
 
 # --- Frontend setup ---
 echo -e "${GREEN}=== Setting up Frontend ===${NC}"
