@@ -22,11 +22,13 @@ export class RecommendedComponent implements OnInit {
   selectedLibrary = '';
   movies: Movie[] = [];
   showOwned = false;
+  searchFilter = '';
 
   // All gaps from backend (always includes owned)
   allGaps: CollectionGap[] = [];
   // Filtered view
   collectionGroups: CollectionGroup[] = [];
+  filteredGroups: CollectionGroup[] = [];
   selectedMovie: Movie | null = null;
   scanMode = false;
 
@@ -152,10 +154,12 @@ export class RecommendedComponent implements OnInit {
     this.scanMode = false;
     this.allGaps = [];
     this.collectionGroups = [];
+    this.filteredGroups = [];
+    this.searchFilter = '';
     this.errorMessage = '';
   }
 
-  private applyFilter(): void {
+  applyFilter(): void {
     const filtered = this.showOwned
       ? this.allGaps
       : this.allGaps.filter(g => !g.owned);
@@ -171,5 +175,21 @@ export class RecommendedComponent implements OnInit {
       groups.get(name)!.push(gap);
     }
     this.collectionGroups = Array.from(groups.entries()).map(([name, gaps]) => ({ name, gaps }));
+
+    // Apply search filter
+    const query = this.searchFilter.trim().toLowerCase();
+    if (!query) {
+      this.filteredGroups = this.collectionGroups;
+    } else {
+      this.filteredGroups = this.collectionGroups
+        .map(group => ({
+          name: group.name,
+          gaps: group.gaps.filter(g =>
+            g.name.toLowerCase().includes(query) ||
+            g.collectionName.toLowerCase().includes(query)
+          )
+        }))
+        .filter(group => group.gaps.length > 0);
+    }
   }
 }

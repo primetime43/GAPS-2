@@ -106,8 +106,17 @@
         </div>
       </div>
 
+      <!-- Search filter -->
+      <input
+        class="form-control dark-input mb-3"
+        type="text"
+        placeholder="Filter results by movie or collection name..."
+        [(ngModel)]="searchFilter"
+        (ngModelChange)="applyFilter()"
+      >
+
       <!-- Collection groups -->
-      <div *ngFor="let group of collectionGroups" class="collection-group mb-4">
+      <div *ngFor="let group of filteredGroups" class="collection-group mb-4">
         <h6 class="collection-name">{{ group.name }}</h6>
         <div class="rec-grid">
           <div *ngFor="let gap of group.gaps" class="rec-card" [class.owned]="gap.owned">
