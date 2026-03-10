@@ -1,0 +1,93 @@
+<div class="container top-margin">
+  <!-- Loading -->
+  <div *ngIf="loading" class="text-center mt-4">
+    <div class="spinner"></div>
+    <p class="text-muted mt-2">Loading server info...</p>
+  </div>
+
+  <!-- No server configured -->
+  <div *ngIf="!loading && !hasServer" class="text-center mt-4">
+    <h4 class="text-muted">No Active Server</h4>
+    <p class="text-muted">
+      You need to configure a Plex server first.
+      <a [routerLink]="['/settings/plex']" class="activeLink">Go to Settings</a>
+    </p>
+  </div>
+
+  <!-- Server loaded -->
+  <div *ngIf="!loading && hasServer">
+    <h3 class="regular-text">{{ serverName }}</h3>
+    <p class="text-muted">Select a library to browse its movies.</p>
+
+    <!-- Library list (when no library selected) -->
+    <div *ngIf="!selectedLibrary" class="row">
+      <div *ngFor="let lib of libraries" class="col-md-4 col-sm-6 mb-3">
+        <div class="library-card" (click)="selectLibrary(lib)">
+          <h5>{{ lib }}</h5>
+        </div>
+      </div>
+    </div>
+
+    <!-- Selected library view -->
+    <div *ngIf="selectedLibrary">
+      <div class="d-flex align-items-center mb-3">
+        <button class="btn btn-sm btn-outline-light me-3" (click)="clearSelection()">
+          &larr; Back
+        </button>
+        <h4 class="regular-text mb-0">{{ selectedLibrary }}</h4>
+      </div>
+
+      <!-- Search -->
+      <div class="mb-3">
+        <input
+          type="text"
+          class="form-control search-input"
+          placeholder="Filter movies by name..."
+          [(ngModel)]="searchTerm"
+          (ngModelChange)="filterMovies()"
+        >
+      </div>
+
+      <!-- Loading movies -->
+      <div *ngIf="loadingMovies" class="text-center mt-4">
+        <div class="spinner"></div>
+        <p class="text-muted mt-2">Loading movies...</p>
+      </div>
+
+      <!-- Error -->
+      <div *ngIf="errorMessage" class="alert alert-danger">{{ errorMessage }}</div>
+
+      <!-- Movies grid -->
+      <div *ngIf="!loadingMovies && filteredMovies.length > 0" class="movie-grid">
+        <div *ngFor="let movie of filteredMovies" class="movie-card">
+          <img
+            *ngIf="movie.posterUrl"
+            [src]="movie.posterUrl"
+            [alt]="movie.name"
+            class="movie-poster"
+            loading="lazy"
+          >
+          <div *ngIf="!movie.posterUrl" class="movie-poster-placeholder">No Image</div>
+          <div class="movie-info">
+            <div class="movie-title">{{ movie.name }}</div>
+            <div class="movie-year">{{ movie.year }}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- No results -->
+      <div *ngIf="!loadingMovies && filteredMovies.length === 0 && movies.length > 0" class="text-muted mt-3">
+        No movies match your search.
+      </div>
+
+      <!-- Empty library -->
+      <div *ngIf="!loadingMovies && movies.length === 0 && !errorMessage" class="text-muted mt-3">
+        This library is empty.
+      </div>
+
+      <p class="text-muted mt-3" *ngIf="!loadingMovies && movies.length > 0">
+        Showing {{ filteredMovies.length }} of {{ movies.length }} movies
+      </p>
+    </div>
+  </div>
+</div>

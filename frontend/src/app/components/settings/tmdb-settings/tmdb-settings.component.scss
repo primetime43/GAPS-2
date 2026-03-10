@@ -1,0 +1,28 @@
+.dark-input {
+  background-color: #2d2d2d;
+  border: 1px solid #444;
+  color: #fff;
+
+  &::placeholder {
+    color: #888;
+  }
+
+  &:focus {
+    background-color: #333;
+    border-color: #00bc8c;
+    color: #fff;
+    box-shadow: none;
+  }
+}
+
+.status-indicator {
+  font-size: 14px;
+}
+
+.status-ok {
+  color: #00bc8c;
+}
+
+.status-missing {
+  color: #e74c3c;
+}

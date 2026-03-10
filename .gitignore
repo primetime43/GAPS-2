@@ -1,7 +1,23 @@
-# Ignore compiled Python files
+# Python
 *.pyc
 *.pyo
 *.pyd
-
-# Ignore the __pycache__ folder
 __pycache__/
+venv/
+.env
+
+# Node/Angular
+node_modules/
+dist/
+.angular/
+.cache/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db

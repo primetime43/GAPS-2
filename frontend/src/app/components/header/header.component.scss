@@ -1,0 +1,9 @@
+.header {
+  background-color: #375a7f !important;
+  padding: 16px;
+}
+
+.active > a {
+  background-color: rgba(0, 188, 140, 0.2);
+  border-radius: 4px;
+}

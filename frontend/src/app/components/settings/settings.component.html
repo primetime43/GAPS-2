@@ -1,0 +1,33 @@
+<div class="container darkBackground">
+  <h3 class="top-margin">Settings</h3>
+  <ul class="nav nav-tabs">
+    <li class="nav-item">
+      <a class="nav-link transparent-tab regular-text"
+         routerLink="/settings/tmdb"
+         routerLinkActive="active">TMDB</a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link regular-text"
+         routerLink="/settings/plex"
+         routerLinkActive="active">Plex</a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link regular-text"
+         routerLink="/settings/jellyfin"
+         routerLinkActive="active">Jellyfin</a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link regular-text"
+         routerLink="/settings/emby"
+         routerLinkActive="active">Emby</a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link regular-text"
+         routerLink="/settings/user-preferences"
+         routerLinkActive="active">User Preferences</a>
+    </li>
+  </ul>
+  <div class="tab-content top-margin">
+    <router-outlet></router-outlet>
+  </div>
+</div>

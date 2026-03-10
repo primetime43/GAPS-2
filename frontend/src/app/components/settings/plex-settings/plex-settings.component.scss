@@ -1,0 +1,43 @@
+.dark-select {
+  background-color: #2d2d2d;
+  border: 1px solid #444;
+  color: #fff;
+
+  &:focus {
+    background-color: #333;
+    border-color: #00bc8c;
+    color: #fff;
+    box-shadow: none;
+  }
+
+  option {
+    background-color: #2d2d2d;
+    color: #fff;
+  }
+}
+
+.dark-input {
+  background-color: #2d2d2d;
+  border: 1px solid #444;
+  color: #fff;
+
+  &:focus {
+    background-color: #333;
+    border-color: #00bc8c;
+    color: #fff;
+    box-shadow: none;
+  }
+}
+
+.library-list {
+  list-style: none;
+  padding-left: 0;
+
+  li {
+    padding: 6px 12px;
+    background-color: #2d2d2d;
+    border: 1px solid #444;
+    border-radius: 4px;
+    margin-bottom: 4px;
+  }
+}

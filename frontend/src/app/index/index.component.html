@@ -1,0 +1,68 @@
+<div class="container bottom-margin">
+  <img loading="lazy" src="assets/images/final-2.svg" alt="Gaps Logo" style="width:50%;height:50%;" class="center">
+
+  <p class="text-muted">
+    <a class="activeLink" href="https://github.com/primetime43/GAPS-2" target="_blank">GAPS 2</a> is a rewrite of the original
+    <a class="activeLink" href="https://github.com/JasonHHouse/gaps" target="_blank">GAPS project</a>, now written in Python instead of
+    Java. GAPS (Gaps A Plex Server) finds movies you're missing in your Plex Server. It's a great way to find
+    additional movies that you might be interested in based on collections from movies in your Plex Server.
+  </p>
+  <p class="text-muted">
+    The <a class="activeLink" href="https://github.com/primetime43/GAPS-2" target="_blank">GAPS 2</a> project aims to bring the same
+    functionality with the simplicity and versatility of Python.
+  </p>
+
+  <p class="text-muted">Gaps searches through your Plex Server. It then queries for known
+    movies in the same collection using The MovieDB, which you will need to get. Don't worry, we'll walk you through
+    those steps. Anyway, if those movies don't exist in your library, Gaps will recommend getting those
+    movies, legally of course.</p>
+
+  <p class="text-muted">An example would be having a copy of 'Alien (1979)' and Gaps recommending
+    'Aliens (1986)' and 'Alien 3 (1992)' to be added to your collection.</p>
+
+  <h4 class="top-margin text-primary">Status</h4>
+
+  <div class="row mt-3" *ngIf="!loading">
+    <div class="col-md-6 mb-3">
+      <div class="status-card" [class.status-ok]="tmdbConfigured" [class.status-missing]="!tmdbConfigured">
+        <div class="status-icon">
+          <span *ngIf="tmdbConfigured">&#10003;</span>
+          <span *ngIf="!tmdbConfigured">&#10007;</span>
+        </div>
+        <div class="status-body">
+          <h5>TMDB API Key</h5>
+          <p *ngIf="tmdbConfigured">API key is configured.</p>
+          <p *ngIf="!tmdbConfigured">
+            No API key found.
+            <a [routerLink]="['/settings/tmdb']" class="activeLink">Configure now</a>
+          </p>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-6 mb-3">
+      <div class="status-card" [class.status-ok]="plexConnected" [class.status-missing]="!plexConnected">
+        <div class="status-icon">
+          <span *ngIf="plexConnected">&#10003;</span>
+          <span *ngIf="!plexConnected">&#10007;</span>
+        </div>
+        <div class="status-body">
+          <h5>Plex Server</h5>
+          <p *ngIf="plexConnected">Connected to <strong>{{ plexServerName }}</strong></p>
+          <p *ngIf="!plexConnected">
+            No active server.
+            <a [routerLink]="['/settings/plex']" class="activeLink">Configure now</a>
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div *ngIf="loading" class="text-center mt-4">
+    <div class="spinner"></div>
+    <p class="text-muted mt-2">Checking status...</p>
+  </div>
+
+  <h4 class="top-margin text-primary">Getting Started</h4>
+  <p class="text-muted">To get started, head to <a [routerLink]="['/settings/tmdb']" class="activeLink">settings</a> and enter your
+    TMDB API key and Plex Server information.</p>
+</div>

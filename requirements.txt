@@ -1,5 +1,0 @@
-Flask
-requests
-plexapi
-uwsgi; sys_platform != 'win32'
-flask-cors

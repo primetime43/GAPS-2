@@ -1,0 +1,126 @@
+<div class="container top-margin">
+  <!-- Loading -->
+  <div *ngIf="loading" class="text-center mt-4">
+    <div class="spinner"></div>
+    <p class="text-muted mt-2">Loading...</p>
+  </div>
+
+  <!-- No server -->
+  <div *ngIf="!loading && !hasServer" class="text-center mt-4">
+    <h4 class="text-muted">No Active Server</h4>
+    <p class="text-muted">
+      Configure a Plex server first.
+      <a [routerLink]="['/settings/plex']" class="activeLink">Go to Settings</a>
+    </p>
+  </div>
+
+  <!-- Main content -->
+  <div *ngIf="!loading && hasServer">
+    <h3 class="regular-text">Find Missing Movies</h3>
+
+    <!-- Library selector -->
+    <div class="row mb-3">
+      <div class="col-md-6">
+        <label class="text-muted mb-1">Select a Library</label>
+        <select class="form-select dark-select" [(ngModel)]="selectedLibrary" (ngModelChange)="onLibrarySelect()">
+          <option value="" disabled>Choose a library...</option>
+          <option *ngFor="let lib of libraries" [value]="lib">{{ lib }}</option>
+        </select>
+      </div>
+      <div class="col-md-6 d-flex align-items-end">
+        <div class="form-check mt-2">
+          <input
+            class="form-check-input"
+            type="checkbox"
+            id="showExisting"
+            [(ngModel)]="showExisting"
+            (ngModelChange)="refreshRecommendations()"
+          >
+          <label class="form-check-label text-muted" for="showExisting">
+            Show movies already in library
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- Loading movies -->
+    <div *ngIf="loadingMovies" class="text-center mt-4">
+      <div class="spinner"></div>
+      <p class="text-muted mt-2">Loading movies...</p>
+    </div>
+
+    <!-- Error -->
+    <div *ngIf="errorMessage" class="alert alert-danger mt-3">{{ errorMessage }}</div>
+
+    <!-- Movie selection (no movie selected yet) -->
+    <div *ngIf="!loadingMovies && movies.length > 0 && !selectedMovie">
+      <div class="mb-3">
+        <input
+          type="text"
+          class="form-control search-input"
+          placeholder="Search movies..."
+          [(ngModel)]="movieSearchTerm"
+          (ngModelChange)="filterMovies()"
+        >
+      </div>
+      <p class="text-muted">Click a movie to find recommendations based on its collection.</p>
+      <div class="movie-grid">
+        <div *ngFor="let movie of filteredMovies" class="movie-card clickable" (click)="selectMovie(movie)">
+          <img
+            *ngIf="movie.posterUrl"
+            [src]="movie.posterUrl"
+            [alt]="movie.name"
+            class="movie-poster"
+            loading="lazy"
+          >
+          <div *ngIf="!movie.posterUrl" class="movie-poster-placeholder">No Image</div>
+          <div class="movie-info">
+            <div class="movie-title">{{ movie.name }}</div>
+            <div class="movie-year">{{ movie.year }}</div>
+          </div>
+        </div>
+      </div>
+      <p class="text-muted mt-3">{{ filteredMovies.length }} of {{ movies.length }} movies</p>
+    </div>
+
+    <!-- Recommendations view -->
+    <div *ngIf="selectedMovie">
+      <div class="d-flex align-items-center mb-3">
+        <button class="btn btn-sm btn-outline-light me-3" (click)="clearMovie()">
+          &larr; Back to Movies
+        </button>
+        <h5 class="regular-text mb-0">Recommendations for: {{ selectedMovie.name }} ({{ selectedMovie.year }})</h5>
+      </div>
+
+      <!-- Loading recommendations -->
+      <div *ngIf="loadingRecommendations" class="text-center mt-4">
+        <div class="spinner"></div>
+        <p class="text-muted mt-2">Finding missing movies...</p>
+      </div>
+
+      <!-- Recommendations grid -->
+      <div *ngIf="!loadingRecommendations && recommendations.length > 0" class="rec-grid">
+        <div *ngFor="let rec of recommendations" class="rec-card">
+          <img
+            *ngIf="rec.posterUrl"
+            [src]="rec.posterUrl"
+            [alt]="rec.name"
+            class="rec-poster"
+            loading="lazy"
+          >
+          <div *ngIf="!rec.posterUrl" class="rec-poster-placeholder">No Image</div>
+          <div class="rec-info">
+            <div class="rec-title">{{ rec.name }}</div>
+            <div class="rec-year">{{ rec.year }}</div>
+            <div class="rec-overview">{{ rec.overview }}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- No recommendations -->
+      <div *ngIf="!loadingRecommendations && recommendations.length === 0 && !errorMessage" class="text-muted mt-3">
+        No missing movies found for this title. Your collection may already be complete!
+      </div>
+    </div>
+  </div>
+</div>
