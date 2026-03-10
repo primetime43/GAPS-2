@@ -87,7 +87,28 @@ export class RecommendedComponent implements OnInit {
     });
   }
 
-  scanLibrary(): void {
+  freshScanActive = false;
+  showFreshScanConfirm = false;
+
+  scanLibrary(freshScan = false): void {
+    if (freshScan) {
+      this.showFreshScanConfirm = true;
+      return;
+    }
+    this.startScan(false);
+  }
+
+  onFreshScanConfirm(): void {
+    this.showFreshScanConfirm = false;
+    this.startScan(true);
+  }
+
+  onFreshScanCancel(): void {
+    this.showFreshScanConfirm = false;
+  }
+
+  private startScan(freshScan: boolean): void {
+    this.freshScanActive = freshScan;
     this.scanMode = true;
     this.selectedMovie = null;
     this.loadingGaps = true;
@@ -96,7 +117,7 @@ export class RecommendedComponent implements OnInit {
     this.errorMessage = '';
 
     // Always fetch with showExisting=true so we have the full data
-    this.recommendationService.scanLibrary(this.selectedLibrary, true).subscribe({
+    this.recommendationService.scanLibrary(this.selectedLibrary, true, freshScan).subscribe({
       next: (res) => {
         this.allGaps = res.gaps;
         this.totalOwned = res.totalOwned;
@@ -111,11 +132,6 @@ export class RecommendedComponent implements OnInit {
   }
 
   selectMovie(movie: Movie): void {
-    if (!movie.tmdbId) {
-      this.errorMessage = 'This movie does not have a TMDB ID.';
-      return;
-    }
-
     this.selectedMovie = movie;
     this.scanMode = false;
     this.loadingGaps = true;
@@ -123,9 +139,9 @@ export class RecommendedComponent implements OnInit {
     this.collectionGroups = [];
     this.errorMessage = '';
 
-    // Always fetch with showExisting=true
+    // Always fetch with showExisting=true; backend uses fallback chain for ID resolution
     this.recommendationService.getGapsForMovie(
-      movie.tmdbId,
+      movie,
       this.selectedLibrary,
       true
     ).subscribe({

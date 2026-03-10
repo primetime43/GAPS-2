@@ -1,3 +1,13 @@
+<app-confirm-modal
+  [visible]="showFreshScanConfirm"
+  title="Fresh Scan"
+  message="This will clear all cached TMDB data and re-fetch everything from scratch. This will take significantly longer than a normal scan."
+  confirmText="Start Fresh Scan"
+  type="info"
+  (confirmed)="onFreshScanConfirm()"
+  (cancelled)="onFreshScanCancel()"
+></app-confirm-modal>
+
 <div class="container top-margin">
   <!-- Loading -->
   <div *ngIf="loading" class="text-center mt-4">
@@ -28,12 +38,19 @@
           <option *ngFor="let lib of libraries" [value]="lib.title">{{ lib.title }}</option>
         </select>
       </div>
-      <div class="col-md-4 d-flex align-items-end">
+      <div class="col-md-4 d-flex align-items-end gap-3">
         <button
           class="btn btn-primary"
           [disabled]="!selectedLibrary || loadingMovies || loadingGaps || movies.length === 0"
-          (click)="scanLibrary()">
+          (click)="scanLibrary(false)">
           Scan for Gaps
+        </button>
+        <button
+          class="btn btn-outline-secondary"
+          [disabled]="!selectedLibrary || loadingMovies || loadingGaps || movies.length === 0"
+          (click)="scanLibrary(true)"
+          title="Clear TMDB cache and re-fetch all data from scratch">
+          Fresh Scan
         </button>
       </div>
     </div>
@@ -75,9 +92,13 @@
     <div *ngIf="loadingGaps" class="text-center mt-4">
       <div class="spinner"></div>
       <p class="text-muted mt-2">
-        <span *ngIf="scanMode">Scanning {{ movies.length }} movies for collection gaps... This may take a while.</span>
+        <span *ngIf="scanMode && !freshScanActive">Scanning {{ movies.length }} movies for collection gaps... This may take a while.</span>
+        <span *ngIf="scanMode && freshScanActive">Fresh scan: re-fetching all {{ movies.length }} movies from TMDB... This will take a while.</span>
         <span *ngIf="!scanMode">Finding collection gaps...</span>
       </p>
+      <div *ngIf="freshScanActive" class="alert alert-warning d-inline-block mt-2">
+        Cache cleared. All data is being fetched fresh from TMDB.
+      </div>
     </div>
 
     <!-- Gaps results -->

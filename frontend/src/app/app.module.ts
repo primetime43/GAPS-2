@@ -19,10 +19,12 @@ import { EmbySettingsComponent } from './components/settings/emby-settings/emby-
 import { UserPreferencesSettingsComponent } from './components/settings/user-preferences-settings/user-preferences-settings.component';
 import { TmdbSettingsComponent } from './components/settings/tmdb-settings/tmdb-settings.component';
 import { SettingsComponent } from './components/settings/settings.component';
+import { ConfirmModalComponent } from './components/confirm-modal/confirm-modal.component';
 
 @NgModule({ declarations: [
         AppComponent,
         HeaderComponent,
+        ConfirmModalComponent,
         RecommendedComponent,
         UpdatesComponent,
         AboutComponent,
