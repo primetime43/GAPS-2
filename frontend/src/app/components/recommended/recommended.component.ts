@@ -129,6 +129,10 @@ export class RecommendedComponent implements OnInit {
     ).subscribe({
       next: (gaps) => {
         this.allGaps = gaps;
+        // Auto-show owned if collection is complete (no missing movies)
+        if (gaps.length > 0 && gaps.every(g => g.owned)) {
+          this.showOwned = true;
+        }
         this.applyFilter();
         this.loadingGaps = false;
       },

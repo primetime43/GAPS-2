@@ -28,25 +28,13 @@
           <option *ngFor="let lib of libraries" [value]="lib.title">{{ lib.title }}</option>
         </select>
       </div>
-      <div class="col-md-4 d-flex align-items-end gap-3">
+      <div class="col-md-4 d-flex align-items-end">
         <button
           class="btn btn-primary"
           [disabled]="!selectedLibrary || loadingMovies || loadingGaps || movies.length === 0"
           (click)="scanLibrary()">
           Scan for Gaps
         </button>
-        <div class="form-check mt-2">
-          <input
-            class="form-check-input"
-            type="checkbox"
-            id="showOwned"
-            [(ngModel)]="showOwned"
-            (ngModelChange)="onShowOwnedChange()"
-          >
-          <label class="form-check-label text-muted" for="showOwned">
-            Show owned
-          </label>
-        </div>
       </div>
     </div>
 
@@ -104,6 +92,18 @@
         <h5 class="regular-text mb-0" *ngIf="selectedMovie">
           Collection for: {{ selectedMovie.name }} ({{ selectedMovie.year }})
         </h5>
+        <div class="form-check ms-auto" *ngIf="missingCount > 0">
+          <input
+            class="form-check-input"
+            type="checkbox"
+            id="showOwned"
+            [(ngModel)]="showOwned"
+            (ngModelChange)="onShowOwnedChange()"
+          >
+          <label class="form-check-label text-muted" for="showOwned">
+            Show owned
+          </label>
+        </div>
       </div>
 
       <!-- Collection groups -->
@@ -130,9 +130,14 @@
     </div>
 
     <!-- No gaps found -->
-    <div *ngIf="!loadingGaps && (scanMode || selectedMovie) && collectionGroups.length === 0 && !errorMessage" class="text-muted mt-3">
-      <span *ngIf="selectedMovie">This movie doesn't belong to a collection, or your collection is complete!</span>
-      <span *ngIf="scanMode">No collection gaps found. Your library is complete!</span>
+    <div *ngIf="!loadingGaps && (scanMode || selectedMovie) && collectionGroups.length === 0 && !errorMessage" class="mt-3">
+      <button class="btn btn-sm btn-outline-light mb-2" (click)="clearResults()">
+        &larr; Back
+      </button>
+      <p class="text-muted">
+        <span *ngIf="selectedMovie">This movie doesn't belong to a collection, or your collection is complete!</span>
+        <span *ngIf="scanMode">No collection gaps found. Your library is complete!</span>
+      </p>
     </div>
   </div>
 </div>
