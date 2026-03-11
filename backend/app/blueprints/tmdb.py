@@ -3,6 +3,13 @@ from flask import Blueprint, jsonify, request, current_app
 tmdb_bp = Blueprint('tmdb', __name__)
 
 
+@tmdb_bp.route('/status', methods=['GET'])
+def get_status():
+    """Return whether a TMDB API key is configured and the key itself."""
+    api_key = current_app.tmdb_service.api_key or ''
+    return jsonify(hasKey=bool(api_key), apiKey=api_key)
+
+
 @tmdb_bp.route('/test-key', methods=['POST'])
 def test_key():
     api_key = request.json.get('api_key')

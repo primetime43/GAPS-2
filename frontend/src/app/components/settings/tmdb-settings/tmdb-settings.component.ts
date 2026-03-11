@@ -23,9 +23,18 @@ export class TmdbSettingsComponent implements OnInit {
   ) {}
 
   ngOnInit(): void {
-    this.hasKey = this.tmdbService.hasApiKey();
     this.tmdbForm = this.fb.group({
-      movieDbApiKey: [this.tmdbService.getApiKey() || '', Validators.required]
+      movieDbApiKey: ['', Validators.required]
+    });
+
+    this.tmdbService.getStatus().subscribe({
+      next: (status) => {
+        this.hasKey = status.hasKey;
+        if (status.apiKey) {
+          this.tmdbForm.patchValue({ movieDbApiKey: status.apiKey });
+        }
+      },
+      error: () => {}
     });
   }
 
@@ -62,7 +71,6 @@ export class TmdbSettingsComponent implements OnInit {
     this.clearMessage();
     this.tmdbService.saveApiKey(apiKey).subscribe({
       next: (res) => {
-        this.tmdbService.setApiKey(apiKey);
         this.hasKey = true;
         this.showMessage(res.message || 'API key saved successfully!', 'success');
         this.saving = false;

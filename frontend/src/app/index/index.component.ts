@@ -40,7 +40,10 @@ export class IndexComponent implements OnInit {
   ) {}
 
   ngOnInit(): void {
-    this.tmdbConfigured = this.tmdbService.hasApiKey();
+    this.tmdbService.getStatus().subscribe({
+      next: (status) => this.tmdbConfigured = status.hasKey,
+      error: () => {}
+    });
 
     forkJoin({
       plex: this.plexService.getActiveServer().pipe(catchError(() => of(null))),
