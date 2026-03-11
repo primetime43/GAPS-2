@@ -1,6 +1,9 @@
+import logging
 import threading
 import requests
 from app.services import config_store
+
+logger = logging.getLogger(__name__)
 
 
 class TmdbService:
@@ -83,8 +86,8 @@ class TmdbService:
                         resolved = results[0]["id"]
                         self._id_cache[cache_key] = resolved
                         return resolved
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("TMDB /find lookup failed for IMDB ID %s: %s", imdb_id, e)
             self._id_cache[cache_key] = None
 
         # 3. Try title + year search (cached)
@@ -113,8 +116,8 @@ class TmdbService:
                                 break
                         self._id_cache[cache_key] = resolved
                         return resolved
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("TMDB search failed for '%s' (%s): %s", title, year, e)
             self._id_cache[cache_key] = None
 
         return None
@@ -138,7 +141,8 @@ class TmdbService:
             coll_id = collection["id"] if collection else None
             self._movie_collection_cache[tmdb_id] = coll_id
             return coll_id
-        except Exception:
+        except Exception as e:
+            logger.warning("Failed to get collection ID for TMDB %s: %s", tmdb_id, e)
             self._movie_collection_cache[tmdb_id] = None
             return None
 
@@ -159,7 +163,8 @@ class TmdbService:
             data = resp.json()
             self._collection_cache[collection_id] = data
             return data
-        except Exception:
+        except Exception as e:
+            logger.warning("Failed to fetch collection %s: %s", collection_id, e)
             return None
 
     def _build_gap_entries(

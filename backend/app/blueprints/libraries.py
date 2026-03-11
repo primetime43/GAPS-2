@@ -1,5 +1,8 @@
+import logging
 import requests as http_requests
 from flask import Blueprint, jsonify, request, current_app, Response
+
+logger = logging.getLogger(__name__)
 
 libraries_bp = Blueprint('libraries', __name__)
 
@@ -76,5 +79,6 @@ def image_proxy():
             headers={'Cache-Control': 'public, max-age=86400'},
         )
 
-    except Exception:
+    except Exception as e:
+        logger.warning("Image proxy failed for source=%s: %s", source, e)
         return Response('Image not found', status=404)

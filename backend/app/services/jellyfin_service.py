@@ -1,5 +1,8 @@
+import logging
 import requests
 from app.services import config_store
+
+logger = logging.getLogger(__name__)
 
 
 class JellyfinService:
@@ -37,7 +40,8 @@ class JellyfinService:
                 info = resp.json()
                 return True, info.get('ServerName', 'Jellyfin Server')
             return False, None
-        except Exception:
+        except Exception as e:
+            logger.warning("Jellyfin connection test failed for %s: %s", server_url, e)
             return False, None
 
     def connect(self, server_url: str, api_key: str) -> tuple[bool, str | None, str | None]:
@@ -60,8 +64,8 @@ class JellyfinService:
                 users = resp.json()
                 if users:
                     self._user_id = users[0]['Id']
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Failed to discover Jellyfin user ID: %s", e)
 
         return True, server_name, None
 

@@ -1,12 +1,15 @@
 import base64
 import hashlib
 import json
+import logging
 import os
 import platform
 import sys
 import uuid
 
 from cryptography.fernet import Fernet, InvalidToken
+
+logger = logging.getLogger(__name__)
 
 
 def _get_base_dir():
@@ -49,7 +52,8 @@ def load() -> dict:
             encrypted = f.read()
         decrypted = _fernet.decrypt(encrypted)
         return json.loads(decrypted)
-    except (InvalidToken, json.JSONDecodeError, OSError):
+    except (InvalidToken, json.JSONDecodeError, OSError) as e:
+        logger.warning("Failed to load config: %s", e)
         return {}
 
 

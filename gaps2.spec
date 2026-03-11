@@ -32,6 +32,8 @@ a = Analysis(
         'app.services.tmdb_service',
         'app.services.schedule_service',
         'app.services.notification_service',
+        'app.services.log_handler',
+        'app.blueprints.logs',
     ],
     hookspath=[],
     hooksconfig={},

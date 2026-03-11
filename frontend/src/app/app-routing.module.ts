@@ -3,6 +3,7 @@ import { RouterModule, Routes } from '@angular/router';
 
 import { RecommendedComponent } from './components/recommended/recommended.component';
 import { AboutComponent } from './components/about/about.component';
+import { LogsComponent } from './components/logs/logs.component';
 import { IndexComponent } from './index/index.component';
 
 //Settings
@@ -19,6 +20,7 @@ const routes: Routes = [
   { path: '', component: IndexComponent },
   { path: 'recommended', component: RecommendedComponent },
   { path: 'about', component: AboutComponent },
+  { path: 'logs', component: LogsComponent },
   { path: 'settings', component: SettingsComponent, children: [
     { path: '', redirectTo: 'tmdb', pathMatch: 'full' },
     { path: 'tmdb', component: TmdbSettingsComponent },

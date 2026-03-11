@@ -1,8 +1,11 @@
+import logging
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import requests
 from app.services import config_store
+
+logger = logging.getLogger(__name__)
 
 CONFIG_KEY = 'notifications'
 
@@ -57,8 +60,8 @@ class NotificationService:
             if config[service].get('enabled'):
                 try:
                     self.notify(service, title, message)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning("Failed to send %s notification: %s", service, e)
 
     def notify(self, service: str, title: str, message: str) -> tuple[bool, str]:
         config = self.get_config()

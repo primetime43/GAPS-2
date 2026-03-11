@@ -1,9 +1,12 @@
+import logging
 from urllib.parse import quote
 from plexapi.myplex import MyPlexPinLogin
 from plexapi.server import PlexServer
 from plexapi import BASE_HEADERS
 import requests
 from app.services import config_store
+
+logger = logging.getLogger(__name__)
 
 
 class PlexService:
@@ -98,8 +101,8 @@ class PlexService:
                 self._server_conn = server
                 self._server_conn_name = server_name
                 return server
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("Failed to connect to Plex via stored URL: %s", e)
 
         resource = self._resources.get(server_name)
         if resource is None:
@@ -112,8 +115,8 @@ class PlexService:
                             resource = r
                             self._resources[server_name] = r
                             break
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning("Failed to re-fetch Plex resources: %s", e)
             if resource is None:
                 return None
 
@@ -139,7 +142,8 @@ class PlexService:
                 self._server_conn = server
                 self._server_conn_name = server_name
                 return server
-            except Exception:
+            except Exception as e:
+                logger.debug("Plex connection attempt to %s failed: %s", url, e)
                 continue
 
         return None
