@@ -1,0 +1,22 @@
+@use '../plex-settings/plex-settings.component.scss' as *;
+
+.media-server-settings {
+  padding-top: 12px;
+}
+
+.dark-input {
+  background-color: #2d2d2d;
+  border: 1px solid #444;
+  color: #fff;
+
+  &:focus {
+    background-color: #333;
+    border-color: #00bc8c;
+    color: #fff;
+    box-shadow: none;
+  }
+
+  &::placeholder {
+    color: #777;
+  }
+}

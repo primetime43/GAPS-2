@@ -1,0 +1,93 @@
+<div class="container top-margin">
+  <h3 class="regular-text">Dashboard</h3>
+
+  <div *ngIf="loading" class="text-center mt-4">
+    <div class="spinner"></div>
+    <p class="text-muted mt-2">Checking status...</p>
+  </div>
+
+  <div class="row mt-3" *ngIf="!loading">
+    <!-- TMDB Status -->
+    <div class="col-md-6 mb-3">
+      <div class="status-card" [class.status-ok]="tmdbConfigured" [class.status-missing]="!tmdbConfigured">
+        <div class="status-icon">
+          <span *ngIf="tmdbConfigured">&#10003;</span>
+          <span *ngIf="!tmdbConfigured">&#10007;</span>
+        </div>
+        <div class="status-body">
+          <h5>TMDB API Key</h5>
+          <p *ngIf="tmdbConfigured">API key is configured.</p>
+          <p *ngIf="!tmdbConfigured">
+            No API key found.
+            <a [routerLink]="['/settings/tmdb']" class="activeLink">Configure now</a>
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Media Server Status -->
+    <div class="col-md-6 mb-3">
+      <div class="status-card" [class.status-ok]="mediaServerConnected" [class.status-missing]="!mediaServerConnected">
+        <div class="status-icon">
+          <span *ngIf="mediaServerConnected">&#10003;</span>
+          <span *ngIf="!mediaServerConnected">&#10007;</span>
+        </div>
+        <div class="status-body">
+          <h5>Media Server</h5>
+          <p *ngIf="mediaServerConnected">Connected to <strong>{{ mediaServerName }}</strong> ({{ mediaServerType }})</p>
+          <p *ngIf="!mediaServerConnected">
+            No active server.
+            <a [routerLink]="['/settings/plex']" class="activeLink">Configure now</a>
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Scheduled Scan -->
+    <div class="col-md-6 mb-3">
+      <div class="status-card" [class.status-ok]="scheduleEnabled" [class.status-missing]="!scheduleEnabled">
+        <div class="status-icon">
+          <span *ngIf="scheduleEnabled">&#128337;</span>
+          <span *ngIf="!scheduleEnabled">&#10007;</span>
+        </div>
+        <div class="status-body">
+          <h5>Scheduled Scans</h5>
+          <p *ngIf="scheduleEnabled">
+            {{ schedulePreset }} &mdash; Next run: {{ nextRun || 'N/A' }}
+          </p>
+          <p *ngIf="!scheduleEnabled">
+            No schedule set.
+            <a [routerLink]="['/settings/schedule']" class="activeLink">Configure now</a>
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Last Scan -->
+    <div class="col-md-6 mb-3">
+      <div class="status-card" [class.status-ok]="lastScanStatus === 'done'" [class.status-missing]="lastScanStatus !== 'done'">
+        <div class="status-icon">
+          <span *ngIf="lastScanStatus === 'done'">&#128269;</span>
+          <span *ngIf="lastScanStatus !== 'done'">&#8212;</span>
+        </div>
+        <div class="status-body">
+          <h5>Last Scan</h5>
+          <p *ngIf="lastScanStatus === 'done'">
+            Found <strong>{{ lastScanGaps }}</strong> gap(s) across <strong>{{ lastScanTotal }}</strong> movies.
+          </p>
+          <p *ngIf="lastScanStatus !== 'done'">
+            No scan results yet.
+            <a [routerLink]="['/recommended']" class="activeLink">Run a scan</a>
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Quick Actions -->
+  <h4 class="mt-4 text-primary">Quick Actions</h4>
+  <div class="quick-actions mt-3">
+    <a [routerLink]="['/recommended']" class="action-btn">Scan for Missing Movies</a>
+    <a [routerLink]="['/settings']" class="action-btn">Settings</a>
+  </div>
+</div>

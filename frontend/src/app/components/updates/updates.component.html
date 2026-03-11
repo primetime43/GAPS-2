@@ -1,0 +1,22 @@
+<div class="container top-margin">
+  <h3 class="regular-text">Updates</h3>
+
+  <div *ngIf="loading" class="text-muted mt-3">Loading releases...</div>
+
+  <div *ngIf="error" class="text-danger mt-3">{{ error }}</div>
+
+  <div *ngIf="!loading && !error && releases.length === 0" class="text-muted mt-3">
+    No releases found.
+  </div>
+
+  <div *ngFor="let release of releases" class="changelog-entry mt-3">
+    <h5 class="text-primary mb-1">
+      {{ release.name || release.tag_name }}
+    </h5>
+    <small class="text-muted">{{ release.published_at | date:'mediumDate' }}</small>
+    <div class="release-body mt-2 text-muted" [innerHTML]="release.bodyHtml"></div>
+    <a [href]="release.html_url" target="_blank" rel="noopener" class="release-link mt-2 d-inline-block">
+      View on GitHub
+    </a>
+  </div>
+</div>

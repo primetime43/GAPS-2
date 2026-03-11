@@ -1,0 +1,212 @@
+<app-confirm-modal
+  [visible]="showFreshScanConfirm"
+  title="Fresh Scan"
+  message="This will clear all cached TMDB data and re-fetch everything from scratch. This will take significantly longer than a normal scan."
+  confirmText="Start Fresh Scan"
+  type="info"
+  (confirmed)="onFreshScanConfirm()"
+  (cancelled)="onFreshScanCancel()"
+></app-confirm-modal>
+
+<div class="container top-margin">
+  <!-- Loading -->
+  <div *ngIf="loading" class="text-center mt-4">
+    <div class="spinner"></div>
+    <p class="text-muted mt-2">Loading...</p>
+  </div>
+
+  <!-- No server -->
+  <div *ngIf="!loading && !hasServer" class="text-center mt-4">
+    <h4 class="text-muted">No Active Server</h4>
+    <p class="text-muted">
+      Configure a Plex server first.
+      <a [routerLink]="['/settings/plex']" class="activeLink">Go to Settings</a>
+    </p>
+  </div>
+
+  <!-- Main content -->
+  <div *ngIf="!loading && hasServer">
+    <h3 class="regular-text">Find Missing Movies</h3>
+    <p class="text-muted">Find gaps in your movie collections using TMDB data.</p>
+
+    <!-- Library selector + controls -->
+    <div class="row mb-3">
+      <div class="col-md-5">
+        <label class="text-muted mb-1">Select a Library</label>
+        <select class="form-select dark-select" [(ngModel)]="selectedLibrary" (ngModelChange)="onLibrarySelect()">
+          <option value="" disabled hidden>Choose a library...</option>
+          <option *ngFor="let lib of libraries" [value]="lib.title">{{ lib.title }}</option>
+        </select>
+      </div>
+      <div class="col-md-4 d-flex align-items-end gap-3">
+        <button
+          class="btn btn-primary"
+          [disabled]="!selectedLibrary || loadingMovies || loadingGaps || movies.length === 0"
+          (click)="scanLibrary(false)">
+          Scan for Gaps
+        </button>
+        <button
+          class="btn btn-outline-secondary"
+          [disabled]="!selectedLibrary || loadingMovies || loadingGaps || movies.length === 0"
+          (click)="scanLibrary(true)"
+          title="Clear TMDB cache and re-fetch all data from scratch">
+          Fresh Scan
+        </button>
+      </div>
+    </div>
+
+    <!-- Loading movies -->
+    <div *ngIf="loadingMovies" class="text-center mt-4">
+      <div class="spinner"></div>
+      <p class="text-muted mt-2">Loading library movies...</p>
+    </div>
+
+    <!-- Error -->
+    <div *ngIf="errorMessage" class="alert alert-danger mt-3">{{ errorMessage }}</div>
+
+    <!-- Movie picker (when library loaded, no scan/movie selected) -->
+    <div *ngIf="!loadingMovies && movies.length > 0 && !scanMode && !selectedMovie && !loadingGaps">
+      <p class="text-muted">
+        Click <strong>Scan for Gaps</strong> to check all {{ movies.length }} movies,
+        or click a movie below to check its collection.
+      </p>
+      <input
+        class="form-control dark-input mb-3"
+        type="text"
+        placeholder="Filter movies by name..."
+        [(ngModel)]="movieFilter"
+        (ngModelChange)="currentPage = 1"
+      >
+      <div class="movie-grid">
+        <div *ngFor="let movie of pagedMovies" class="movie-card clickable" (click)="selectMovie(movie)">
+          <img
+            *ngIf="movie.posterUrl"
+            [src]="movie.posterUrl"
+            [alt]="movie.name"
+            class="movie-poster"
+            loading="lazy"
+          >
+          <div *ngIf="!movie.posterUrl" class="movie-poster-placeholder">No Image</div>
+          <div class="movie-info">
+            <div class="movie-title">{{ movie.name }}</div>
+            <div class="movie-year">{{ movie.year }}</div>
+          </div>
+        </div>
+      </div>
+      <!-- Pagination -->
+      <div *ngIf="totalPages > 1" class="pagination-controls mt-3 d-flex align-items-center justify-content-center gap-3">
+        <button class="btn btn-sm btn-outline-light" [disabled]="currentPage === 1" (click)="currentPage = currentPage - 1">
+          &larr; Prev
+        </button>
+        <span class="text-muted">Page {{ currentPage }} of {{ totalPages }}</span>
+        <button class="btn btn-sm btn-outline-light" [disabled]="currentPage === totalPages" (click)="currentPage = currentPage + 1">
+          Next &rarr;
+        </button>
+      </div>
+    </div>
+
+    <!-- Loading gaps -->
+    <div *ngIf="loadingGaps" class="mt-4">
+      <!-- Single movie lookup (no progress needed) -->
+      <div *ngIf="!scanMode" class="text-center">
+        <div class="spinner"></div>
+        <p class="text-muted mt-2">Finding collection gaps...</p>
+      </div>
+
+      <!-- Library scan with progress -->
+      <div *ngIf="scanMode" class="scan-progress-container">
+        <div *ngIf="scanProgress" class="mb-3">
+          <div class="d-flex justify-content-between text-muted mb-1">
+            <span>Scanning movies... {{ scanProgress.processed }} / {{ scanProgress.total }}</span>
+            <span>{{ scanProgress.collections_found }} collections found</span>
+          </div>
+          <div class="progress-bar-track">
+            <div
+              class="progress-bar-fill"
+              [style.width.%]="scanProgress.total ? (scanProgress.processed / scanProgress.total * 100) : 0"
+            ></div>
+          </div>
+          <p class="text-muted mt-2 current-movie" *ngIf="scanProgress.current_movie">
+            Checking: {{ scanProgress.current_movie }}
+          </p>
+        </div>
+        <div *ngIf="!scanProgress" class="text-center">
+          <div class="spinner"></div>
+          <p class="text-muted mt-2">Starting scan...</p>
+        </div>
+        <div *ngIf="freshScanActive" class="fresh-scan-notice mt-2">
+          Cache cleared — all data is being fetched fresh from TMDB.
+        </div>
+      </div>
+    </div>
+
+    <!-- Gaps results -->
+    <div *ngIf="!loadingGaps && (scanMode || selectedMovie) && collectionGroups.length > 0">
+      <div class="d-flex align-items-center mb-3">
+        <button class="btn btn-sm btn-outline-light me-3" (click)="clearResults()">
+          &larr; Back
+        </button>
+        <h5 class="regular-text mb-0" *ngIf="scanMode">
+          Found {{ missingCount }} missing movies across {{ collectionGroups.length }} collections
+        </h5>
+        <h5 class="regular-text mb-0" *ngIf="selectedMovie">
+          Collection for: {{ selectedMovie.name }} ({{ selectedMovie.year }})
+        </h5>
+        <div class="form-check ms-auto" *ngIf="missingCount > 0">
+          <input
+            class="form-check-input"
+            type="checkbox"
+            id="showOwned"
+            [(ngModel)]="showOwned"
+            (ngModelChange)="onShowOwnedChange()"
+          >
+          <label class="form-check-label text-muted" for="showOwned">
+            Show owned
+          </label>
+        </div>
+      </div>
+
+      <!-- Search filter -->
+      <input
+        class="form-control dark-input mb-3"
+        type="text"
+        placeholder="Filter results by movie or collection name..."
+        [(ngModel)]="searchFilter"
+        (ngModelChange)="applyFilter()"
+      >
+
+      <!-- Collection groups -->
+      <div *ngFor="let group of filteredGroups" class="collection-group mb-4">
+        <h6 class="collection-name">{{ group.name }}</h6>
+        <div class="rec-grid">
+          <div *ngFor="let gap of group.gaps" class="rec-card" [class.owned]="gap.owned">
+            <div class="owned-badge" *ngIf="gap.owned">Owned</div>
+            <img
+              *ngIf="gap.posterUrl"
+              [src]="gap.posterUrl"
+              [alt]="gap.name"
+              class="rec-poster"
+              loading="lazy"
+            >
+            <div *ngIf="!gap.posterUrl" class="rec-poster-placeholder">No Image</div>
+            <div class="rec-info">
+              <div class="rec-title">{{ gap.name }}</div>
+              <div class="rec-year">{{ gap.year }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- No gaps found -->
+    <div *ngIf="!loadingGaps && (scanMode || selectedMovie) && collectionGroups.length === 0 && !errorMessage" class="mt-3">
+      <button class="btn btn-sm btn-outline-light mb-2" (click)="clearResults()">
+        &larr; Back
+      </button>
+      <p class="text-muted">
+        <span *ngIf="selectedMovie">This movie doesn't belong to a collection, or your collection is complete!</span>
+        <span *ngIf="scanMode">No collection gaps found. Your library is complete!</span>
+      </p>
+    </div>
+  </div>
+</div>

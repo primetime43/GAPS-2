@@ -1,4 +1,0 @@
-Flask
-requests
-plexapi
-uwsgi

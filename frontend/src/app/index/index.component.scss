@@ -1,0 +1,64 @@
+.status-card {
+  display: flex;
+  align-items: center;
+  padding: 16px;
+  border-radius: 8px;
+  background-color: #2d2d2d;
+  border: 1px solid #444;
+}
+
+.status-card.status-ok {
+  border-left: 4px solid #00bc8c;
+}
+
+.status-card.status-missing {
+  border-left: 4px solid #e74c3c;
+}
+
+.status-icon {
+  font-size: 28px;
+  margin-right: 16px;
+  min-width: 36px;
+  text-align: center;
+}
+
+.status-ok .status-icon {
+  color: #00bc8c;
+}
+
+.status-missing .status-icon {
+  color: #e74c3c;
+}
+
+.status-body h5 {
+  color: #fff;
+  margin-bottom: 4px;
+}
+
+.status-body p {
+  color: #999;
+  margin-bottom: 0;
+}
+
+.quick-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.action-btn {
+  display: inline-block;
+  padding: 10px 20px;
+  background-color: #00bc8c;
+  color: #fff;
+  border-radius: 6px;
+  text-decoration: none;
+  font-weight: 500;
+  transition: background-color 0.2s;
+
+  &:hover {
+    background-color: #00a379;
+    color: #fff;
+    text-decoration: none;
+  }
+}

@@ -1,0 +1,6 @@
+Flask
+requests
+plexapi
+flask-cors
+cryptography
+apscheduler

@@ -1,0 +1,121 @@
+<div class="plex-settings">
+
+  <!-- Current active server (accordion) -->
+  <div class="server-accordion" *ngIf="hasActiveServer">
+    <div class="server-accordion-header" (click)="serverExpanded = !serverExpanded">
+      <div class="active-server-info">
+        <div class="active-badge">Connected</div>
+        <div class="active-details">
+          <span class="server-name">{{ activeServer }}</span>
+          <span class="lib-count">{{ activeLibraryCount }} libraries</span>
+        </div>
+      </div>
+      <div class="accordion-right">
+        <span class="accordion-arrow" [class.expanded]="serverExpanded">&#9662;</span>
+      </div>
+    </div>
+
+    <div class="server-accordion-body" *ngIf="serverExpanded">
+      <!-- All libraries grouped by type -->
+      <div class="lib-group" *ngIf="activeMovieLibraries.length > 0">
+        <span class="lib-group-label">Movie Libraries</span>
+        <div class="libraries-row">
+          <span *ngFor="let lib of activeMovieLibraries" class="lib-tag lib-tag-movie">{{ lib.title }}</span>
+        </div>
+      </div>
+      <div class="lib-group" *ngIf="activeOtherLibraries.length > 0">
+        <span class="lib-group-label">Other Libraries</span>
+        <div class="libraries-row">
+          <span *ngFor="let lib of activeOtherLibraries" class="lib-tag">{{ lib.title }}</span>
+        </div>
+      </div>
+
+      <!-- Token -->
+      <div class="token-row mt-2" *ngIf="plexToken">
+        <a class="text-muted token-toggle" (click)="togglePlexTokenVisibility(); $event.stopPropagation()">
+          {{ tokenVisible ? 'Hide token' : 'Show token' }}
+        </a>
+        <code *ngIf="tokenVisible" class="token-value">{{ plexToken }}</code>
+      </div>
+
+      <!-- Actions -->
+      <div class="active-server-actions mt-3">
+        <button class="btn btn-sm btn-outline-secondary" (click)="disconnect(); $event.stopPropagation()">Change Server</button>
+        <button class="btn btn-sm btn-outline-danger" (click)="removeServer(); $event.stopPropagation()">Remove</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Status message -->
+  <div *ngIf="statusMessage" class="alert alert-sm mt-3"
+       [class.alert-success]="statusType === 'success'"
+       [class.alert-danger]="statusType === 'error'">
+    {{ statusMessage }}
+  </div>
+
+  <!-- Setup flow (only when no active server or changing) -->
+  <div *ngIf="!hasActiveServer" class="setup-flow">
+
+    <!-- Step 1: Connect -->
+    <div class="step-card" *ngIf="step === 'idle'">
+      <p class="text-muted mb-3">Connect your Plex account to get started. You'll be redirected to Plex to sign in.</p>
+      <button class="btn btn-primary" (click)="connectPlex()">
+        Connect Plex Account
+      </button>
+    </div>
+
+    <!-- Step 2: Waiting for auth (auto-polling) -->
+    <div class="step-card text-center" *ngIf="step === 'waiting'">
+      <div class="spinner"></div>
+      <p class="text-muted mt-2 mb-0">Waiting for Plex sign-in to complete...</p>
+      <button class="btn btn-outline-secondary btn-sm mt-3" (click)="connectPlex()">
+        Retry Authentication
+      </button>
+    </div>
+
+    <!-- Loading state -->
+    <div class="step-card text-center" *ngIf="step === 'authenticating' || step === 'fetching' || step === 'saving'">
+      <div class="spinner"></div>
+      <p class="text-muted mt-2 mb-0">
+        <span *ngIf="step === 'authenticating'">Connecting to Plex...</span>
+        <span *ngIf="step === 'fetching'">Fetching data...</span>
+        <span *ngIf="step === 'saving'">Saving...</span>
+      </p>
+    </div>
+
+    <!-- Step 3: Select server & save -->
+    <div *ngIf="step === 'selecting'">
+      <!-- Server dropdown -->
+      <div class="mb-3">
+        <label class="form-label text-muted">Select Server</label>
+        <select class="form-select dark-select" [(ngModel)]="selectedServer" (ngModelChange)="onServerSelect()">
+          <option value="" disabled>Choose a server...</option>
+          <option *ngFor="let server of servers" [value]="server">{{ server }}</option>
+        </select>
+      </div>
+
+      <!-- Movie libraries found -->
+      <div class="libraries-row mb-3" *ngIf="movieLibraries.length > 0">
+        <span class="text-muted lib-label">Movie libraries:</span>
+        <span *ngFor="let lib of movieLibraries" class="lib-tag lib-tag-movie">{{ lib.title }}</span>
+      </div>
+      <div *ngIf="libraries.length > 0 && movieLibraries.length === 0" class="text-muted mb-3">
+        No movie libraries found on this server.
+      </div>
+
+      <!-- Token (collapsible) -->
+      <div class="token-row mb-3" *ngIf="plexToken">
+        <a class="text-muted token-toggle" (click)="togglePlexTokenVisibility()">
+          {{ tokenVisible ? 'Hide token' : 'Show token' }}
+        </a>
+        <code *ngIf="tokenVisible" class="token-value">{{ plexToken }}</code>
+      </div>
+
+      <!-- Save -->
+      <button class="btn btn-success" (click)="setAsActive()" [disabled]="!selectedServer || isLoading">
+        Save as Active Server
+      </button>
+      <button class="btn btn-outline-secondary ms-2" (click)="step = 'idle'">Cancel</button>
+    </div>
+  </div>
+</div>

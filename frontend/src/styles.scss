@@ -1,0 +1,149 @@
+/* Global styles for GAPS 2 */
+
+.top-margin {
+  margin-top: 16px;
+  color: #fff;
+}
+
+.all-padding {
+  padding: 16px;
+}
+
+.gaps-hide {
+  display: none;
+}
+
+.thumbnail {
+  max-width: 96px;
+  height: auto;
+}
+
+.bottom-margin {
+  margin-top: 16px;
+}
+
+.word-break {
+  word-break: break-all;
+}
+
+.center {
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
+  width: 50%;
+}
+
+.center-text {
+  text-align: center;
+}
+
+.center-parent {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.nav-button-padding {
+  padding-top: 8px;
+  display: block;
+  width: 96px;
+}
+
+.nav-anchor-spacing {
+  display: block;
+  width: 96px;
+}
+
+.icon {
+  width: 48px;
+  height: 48px;
+  margin-bottom: 4px;
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.long-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+
+hr.thin {
+  height: 1px;
+  border: 0;
+  color: #333;
+  background-color: #333;
+  width: 95%;
+}
+
+.darkBackground {
+  background-color: #222;
+}
+
+.activeLink {
+  color: #00bc8c;
+}
+
+.text-muted {
+  color: #999 !important;
+}
+
+.regular-text {
+  color: #fff;
+}
+
+/* Coming soon cards */
+.coming-soon-card {
+  background-color: #2d2d2d;
+  border: 1px solid #444;
+  border-radius: 8px;
+  padding: 24px;
+  text-align: center;
+  color: #fff;
+
+  h4 {
+    margin-bottom: 8px;
+  }
+}
+
+/* Loading spinner */
+.spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid #444;
+  border-top-color: #00bc8c;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin: 0 auto;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Update entries */
+.update-entry {
+  background-color: #2d2d2d;
+  border: 1px solid #444;
+  border-radius: 8px;
+  padding: 16px 20px;
+  margin-bottom: 16px;
+
+  h5 {
+    margin-bottom: 12px;
+  }
+
+  ul {
+    margin-bottom: 0;
+    padding-left: 20px;
+
+    li {
+      margin-bottom: 4px;
+    }
+  }
+}

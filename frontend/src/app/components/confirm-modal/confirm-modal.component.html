@@ -1,0 +1,10 @@
+<div class="modal-backdrop" *ngIf="visible" (click)="onBackdropClick($event)">
+  <div class="modal-box">
+    <h5 class="modal-title" [ngClass]="'type-' + type">{{ title }}</h5>
+    <p class="modal-message">{{ message }}</p>
+    <div class="modal-actions">
+      <button class="btn-cancel" (click)="onCancel()">{{ cancelText }}</button>
+      <button class="btn-confirm" [ngClass]="'type-' + type" (click)="onConfirm()">{{ confirmText }}</button>
+    </div>
+  </div>
+</div>

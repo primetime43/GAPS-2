@@ -1,0 +1,70 @@
+<div class="top-margin regular-text">
+  <p>Automatically scan your library for missing collection movies on a schedule.</p>
+
+  <div *ngIf="loading" class="text-center mt-4">
+    <div class="spinner"></div>
+  </div>
+
+  <div *ngIf="!loading">
+    <!-- Status -->
+    <div class="status-indicator mb-3">
+      <span *ngIf="schedule?.enabled" class="status-ok">
+        &#10003; Scheduled: {{ schedule?.presets?.[schedule?.preset ?? ''] }}
+      </span>
+      <span *ngIf="!schedule?.enabled" class="status-missing">
+        &#10007; No schedule configured
+      </span>
+    </div>
+
+    <div *ngIf="schedule?.enabled && schedule?.next_run" class="text-muted mb-3">
+      Next scan: {{ schedule.next_run }}
+    </div>
+
+    <!-- Message -->
+    <div *ngIf="message"
+         class="alert"
+         [class.alert-success]="messageType === 'success'"
+         [class.alert-danger]="messageType === 'error'">
+      {{ message }}
+    </div>
+
+    <!-- No libraries warning -->
+    <div *ngIf="libraries.length === 0" class="text-muted">
+      No movie libraries found. Configure a Plex server first.
+    </div>
+
+    <!-- Config form -->
+    <div *ngIf="libraries.length > 0">
+      <div class="form-group mb-3">
+        <label class="form-label">Library</label>
+        <select class="form-select dark-select" [(ngModel)]="selectedLibrary">
+          <option value="" disabled hidden>Select a library...</option>
+          <option *ngFor="let lib of libraries" [value]="lib.title">{{ lib.title }}</option>
+        </select>
+      </div>
+
+      <div class="form-group mb-3">
+        <label class="form-label">Frequency</label>
+        <select class="form-select dark-select" [(ngModel)]="selectedPreset">
+          <option value="" disabled hidden>Select frequency...</option>
+          <option *ngFor="let key of presetKeys" [value]="key">{{ schedule?.presets?.[key] }}</option>
+        </select>
+      </div>
+
+      <div class="d-flex gap-2">
+        <button
+          class="btn btn-primary"
+          (click)="saveSchedule()"
+          [disabled]="saving || !selectedPreset || !selectedLibrary">
+          {{ saving ? 'Saving...' : 'Save Schedule' }}
+        </button>
+        <button
+          class="btn btn-outline-secondary"
+          (click)="disableSchedule()"
+          [disabled]="saving || !schedule?.enabled">
+          Disable
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

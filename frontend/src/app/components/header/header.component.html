@@ -1,0 +1,36 @@
+<header>
+  <nav class="header navbar navbar-expand navbar-expand-lg navbar-dark bg-primary">
+      <a class="" [routerLink]="['/']">
+          <img alt="" class="d-inline-block align-top" height="96" src="assets/images/final-gaps.svg" width="96">
+      </a>
+      <div class="collapse navbar-collapse" id="navbarColor01">
+          <ul class="navbar-nav mr-auto">
+              <li class="nav-item nav-button-padding" routerLinkActive="active" [routerLinkActiveOptions]="{exact: true}">
+                  <a class="nav-link center-text nav-anchor-spacing" [routerLink]="['/']">
+                      <img alt="" class="d-inline-block align-top" src="assets/images/speedometer2.svg" width="32" height="32">
+                      Dashboard
+                  </a>
+              </li>
+              <li class="nav-item nav-button-padding" routerLinkActive="active">
+                  <a class="nav-link center-text nav-anchor-spacing" [routerLink]="['/recommended']">
+                      <img alt="" class="d-inline-block align-top" src="assets/images/collection-fill.svg" width="32" height="32">
+                      Missing
+                  </a>
+              </li>
+              <li class="nav-item nav-button-padding" routerLinkActive="active">
+                  <a class="nav-link center-text nav-anchor-spacing" [routerLink]="['/settings']">
+                      <img alt="" class="d-inline-block align-top" src="assets/images/gear.svg" width="32" height="32">
+                      Settings
+                  </a>
+              </li>
+              <li class="nav-item nav-button-padding" routerLinkActive="active">
+                  <a class="nav-link center-text nav-anchor-spacing" [routerLink]="['/about']">
+                      <img alt="" class="d-inline-block align-top" src="assets/images/info-circle.svg" width="32" height="32">
+                      <br>
+                      About
+                  </a>
+              </li>
+          </ul>
+      </div>
+  </nav>
+</header>

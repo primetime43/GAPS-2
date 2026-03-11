@@ -1,0 +1,48 @@
+<div class="top-margin regular-text">
+  <p>To use Gaps, you'll need a MovieDB API key. Navigate over to
+    <a class="activeLink" href="https://www.themoviedb.org/settings/api" target="_blank">The Movie DB</a>,
+    create an account, and make an API Key. Copy that key and paste it below.
+  </p>
+
+  <!-- Status indicator -->
+  <div class="status-indicator mb-3">
+    <span *ngIf="hasKey" class="status-ok">&#10003; API Key configured</span>
+    <span *ngIf="!hasKey" class="status-missing">&#10007; No API Key configured</span>
+  </div>
+
+  <!-- Message -->
+  <div *ngIf="message"
+       class="alert"
+       [class.alert-success]="messageType === 'success'"
+       [class.alert-danger]="messageType === 'error'">
+    {{ message }}
+  </div>
+
+  <form [formGroup]="tmdbForm" novalidate>
+    <div class="form-group mb-3">
+      <label for="movieDbApiKey" class="form-label">Movie Database API Key</label>
+      <div class="input-group">
+        <input
+          class="form-control dark-input"
+          id="movieDbApiKey"
+          formControlName="movieDbApiKey"
+          [type]="showKey ? 'text' : 'password'"
+          placeholder="Enter your TMDB API key..."
+        >
+        <button class="btn btn-outline-secondary" type="button" (click)="showKey = !showKey">
+          {{ showKey ? 'Hide' : 'Show' }}
+        </button>
+      </div>
+      <div *ngIf="tmdbForm.get('movieDbApiKey')?.invalid && tmdbForm.get('movieDbApiKey')?.touched"
+           class="text-danger mt-1" style="font-size: 13px;">
+        Please enter a Movie Database Key.
+      </div>
+    </div>
+    <button class="btn btn-info me-2" type="button" (click)="testTmdbKey()" [disabled]="testing || saving">
+      {{ testing ? 'Testing...' : 'Test' }}
+    </button>
+    <button class="btn btn-primary" type="button" (click)="saveTmdbKey()" [disabled]="testing || saving">
+      {{ saving ? 'Saving...' : 'Save' }}
+    </button>
+  </form>
+</div>

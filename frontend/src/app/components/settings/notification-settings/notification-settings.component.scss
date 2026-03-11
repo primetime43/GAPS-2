@@ -1,0 +1,31 @@
+.notification-section {
+  border: 1px solid #444;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+  background: #2d2d2d;
+}
+
+.section-title {
+  color: #00bc8c;
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+
+.dark-input {
+  background-color: #222;
+  border: 1px solid #444;
+  color: #fff;
+
+  &::placeholder {
+    color: #666;
+  }
+
+  &:focus {
+    background-color: #333;
+    border-color: #00bc8c;
+    color: #fff;
+    box-shadow: none;
+  }
+}
