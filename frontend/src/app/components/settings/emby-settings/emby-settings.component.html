@@ -1,7 +1,80 @@
-<div class="top-margin">
-  <div class="coming-soon-card">
-    <h4>Emby Support</h4>
-    <p class="text-muted">Coming Soon</p>
-    <p class="text-muted">Emby integration is planned for a future release. Stay tuned!</p>
+<div class="media-server-settings">
+  <!-- Active server accordion -->
+  <div class="server-accordion" *ngIf="hasActiveServer">
+    <div class="server-accordion-header" (click)="serverExpanded = !serverExpanded">
+      <div class="active-server-info">
+        <div class="active-badge">Connected</div>
+        <div class="active-details">
+          <span class="server-name">{{ activeServer }}</span>
+          <span class="lib-count">{{ activeLibraries.length }} libraries</span>
+        </div>
+      </div>
+      <span class="accordion-arrow" [class.expanded]="serverExpanded">&#9662;</span>
+    </div>
+    <div class="server-accordion-body" *ngIf="serverExpanded">
+      <div class="lib-group" *ngIf="activeMovieLibraries.length > 0">
+        <span class="lib-group-label">Movie Libraries</span>
+        <div class="libraries-row">
+          <span *ngFor="let lib of activeMovieLibraries" class="lib-tag lib-tag-movie">{{ lib.title }}</span>
+        </div>
+      </div>
+      <div class="lib-group" *ngIf="activeOtherLibraries.length > 0">
+        <span class="lib-group-label">Other Libraries</span>
+        <div class="libraries-row">
+          <span *ngFor="let lib of activeOtherLibraries" class="lib-tag">{{ lib.title }}</span>
+        </div>
+      </div>
+      <div class="active-server-actions mt-3">
+        <button class="btn btn-sm btn-outline-secondary" (click)="disconnect(); $event.stopPropagation()">Change Server</button>
+        <button class="btn btn-sm btn-outline-danger" (click)="removeServer(); $event.stopPropagation()">Remove</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Status message -->
+  <div *ngIf="statusMessage" class="alert alert-sm mt-3"
+       [class.alert-success]="statusType === 'success'"
+       [class.alert-danger]="statusType === 'error'">
+    {{ statusMessage }}
+  </div>
+
+  <!-- Setup flow -->
+  <div *ngIf="!hasActiveServer" class="setup-flow">
+    <!-- Input form -->
+    <div class="step-card" *ngIf="step === 'idle' || step === 'connecting'">
+      <p class="text-muted mb-3">Enter your Emby server URL and API key. You can generate an API key in Emby Dashboard &gt; API Keys.</p>
+      <div class="mb-3">
+        <label class="form-label text-muted">Server URL</label>
+        <input type="text" class="form-control dark-input" [(ngModel)]="serverUrl" placeholder="http://localhost:8096">
+      </div>
+      <div class="mb-3">
+        <label class="form-label text-muted">API Key</label>
+        <div class="input-group">
+          <input [type]="apiKeyVisible ? 'text' : 'password'" class="form-control dark-input" [(ngModel)]="apiKey" placeholder="Enter API key">
+          <button class="btn btn-outline-secondary" type="button" (click)="toggleApiKeyVisibility()">
+            {{ apiKeyVisible ? 'Hide' : 'Show' }}
+          </button>
+        </div>
+      </div>
+      <button class="btn btn-primary" (click)="connect()" [disabled]="!serverUrl || !apiKey || step === 'connecting'">
+        {{ step === 'connecting' ? 'Connecting...' : 'Connect' }}
+      </button>
+    </div>
+
+    <!-- Connected - show libraries and save -->
+    <div class="step-card" *ngIf="step === 'connected' || step === 'saving'">
+      <h5 class="text-success mb-3">Connected to {{ serverName }}</h5>
+      <div class="libraries-row mb-3" *ngIf="movieLibraries.length > 0">
+        <span class="text-muted lib-label">Movie libraries:</span>
+        <span *ngFor="let lib of movieLibraries" class="lib-tag lib-tag-movie">{{ lib.title }}</span>
+      </div>
+      <div *ngIf="libraries.length > 0 && movieLibraries.length === 0" class="text-muted mb-3">
+        No movie libraries found on this server.
+      </div>
+      <button class="btn btn-success" (click)="save()" [disabled]="step === 'saving'">
+        {{ step === 'saving' ? 'Saving...' : 'Save as Active Server' }}
+      </button>
+      <button class="btn btn-outline-secondary ms-2" (click)="step = 'idle'">Cancel</button>
+    </div>
   </div>
 </div>

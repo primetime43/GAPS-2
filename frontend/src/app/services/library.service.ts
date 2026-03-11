@@ -11,8 +11,10 @@ export class LibraryService {
 
   constructor(private http: HttpClient) {}
 
-  getMovies(libraryName: string): Observable<{ movies: Movie[] }> {
-    const params = new HttpParams().set('library_name', libraryName);
+  getMovies(libraryName: string, source: string = 'plex'): Observable<{ movies: Movie[] }> {
+    const params = new HttpParams()
+      .set('library_name', libraryName)
+      .set('source', source);
     return this.http.get<{ movies: Movie[] }>(`${environment.apiUrl}/libraries/movies`, { params });
   }
 }

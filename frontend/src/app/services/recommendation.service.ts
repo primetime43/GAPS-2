@@ -27,11 +27,13 @@ export class RecommendationService {
   getGapsForMovie(
     movie: Movie,
     libraryName: string,
-    showExisting: boolean
+    showExisting: boolean,
+    source: string = 'plex'
   ): Observable<CollectionGap[]> {
     let params = new HttpParams()
       .set('libraryName', libraryName)
-      .set('showExisting', showExisting.toString());
+      .set('showExisting', showExisting.toString())
+      .set('source', source);
 
     if (movie.tmdbId) {
       params = params.set('movieId', movie.tmdbId.toString());
@@ -54,11 +56,12 @@ export class RecommendationService {
   startScan(
     libraryName: string,
     showExisting: boolean,
-    freshScan = false
+    freshScan = false,
+    source: string = 'plex'
   ): Observable<{ status: string; total: number }> {
     return this.http.post<{ status: string; total: number }>(
       `${environment.apiUrl}/recommendations/scan`,
-      { libraryName, showExisting, freshScan }
+      { libraryName, showExisting, freshScan, source }
     );
   }
 

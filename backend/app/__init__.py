@@ -24,10 +24,14 @@ def create_app(config_name=None):
     # Initialize services and store on app
     from app.services.plex_service import PlexService
     from app.services.tmdb_service import TmdbService
+    from app.services.jellyfin_service import JellyfinService
+    from app.services.emby_service import EmbyService
     from app.services.schedule_service import ScheduleService
     from app.services.notification_service import NotificationService
 
     app.plex_service = PlexService()
+    app.jellyfin_service = JellyfinService()
+    app.emby_service = EmbyService()
     app.tmdb_service = TmdbService(app.config['TMDB_BASE_URL'], app.config['TMDB_IMAGE_BASE_URL'])
     app.notification_service = NotificationService()
     app.schedule_service = ScheduleService()
@@ -41,8 +45,12 @@ def create_app(config_name=None):
     from app.blueprints.schedule import schedule_bp
     from app.blueprints.notifications import notifications_bp
     from app.blueprints.preferences import preferences_bp
+    from app.blueprints.jellyfin import jellyfin_bp
+    from app.blueprints.emby import emby_bp
 
     app.register_blueprint(plex_bp, url_prefix='/api/plex')
+    app.register_blueprint(jellyfin_bp, url_prefix='/api/jellyfin')
+    app.register_blueprint(emby_bp, url_prefix='/api/emby')
     app.register_blueprint(tmdb_bp, url_prefix='/api/tmdb')
     app.register_blueprint(libraries_bp, url_prefix='/api/libraries')
     app.register_blueprint(recommendations_bp, url_prefix='/api/recommendations')

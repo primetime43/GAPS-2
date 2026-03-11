@@ -1,5 +1,10 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
+import { forkJoin } from 'rxjs';
+import { catchError } from 'rxjs/operators';
+import { of } from 'rxjs';
 import { PlexService } from '../../services/plex.service';
+import { JellyfinService } from '../../services/jellyfin.service';
+import { EmbyService } from '../../services/emby.service';
 import { LibraryService } from '../../services/library.service';
 import { RecommendationService, ScanProgress } from '../../services/recommendation.service';
 import { Movie } from '../../models/movie.model';
@@ -51,6 +56,10 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   selectedMovie: Movie | null = null;
   scanMode = false;
 
+  // Media server source
+  activeSource: 'plex' | 'jellyfin' | 'emby' = 'plex';
+  activeServerName = '';
+
   // UI
   loading = true;
   loadingMovies = false;
@@ -68,57 +77,55 @@ export class RecommendedComponent implements OnInit, OnDestroy {
 
   constructor(
     private plexService: PlexService,
+    private jellyfinService: JellyfinService,
+    private embyService: EmbyService,
     private libraryService: LibraryService,
     private recommendationService: RecommendationService,
     private preferencesService: PreferencesService,
   ) {}
 
   ngOnInit(): void {
-    this.preferencesService.load().subscribe({
-      next: (prefs) => {
+    this.preferencesService.load().pipe(
+      catchError(() => of(null))
+    ).subscribe((prefs) => {
+      if (prefs) {
         this.moviesPerPage = prefs.moviesPerPage || 50;
         this.showOwned = !prefs.hideOwnedByDefault;
-
-        this.plexService.getActiveServer().subscribe({
-          next: (res: ActiveServerResponse) => {
-            if (res && res.server) {
-              this.hasServer = true;
-              this.libraries = Array.isArray(res.libraries)
-                ? res.libraries.filter((lib: PlexLibrary) => lib.type === 'movie')
-                : [];
-
-              // Auto-select default library
-              if (prefs.defaultLibrary && this.libraries.some(l => l.title === prefs.defaultLibrary)) {
-                this.selectedLibrary = prefs.defaultLibrary;
-                this.onLibrarySelect();
-              }
-            }
-            this.loading = false;
-          },
-          error: () => {
-            this.hasServer = false;
-            this.loading = false;
-          }
-        });
-      },
-      error: () => {
-        // Fallback if preferences fail to load
-        this.plexService.getActiveServer().subscribe({
-          next: (res: ActiveServerResponse) => {
-            if (res && res.server) {
-              this.hasServer = true;
-              this.libraries = Array.isArray(res.libraries)
-                ? res.libraries.filter((lib: PlexLibrary) => lib.type === 'movie')
-                : [];
-            }
-            this.loading = false;
-          },
-          error: () => {
-            this.hasServer = false;
-            this.loading = false;
-          }
-        });
       }
+
+      // Check all three media servers in parallel
+      forkJoin({
+        plex: this.plexService.getActiveServer().pipe(catchError(() => of(null))),
+        jellyfin: this.jellyfinService.getActiveServer().pipe(catchError(() => of(null))),
+        emby: this.embyService.getActiveServer().pipe(catchError(() => of(null))),
+      }).subscribe((servers) => {
+        let res: ActiveServerResponse | null = null;
+
+        if (servers.plex && (servers.plex as any).server) {
+          res = servers.plex as ActiveServerResponse;
+          this.activeSource = 'plex';
+        } else if (servers.jellyfin && (servers.jellyfin as any).server) {
+          res = servers.jellyfin as ActiveServerResponse;
+          this.activeSource = 'jellyfin';
+        } else if (servers.emby && (servers.emby as any).server) {
+          res = servers.emby as ActiveServerResponse;
+          this.activeSource = 'emby';
+        }
+
+        if (res && res.server) {
+          this.hasServer = true;
+          this.activeServerName = res.server;
+          this.libraries = Array.isArray(res.libraries)
+            ? res.libraries.filter((lib: PlexLibrary) => lib.type === 'movie')
+            : [];
+
+          if (prefs?.defaultLibrary && this.libraries.some(l => l.title === prefs.defaultLibrary)) {
+            this.selectedLibrary = prefs.defaultLibrary;
+            this.onLibrarySelect();
+          }
+        }
+        this.loading = false;
+      });
     });
   }
 
@@ -137,7 +144,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     this.scanMode = false;
     this.errorMessage = '';
 
-    this.libraryService.getMovies(this.selectedLibrary).subscribe({
+    this.libraryService.getMovies(this.selectedLibrary, this.activeSource).subscribe({
       next: (res: any) => {
         this.movies = Array.isArray(res) ? res : (res.movies || []);
         this.loadingMovies = false;
@@ -176,7 +183,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     this.scanProgress = null;
     this.errorMessage = '';
 
-    this.recommendationService.startScan(this.selectedLibrary, true, freshScan).subscribe({
+    this.recommendationService.startScan(this.selectedLibrary, true, freshScan, this.activeSource).subscribe({
       next: () => {
         this.startPolling();
       },
@@ -234,7 +241,8 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     this.recommendationService.getGapsForMovie(
       movie,
       this.selectedLibrary,
-      true
+      true,
+      this.activeSource
     ).subscribe({
       next: (gaps) => {
         this.allGaps = gaps;

@@ -25,17 +25,17 @@
       </div>
     </div>
 
-    <!-- Plex Status -->
+    <!-- Media Server Status -->
     <div class="col-md-6 mb-3">
-      <div class="status-card" [class.status-ok]="plexConnected" [class.status-missing]="!plexConnected">
+      <div class="status-card" [class.status-ok]="mediaServerConnected" [class.status-missing]="!mediaServerConnected">
         <div class="status-icon">
-          <span *ngIf="plexConnected">&#10003;</span>
-          <span *ngIf="!plexConnected">&#10007;</span>
+          <span *ngIf="mediaServerConnected">&#10003;</span>
+          <span *ngIf="!mediaServerConnected">&#10007;</span>
         </div>
         <div class="status-body">
-          <h5>Plex Server</h5>
-          <p *ngIf="plexConnected">Connected to <strong>{{ plexServerName }}</strong></p>
-          <p *ngIf="!plexConnected">
+          <h5>Media Server</h5>
+          <p *ngIf="mediaServerConnected">Connected to <strong>{{ mediaServerName }}</strong> ({{ mediaServerType }})</p>
+          <p *ngIf="!mediaServerConnected">
             No active server.
             <a [routerLink]="['/settings/plex']" class="activeLink">Configure now</a>
           </p>
