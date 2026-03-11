@@ -37,6 +37,23 @@ class PlexService:
             return True
         return self._pin.checkLogin()
 
+    # -- Manual connection --
+
+    def connect_manual(self, server_url: str, token: str) -> tuple[bool, str | None, list | None, str | None]:
+        """Connect directly to a Plex server using URL and token."""
+        try:
+            server = PlexServer(server_url, token, timeout=5)
+            self._server_conn = server
+            self._server_conn_name = server.friendlyName
+            self._token = token
+            libraries = [
+                {'title': section.title, 'type': section.type}
+                for section in server.library.sections()
+            ]
+            return True, server.friendlyName, libraries, None
+        except Exception as e:
+            return False, None, None, str(e)
+
     # -- Servers --
 
     def _fetch_resources(self) -> list[dict]:
@@ -71,6 +88,17 @@ class PlexService:
         """Get a cached server connection, or connect if needed."""
         if self._server_conn and self._server_conn_name == server_name:
             return self._server_conn
+
+        # Try direct URL from active server (manual connection)
+        if self._active_server and self._active_server.get('serverUrl'):
+            token = self._active_server.get('token', self._token)
+            try:
+                server = PlexServer(self._active_server['serverUrl'], token, timeout=5)
+                self._server_conn = server
+                self._server_conn_name = server_name
+                return server
+            except Exception:
+                pass
 
         resource = self._resources.get(server_name)
         if resource is None:
@@ -131,12 +159,14 @@ class PlexService:
 
     # -- Active Server --
 
-    def save_active_server(self, server: str, token: str, libraries: list | None = None) -> tuple[bool, str | None]:
+    def save_active_server(self, server: str, token: str, libraries: list | None = None, server_url: str | None = None) -> tuple[bool, str | None]:
         self._active_server = {
             'server': server,
             'token': token,
             'libraries': libraries if isinstance(libraries, list) else [],
         }
+        if server_url:
+            self._active_server['serverUrl'] = server_url
         self._token = token
         config_store.put('plex', {
             'token': token,

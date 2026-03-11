@@ -12,6 +12,12 @@ export class PlexService {
 
   constructor(private http: HttpClient) {}
 
+  connectManual(serverUrl: string, token: string): Observable<{ connected: boolean; serverName: string; libraries: PlexLibrary[]; error?: string }> {
+    return this.http.post<{ connected: boolean; serverName: string; libraries: PlexLibrary[]; error?: string }>(
+      `${environment.apiUrl}/plex/connect-manual`, { serverUrl, token }
+    );
+  }
+
   authenticate(): Observable<PlexAuthResponse> {
     return this.http.post<PlexAuthResponse>(`${environment.apiUrl}/plex/authenticate`, {});
   }
@@ -30,11 +36,12 @@ export class PlexService {
     );
   }
 
-  saveData(server: string, token: string, libraries: PlexLibrary[]): Observable<ApiResult> {
+  saveData(server: string, token: string, libraries: PlexLibrary[], serverUrl?: string): Observable<ApiResult> {
     return this.http.post<ApiResult>(`${environment.apiUrl}/plex/save-data`, {
       server,
       token,
-      libraries
+      libraries,
+      ...(serverUrl ? { serverUrl } : {})
     });
   }
 

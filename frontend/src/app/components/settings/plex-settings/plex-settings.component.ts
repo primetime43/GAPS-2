@@ -22,8 +22,14 @@ export class PlexSettingsComponent implements OnInit, OnDestroy {
   hasActiveServer = false;
   serverExpanded = false;
 
+  // Manual connection
+  manualServerUrl = '';
+  manualToken = '';
+  manualServerName = '';
+  connectionMode: 'choose' | 'oauth' | 'manual' = 'choose';
+
   // UI state
-  step: 'idle' | 'authenticating' | 'waiting' | 'fetching' | 'selecting' | 'saving' = 'idle';
+  step: 'idle' | 'authenticating' | 'waiting' | 'fetching' | 'selecting' | 'saving' | 'manual-connecting' | 'manual-connected' = 'idle';
   tokenVisible = false;
   statusMessage = '';
   statusType: 'success' | 'error' | '' = '';
@@ -104,6 +110,50 @@ export class PlexSettingsComponent implements OnInit, OnDestroy {
     });
   }
 
+  connectManual(): void {
+    if (!this.manualServerUrl || !this.manualToken) return;
+    this.step = 'manual-connecting';
+    this.clearMessage();
+    this.plexService.connectManual(this.manualServerUrl, this.manualToken).subscribe({
+      next: (res) => {
+        if (res.connected) {
+          this.manualServerName = res.serverName;
+          this.libraries = res.libraries || [];
+          this.step = 'manual-connected';
+        } else {
+          this.showMessage(res.error || 'Could not connect to Plex server.', 'error');
+          this.step = 'idle';
+        }
+      },
+      error: (err) => {
+        const msg = err.error?.error || 'Failed to connect. Check the URL and token.';
+        this.showMessage(msg, 'error');
+        this.step = 'idle';
+      }
+    });
+  }
+
+  saveManual(): void {
+    this.step = 'saving';
+    this.clearMessage();
+    this.plexService.saveData(this.manualServerName, this.manualToken, this.libraries, this.manualServerUrl).subscribe({
+      next: () => {
+        this.showMessage('Server saved successfully!', 'success');
+        this.step = 'idle';
+        this.connectionMode = 'choose';
+        this.manualServerUrl = '';
+        this.manualToken = '';
+        this.manualServerName = '';
+        this.libraries = [];
+        this.loadActiveServer();
+      },
+      error: () => {
+        this.showMessage('Failed to save server.', 'error');
+        this.step = 'manual-connected';
+      }
+    });
+  }
+
   setAsActive(): void {
     if (!this.selectedServer || !this.plexToken) return;
     this.step = 'saving';
@@ -130,6 +180,7 @@ export class PlexSettingsComponent implements OnInit, OnDestroy {
     this.activeLibraryCount = 0;
     this.activeLibraries = [];
     this.serverExpanded = false;
+    this.connectionMode = 'choose';
     this.step = 'idle';
     this.clearMessage();
   }
@@ -156,7 +207,7 @@ export class PlexSettingsComponent implements OnInit, OnDestroy {
   }
 
   get isLoading(): boolean {
-    return this.step === 'authenticating' || this.step === 'fetching' || this.step === 'saving';
+    return this.step === 'authenticating' || this.step === 'fetching' || this.step === 'saving' || this.step === 'manual-connecting';
   }
 
   get movieLibraries(): PlexLibrary[] {
