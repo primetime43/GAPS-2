@@ -11,13 +11,16 @@ FROM python:3.11-slim
 WORKDIR /app
 
 COPY backend/requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt gunicorn
 
 COPY backend/ ./
 
 # Copy Angular build output
 COPY --from=frontend-build /app/frontend/dist/gaps-2 /app/frontend/dist/gaps-2
 
+# Create data directory for persistent config
+RUN mkdir -p /app/data
+
 EXPOSE 5000
 
-CMD ["python", "run.py"]
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "1", "--threads", "4", "run:app"]

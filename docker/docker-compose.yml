@@ -7,4 +7,11 @@ services:
       dockerfile: docker/Dockerfile
     ports:
       - "5000:5000"
+    volumes:
+      - gaps2-data:/app/data
+    environment:
+      - FLASK_ENV=production
     restart: unless-stopped
+
+volumes:
+  gaps2-data:

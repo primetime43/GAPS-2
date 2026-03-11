@@ -1,0 +1,31 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+venv/
+backend/data/
+
+# Node/Angular
+frontend/node_modules/
+frontend/dist/
+frontend/.angular/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Docker
+docker/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Misc
+*.md
+*.bat
