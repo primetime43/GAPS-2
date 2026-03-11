@@ -1,33 +1,51 @@
-.version-card {
+.changelog-entry {
   background-color: #2d2d2d;
   border: 1px solid #444;
   border-left: 4px solid #00bc8c;
   border-radius: 8px;
   padding: 20px;
 
-  h4 {
+  h5 {
     color: #00bc8c;
     margin-bottom: 4px;
   }
 }
 
-.changelog-entry {
-  background-color: #2d2d2d;
-  border: 1px solid #444;
-  border-radius: 8px;
-  padding: 16px;
-  margin-bottom: 12px;
+.release-body {
+  line-height: 1.6;
 
-  h6 {
-    margin-bottom: 8px;
-  }
+  ::ng-deep {
+    a {
+      color: #00bc8c;
+      text-decoration: none;
 
-  ul {
-    margin-bottom: 0;
-    padding-left: 20px;
-
-    li {
-      margin-bottom: 4px;
+      &:hover {
+        text-decoration: underline;
+      }
     }
+
+    ul, ol {
+      padding-left: 20px;
+    }
+
+    h1, h2, h3, h4, h5, h6 {
+      color: #fff;
+      margin-top: 12px;
+      margin-bottom: 8px;
+    }
+
+    p {
+      margin-bottom: 8px;
+    }
+  }
+}
+
+.release-link {
+  color: #00bc8c;
+  text-decoration: none;
+  font-size: 0.9rem;
+
+  &:hover {
+    text-decoration: underline;
   }
 }

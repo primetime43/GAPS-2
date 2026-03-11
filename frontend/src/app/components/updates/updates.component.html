@@ -1,28 +1,22 @@
 <div class="container top-margin">
   <h3 class="regular-text">Updates</h3>
 
-  <div class="update-entry">
-    <h5 class="text-primary">v2.0.0 - Angular Rewrite</h5>
-    <ul class="text-muted">
-      <li>Complete rewrite with Angular frontend and refactored Flask backend</li>
-      <li>Proper project structure with separated frontend and backend</li>
-      <li>TypeScript models and HTTP services for type-safe API communication</li>
-      <li>Responsive dark theme UI with Bootstrap 5</li>
-      <li>Step-by-step Plex authentication flow</li>
-      <li>Interactive movie browsing and recommendation discovery</li>
-      <li>TMDB API key validation with status indicators</li>
-      <li>Removed jQuery dependency</li>
-    </ul>
+  <div *ngIf="loading" class="text-muted mt-3">Loading releases...</div>
+
+  <div *ngIf="error" class="text-danger mt-3">{{ error }}</div>
+
+  <div *ngIf="!loading && !error && releases.length === 0" class="text-muted mt-3">
+    No releases found.
   </div>
 
-  <div class="update-entry">
-    <h5 class="text-primary">v1.0.0 - Initial Python Rewrite</h5>
-    <ul class="text-muted">
-      <li>Rewrite of original Java-based GAPS project in Python/Flask</li>
-      <li>Plex OAuth authentication</li>
-      <li>TMDB integration for movie recommendations</li>
-      <li>Library scanning and missing movie detection</li>
-      <li>Docker support</li>
-    </ul>
+  <div *ngFor="let release of releases" class="changelog-entry mt-3">
+    <h5 class="text-primary mb-1">
+      {{ release.name || release.tag_name }}
+    </h5>
+    <small class="text-muted">{{ release.published_at | date:'mediumDate' }}</small>
+    <div class="release-body mt-2 text-muted" [innerHTML]="release.bodyHtml"></div>
+    <a [href]="release.html_url" target="_blank" rel="noopener" class="release-link mt-2 d-inline-block">
+      View on GitHub
+    </a>
   </div>
 </div>
