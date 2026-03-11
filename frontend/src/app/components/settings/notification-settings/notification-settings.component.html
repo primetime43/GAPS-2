@@ -1,0 +1,125 @@
+<div class="top-margin regular-text">
+  <p>Get notified when a scheduled scan finds missing movies.</p>
+
+  <div *ngIf="loading" class="text-center mt-4">
+    <div class="spinner"></div>
+  </div>
+
+  <div *ngIf="!loading">
+
+    <!-- Discord -->
+    <div class="notification-section">
+      <h5 class="section-title">Discord</h5>
+      <div class="form-check mb-2">
+        <input class="form-check-input" type="checkbox" id="discordEnabled" [(ngModel)]="discordEnabled">
+        <label class="form-check-label text-muted" for="discordEnabled">Enable Discord notifications</label>
+      </div>
+      <div *ngIf="discordEnabled">
+        <div class="form-group mb-2">
+          <label class="form-label text-muted">Webhook URL</label>
+          <input class="form-control dark-input" [(ngModel)]="discordWebhookUrl" placeholder="https://discord.com/api/webhooks/...">
+        </div>
+        <div *ngIf="messages['discord']" class="alert mb-2"
+             [class.alert-success]="messages['discord'].type === 'success'"
+             [class.alert-danger]="messages['discord'].type === 'error'">
+          {{ messages['discord'].text }}
+        </div>
+        <div class="d-flex gap-2">
+          <button class="btn btn-primary btn-sm" (click)="saveDiscord()" [disabled]="saving['discord']">
+            {{ saving['discord'] ? 'Saving...' : 'Save' }}
+          </button>
+          <button class="btn btn-outline-secondary btn-sm" (click)="testService('discord')" [disabled]="testing['discord'] || !discordWebhookUrl">
+            {{ testing['discord'] ? 'Sending...' : 'Test' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Telegram -->
+    <div class="notification-section">
+      <h5 class="section-title">Telegram</h5>
+      <div class="form-check mb-2">
+        <input class="form-check-input" type="checkbox" id="telegramEnabled" [(ngModel)]="telegramEnabled">
+        <label class="form-check-label text-muted" for="telegramEnabled">Enable Telegram notifications</label>
+      </div>
+      <div *ngIf="telegramEnabled">
+        <div class="form-group mb-2">
+          <label class="form-label text-muted">Bot Token</label>
+          <input class="form-control dark-input" [(ngModel)]="telegramBotToken" placeholder="123456:ABC-DEF...">
+        </div>
+        <div class="form-group mb-2">
+          <label class="form-label text-muted">Chat ID</label>
+          <input class="form-control dark-input" [(ngModel)]="telegramChatId" placeholder="123456789">
+        </div>
+        <div *ngIf="messages['telegram']" class="alert mb-2"
+             [class.alert-success]="messages['telegram'].type === 'success'"
+             [class.alert-danger]="messages['telegram'].type === 'error'">
+          {{ messages['telegram'].text }}
+        </div>
+        <div class="d-flex gap-2">
+          <button class="btn btn-primary btn-sm" (click)="saveTelegram()" [disabled]="saving['telegram']">
+            {{ saving['telegram'] ? 'Saving...' : 'Save' }}
+          </button>
+          <button class="btn btn-outline-secondary btn-sm" (click)="testService('telegram')" [disabled]="testing['telegram'] || !telegramBotToken || !telegramChatId">
+            {{ testing['telegram'] ? 'Sending...' : 'Test' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Email -->
+    <div class="notification-section">
+      <h5 class="section-title">Email</h5>
+      <div class="form-check mb-2">
+        <input class="form-check-input" type="checkbox" id="emailEnabled" [(ngModel)]="emailEnabled">
+        <label class="form-check-label text-muted" for="emailEnabled">Enable email notifications</label>
+      </div>
+      <div *ngIf="emailEnabled">
+        <div class="row mb-2">
+          <div class="col-md-8">
+            <label class="form-label text-muted">SMTP Host</label>
+            <input class="form-control dark-input" [(ngModel)]="emailSmtpHost" placeholder="smtp.gmail.com">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label text-muted">Port</label>
+            <input class="form-control dark-input" type="number" [(ngModel)]="emailSmtpPort">
+          </div>
+        </div>
+        <div class="row mb-2">
+          <div class="col-md-6">
+            <label class="form-label text-muted">Username</label>
+            <input class="form-control dark-input" [(ngModel)]="emailUsername" placeholder="Optional">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label text-muted">Password</label>
+            <input class="form-control dark-input" type="password" [(ngModel)]="emailPassword" placeholder="Optional">
+          </div>
+        </div>
+        <div class="row mb-2">
+          <div class="col-md-6">
+            <label class="form-label text-muted">From Address</label>
+            <input class="form-control dark-input" type="email" [(ngModel)]="emailFrom" placeholder="gaps@example.com">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label text-muted">To Address</label>
+            <input class="form-control dark-input" type="email" [(ngModel)]="emailTo" placeholder="you@example.com">
+          </div>
+        </div>
+        <div *ngIf="messages['email']" class="alert mb-2"
+             [class.alert-success]="messages['email'].type === 'success'"
+             [class.alert-danger]="messages['email'].type === 'error'">
+          {{ messages['email'].text }}
+        </div>
+        <div class="d-flex gap-2">
+          <button class="btn btn-primary btn-sm" (click)="saveEmail()" [disabled]="saving['email']">
+            {{ saving['email'] ? 'Saving...' : 'Save' }}
+          </button>
+          <button class="btn btn-outline-secondary btn-sm" (click)="testService('email')" [disabled]="testing['email'] || !emailSmtpHost || !emailFrom || !emailTo">
+            {{ testing['email'] ? 'Sending...' : 'Test' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>

@@ -58,11 +58,18 @@ class ScheduleService:
             if not owned_movies:
                 return
 
-            tmdb.find_collection_gaps(
+            gaps, _ = tmdb.find_collection_gaps(
                 api_key=api_key,
                 owned_movies=owned_movies,
                 owned_tmdb_ids=owned_ids,
                 show_existing=True,
+            )
+
+            # Send notifications
+            missing = [g for g in (gaps or []) if not g.get('owned')]
+            collections = len(set(g['collectionName'] for g in missing)) if missing else 0
+            self._app.notification_service.notify_scan_results(
+                len(missing), collections, library_name
             )
 
     def _add_job(self, preset: str) -> None:

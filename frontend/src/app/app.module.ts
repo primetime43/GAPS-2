@@ -20,6 +20,7 @@ import { UserPreferencesSettingsComponent } from './components/settings/user-pre
 import { TmdbSettingsComponent } from './components/settings/tmdb-settings/tmdb-settings.component';
 import { SettingsComponent } from './components/settings/settings.component';
 import { ScheduleSettingsComponent } from './components/settings/schedule-settings/schedule-settings.component';
+import { NotificationSettingsComponent } from './components/settings/notification-settings/notification-settings.component';
 import { ConfirmModalComponent } from './components/confirm-modal/confirm-modal.component';
 
 @NgModule({ declarations: [
@@ -36,6 +37,7 @@ import { ConfirmModalComponent } from './components/confirm-modal/confirm-modal.
         UserPreferencesSettingsComponent,
         TmdbSettingsComponent,
         ScheduleSettingsComponent,
+        NotificationSettingsComponent,
         SettingsComponent
     ],
     bootstrap: [AppComponent], imports: [BrowserModule,
