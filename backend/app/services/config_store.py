@@ -3,11 +3,20 @@ import hashlib
 import json
 import os
 import platform
+import sys
 import uuid
 
 from cryptography.fernet import Fernet, InvalidToken
 
-_DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'data')
+
+def _get_base_dir():
+    """Return the backend root, works both normally and in a PyInstaller bundle."""
+    if getattr(sys, 'frozen', False):
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+
+
+_DATA_DIR = os.path.join(_get_base_dir(), 'data')
 _CONFIG_FILE = os.path.join(_DATA_DIR, 'config.enc')
 
 

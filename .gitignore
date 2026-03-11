@@ -21,6 +21,10 @@ dist/
 # App data (user config, persisted state)
 backend/data/
 
+# PyInstaller
+build/
+*.spec.bak
+
 # OS
 .DS_Store
 Thumbs.db

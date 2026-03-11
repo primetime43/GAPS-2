@@ -1,6 +1,14 @@
 import os
+import sys
 from flask import Flask, send_from_directory
 from flask_cors import CORS
+
+
+def _get_bundle_dir():
+    """Return the temp extraction dir when running as a PyInstaller bundle."""
+    if getattr(sys, 'frozen', False):
+        return sys._MEIPASS
+    return None
 
 
 def create_app(config_name=None):
@@ -41,7 +49,11 @@ def create_app(config_name=None):
     app.register_blueprint(notifications_bp, url_prefix='/api/notifications')
 
     # In production, serve Angular dist
-    dist_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), '..', 'frontend', 'dist', 'gaps-2')
+    bundle_dir = _get_bundle_dir()
+    if bundle_dir:
+        dist_dir = os.path.join(bundle_dir, 'frontend', 'dist', 'gaps-2')
+    else:
+        dist_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), '..', 'frontend', 'dist', 'gaps-2')
     if os.path.isdir(dist_dir):
         @app.route('/', defaults={'path': ''})
         @app.route('/<path:path>')
