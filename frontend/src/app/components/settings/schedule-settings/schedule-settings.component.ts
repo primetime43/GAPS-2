@@ -1,7 +1,11 @@
 import { Component, OnInit } from '@angular/core';
+import { forkJoin, of } from 'rxjs';
+import { catchError } from 'rxjs/operators';
 import { ScheduleService, ScheduleConfig } from '../../../services/schedule.service';
 import { PlexService } from '../../../services/plex.service';
-import { PlexLibrary } from '../../../models/plex.model';
+import { JellyfinService } from '../../../services/jellyfin.service';
+import { EmbyService } from '../../../services/emby.service';
+import { PlexLibrary, ActiveServerResponse } from '../../../models/plex.model';
 
 @Component({
   selector: 'app-schedule-settings',
@@ -14,6 +18,8 @@ export class ScheduleSettingsComponent implements OnInit {
   libraries: PlexLibrary[] = [];
   selectedPreset = '';
   selectedLibrary = '';
+  activeSource: 'plex' | 'jellyfin' | 'emby' = 'plex';
+  activeServerName = '';
   saving = false;
   message = '';
   messageType: 'success' | 'error' | '' = '';
@@ -24,14 +30,33 @@ export class ScheduleSettingsComponent implements OnInit {
   constructor(
     private scheduleService: ScheduleService,
     private plexService: PlexService,
+    private jellyfinService: JellyfinService,
+    private embyService: EmbyService,
   ) {}
 
   ngOnInit(): void {
-    this.plexService.getActiveServer().subscribe({
-      next: (res) => {
-        if (res && res.libraries) {
-          this.libraries = res.libraries.filter((lib: PlexLibrary) => lib.type === 'movie');
-        }
+    // Detect active media server
+    forkJoin({
+      plex: this.plexService.getActiveServer().pipe(catchError(() => of(null))),
+      jellyfin: this.jellyfinService.getActiveServer().pipe(catchError(() => of(null))),
+      emby: this.embyService.getActiveServer().pipe(catchError(() => of(null))),
+    }).subscribe((servers) => {
+      let res: ActiveServerResponse | null = null;
+
+      if (servers.plex && (servers.plex as any).server) {
+        res = servers.plex as ActiveServerResponse;
+        this.activeSource = 'plex';
+      } else if (servers.jellyfin && (servers.jellyfin as any).server) {
+        res = servers.jellyfin as ActiveServerResponse;
+        this.activeSource = 'jellyfin';
+      } else if (servers.emby && (servers.emby as any).server) {
+        res = servers.emby as ActiveServerResponse;
+        this.activeSource = 'emby';
+      }
+
+      if (res && res.libraries) {
+        this.activeServerName = res.server;
+        this.libraries = res.libraries.filter((lib: PlexLibrary) => lib.type === 'movie');
       }
     });
 
@@ -40,6 +65,9 @@ export class ScheduleSettingsComponent implements OnInit {
         this.schedule = config;
         this.selectedPreset = config.preset || '';
         this.selectedLibrary = config.library || '';
+        if (config.source) {
+          this.activeSource = config.source as any;
+        }
         this.presetKeys = Object.keys(config.presets);
         this.loading = false;
       },
@@ -57,7 +85,7 @@ export class ScheduleSettingsComponent implements OnInit {
 
     this.saving = true;
     this.clearMessage();
-    this.scheduleService.setSchedule(this.selectedPreset, this.selectedLibrary).subscribe({
+    this.scheduleService.setSchedule(this.selectedPreset, this.selectedLibrary, this.activeSource).subscribe({
       next: (config) => {
         this.schedule = config;
         this.showMessage('Schedule saved.', 'success');

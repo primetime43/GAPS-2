@@ -13,11 +13,12 @@ def set_schedule():
     data = request.get_json() or {}
     preset = data.get('preset', '')
     library = data.get('library', '')
+    source = data.get('source', 'plex')
 
     if not preset or not library:
         return jsonify(error='preset and library are required'), 400
 
-    success = current_app.schedule_service.set_schedule(preset, library)
+    success = current_app.schedule_service.set_schedule(preset, library, source)
     if not success:
         return jsonify(error='Invalid preset'), 400
 

@@ -27,6 +27,15 @@ class ScheduleService:
         if saved and saved.get('enabled') and saved.get('preset') in SCHEDULE_PRESETS:
             self._add_job(saved['preset'])
 
+    def _get_media_service(self, source: str):
+        """Get the appropriate media server service by source name."""
+        if source == 'jellyfin':
+            return self._app.jellyfin_service
+        elif source == 'emby':
+            return self._app.emby_service
+        else:
+            return self._app.plex_service
+
     def _run_scan(self):
         """Execute a scan using the saved library config."""
         if not self._app:
@@ -35,21 +44,22 @@ class ScheduleService:
         with self._app.app_context():
             config = config_store.get('schedule', {})
             library_name = config.get('library', '')
+            source = config.get('source', 'plex')
             if not library_name:
                 return
 
             tmdb = self._app.tmdb_service
-            plex = self._app.plex_service
+            media_service = self._get_media_service(source)
 
             api_key = tmdb.api_key
             if not api_key:
                 return
 
             # Load movies if not cached
-            cache = plex.movies_cache
+            cache = media_service.movies_cache
             if library_name not in cache:
-                plex.get_movies(library_name)
-                cache = plex.movies_cache
+                media_service.get_movies(library_name)
+                cache = media_service.movies_cache
 
             library_data = cache.get(library_name, {})
             owned_movies = library_data.get('movies', [])
@@ -83,8 +93,8 @@ class ScheduleService:
             replace_existing=True,
         )
 
-    def set_schedule(self, preset: str, library: str) -> bool:
-        """Enable a schedule with the given preset and library."""
+    def set_schedule(self, preset: str, library: str, source: str = 'plex') -> bool:
+        """Enable a schedule with the given preset, library, and source."""
         if preset not in SCHEDULE_PRESETS:
             return False
         self._add_job(preset)
@@ -92,6 +102,7 @@ class ScheduleService:
             'enabled': True,
             'preset': preset,
             'library': library,
+            'source': source,
         })
         return True
 
@@ -110,6 +121,7 @@ class ScheduleService:
             'enabled': saved.get('enabled', False),
             'preset': saved.get('preset', ''),
             'library': saved.get('library', ''),
+            'source': saved.get('source', 'plex'),
             'next_run': str(job.next_run_time) if job else None,
             'presets': {k: v['label'] for k, v in SCHEDULE_PRESETS.items()},
         }
