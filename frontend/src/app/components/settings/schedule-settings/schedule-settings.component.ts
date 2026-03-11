@@ -5,7 +5,7 @@ import { ScheduleService, ScheduleConfig } from '../../../services/schedule.serv
 import { PlexService } from '../../../services/plex.service';
 import { JellyfinService } from '../../../services/jellyfin.service';
 import { EmbyService } from '../../../services/emby.service';
-import { PlexLibrary, ActiveServerResponse } from '../../../models/plex.model';
+import { MediaLibrary, ActiveServerResponse } from '../../../models/media-server.model';
 
 @Component({
   selector: 'app-schedule-settings',
@@ -15,7 +15,7 @@ import { PlexLibrary, ActiveServerResponse } from '../../../models/plex.model';
 })
 export class ScheduleSettingsComponent implements OnInit {
   schedule: ScheduleConfig | null = null;
-  libraries: PlexLibrary[] = [];
+  libraries: MediaLibrary[] = [];
   selectedPreset = '';
   selectedLibrary = '';
   activeSource: 'plex' | 'jellyfin' | 'emby' = 'plex';
@@ -56,7 +56,7 @@ export class ScheduleSettingsComponent implements OnInit {
 
       if (res && res.libraries) {
         this.activeServerName = res.server;
-        this.libraries = res.libraries.filter((lib: PlexLibrary) => lib.type === 'movie');
+        this.libraries = res.libraries.filter((lib: MediaLibrary) => lib.type === 'movie');
       }
     });
 

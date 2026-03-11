@@ -5,7 +5,7 @@ import { PreferencesService, UserPreferences } from '../../../services/preferenc
 import { PlexService } from '../../../services/plex.service';
 import { JellyfinService } from '../../../services/jellyfin.service';
 import { EmbyService } from '../../../services/emby.service';
-import { PlexLibrary, ActiveServerResponse } from '../../../models/plex.model';
+import { MediaLibrary, ActiveServerResponse } from '../../../models/media-server.model';
 
 @Component({
     selector: 'app-user-preferences-settings',
@@ -23,7 +23,7 @@ export class UserPreferencesSettingsComponent implements OnInit {
     autoOpenBrowser: true,
   };
 
-  libraries: PlexLibrary[] = [];
+  libraries: MediaLibrary[] = [];
   saving = false;
   saved = false;
   loading = true;
@@ -83,7 +83,7 @@ export class UserPreferencesSettingsComponent implements OnInit {
       }
 
       if (res && res.libraries) {
-        this.libraries = res.libraries.filter((lib: PlexLibrary) => lib.type === 'movie');
+        this.libraries = res.libraries.filter((lib: MediaLibrary) => lib.type === 'movie');
       }
     });
   }

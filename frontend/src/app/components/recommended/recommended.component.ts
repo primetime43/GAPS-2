@@ -9,7 +9,7 @@ import { LibraryService } from '../../services/library.service';
 import { RecommendationService, ScanProgress } from '../../services/recommendation.service';
 import { Movie } from '../../models/movie.model';
 import { CollectionGap } from '../../models/recommendation.model';
-import { ActiveServerResponse, PlexLibrary } from '../../models/plex.model';
+import { ActiveServerResponse, MediaLibrary } from '../../models/media-server.model';
 import { PreferencesService } from '../../services/preferences.service';
 
 interface CollectionGroup {
@@ -24,7 +24,7 @@ interface CollectionGroup {
     standalone: false
 })
 export class RecommendedComponent implements OnInit, OnDestroy {
-  libraries: PlexLibrary[] = [];
+  libraries: MediaLibrary[] = [];
   selectedLibrary = '';
   selectedLibraries: string[] = [];
   movies: Movie[] = [];
@@ -124,7 +124,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
           this.hasServer = true;
           this.activeServerName = res.server;
           this.libraries = Array.isArray(res.libraries)
-            ? res.libraries.filter((lib: PlexLibrary) => lib.type === 'movie')
+            ? res.libraries.filter((lib: MediaLibrary) => lib.type === 'movie')
             : [];
 
           if (prefs?.defaultLibrary && this.libraries.some(l => l.title === prefs.defaultLibrary)) {
@@ -313,10 +313,14 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     event.stopPropagation();
     if (this.ignoredIds.has(gap.tmdbId)) {
       this.ignoredIds.delete(gap.tmdbId);
-      this.recommendationService.removeIgnored(gap.tmdbId).subscribe();
+      this.recommendationService.removeIgnored(gap.tmdbId).subscribe({
+        error: () => this.ignoredIds.add(gap.tmdbId)
+      });
     } else {
       this.ignoredIds.add(gap.tmdbId);
-      this.recommendationService.addIgnored(gap.tmdbId).subscribe();
+      this.recommendationService.addIgnored(gap.tmdbId).subscribe({
+        error: () => this.ignoredIds.delete(gap.tmdbId)
+      });
     }
     this.applyFilter();
   }
@@ -330,7 +334,9 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     for (const id of idsToIgnore) {
       this.ignoredIds.add(id);
     }
-    this.recommendationService.addIgnoredBulk(idsToIgnore).subscribe();
+    this.recommendationService.addIgnoredBulk(idsToIgnore).subscribe({
+      error: () => { for (const id of idsToIgnore) this.ignoredIds.delete(id); this.applyFilter(); }
+    });
     this.applyFilter();
   }
 
@@ -343,7 +349,9 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     for (const id of idsToUnignore) {
       this.ignoredIds.delete(id);
     }
-    this.recommendationService.removeIgnoredBulk(idsToUnignore).subscribe();
+    this.recommendationService.removeIgnoredBulk(idsToUnignore).subscribe({
+      error: () => { for (const id of idsToUnignore) this.ignoredIds.add(id); this.applyFilter(); }
+    });
     this.applyFilter();
   }
 

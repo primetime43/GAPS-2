@@ -1,6 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import { JellyfinService } from '../../../services/jellyfin.service';
-import { PlexLibrary } from '../../../models/plex.model';
+import { MediaLibrary } from '../../../models/media-server.model';
 
 @Component({
     selector: 'app-jellyfin-settings',
@@ -12,11 +12,11 @@ export class JellyfinSettingsComponent implements OnInit {
   serverUrl = '';
   apiKey = '';
   serverName = '';
-  libraries: PlexLibrary[] = [];
+  libraries: MediaLibrary[] = [];
 
   hasActiveServer = false;
   activeServer = '';
-  activeLibraries: PlexLibrary[] = [];
+  activeLibraries: MediaLibrary[] = [];
   serverExpanded = false;
 
   step: 'idle' | 'connecting' | 'connected' | 'saving' = 'idle';
@@ -92,15 +92,15 @@ export class JellyfinSettingsComponent implements OnInit {
     this.apiKeyVisible = !this.apiKeyVisible;
   }
 
-  get movieLibraries(): PlexLibrary[] {
+  get movieLibraries(): MediaLibrary[] {
     return this.libraries.filter(l => l.type === 'movie');
   }
 
-  get activeMovieLibraries(): PlexLibrary[] {
+  get activeMovieLibraries(): MediaLibrary[] {
     return this.activeLibraries.filter(l => l.type === 'movie');
   }
 
-  get activeOtherLibraries(): PlexLibrary[] {
+  get activeOtherLibraries(): MediaLibrary[] {
     return this.activeLibraries.filter(l => l.type !== 'movie');
   }
 
