@@ -17,7 +17,7 @@ def check_login():
 
 @plex_bp.route('/connect-manual', methods=['POST'])
 def connect_manual():
-    data = request.get_json()
+    data = request.get_json() or {}
     server_url = data.get('serverUrl', '').strip()
     token = data.get('token', '').strip()
     if not server_url or not token:
@@ -50,7 +50,7 @@ def fetch_libraries(server_name):
 
 @plex_bp.route('/save-data', methods=['POST'])
 def save_data():
-    data = request.get_json()
+    data = request.get_json() or {}
     server = data.get('server')
     token = data.get('token')
     libraries = data.get('libraries')
