@@ -123,18 +123,69 @@
   }
 }
 
-.owned-badge {
+.owned-badge,
+.ignored-badge {
   position: absolute;
   top: 8px;
   right: 8px;
-  background-color: #00bc8c;
-  color: #111;
   font-size: 10px;
   font-weight: 600;
   text-transform: uppercase;
   padding: 2px 8px;
   border-radius: 10px;
   z-index: 1;
+}
+
+.owned-badge {
+  background-color: #00bc8c;
+  color: #111;
+}
+
+.ignored-badge {
+  background-color: #e2a03f;
+  color: #111;
+}
+
+.ignore-btn {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid #666;
+  background: rgba(0, 0, 0, 0.6);
+  color: #ccc;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.2s;
+
+  &:hover {
+    background: rgba(226, 160, 63, 0.8);
+    color: #111;
+    border-color: #e2a03f;
+  }
+}
+
+.rec-card:hover .ignore-btn,
+.rec-card.ignored .ignore-btn {
+  opacity: 1;
+}
+
+.rec-card.ignored {
+  opacity: 0.4;
+  border-color: #e2a03f55;
+}
+
+.collection-ignore-btn {
+  font-size: 11px;
+  padding: 1px 8px;
 }
 
 .rec-poster {

@@ -70,4 +70,30 @@ export class RecommendationService {
       `${environment.apiUrl}/recommendations/scan/progress`
     );
   }
+
+  getIgnored(): Observable<number[]> {
+    return this.http.get<{ ignored: number[] }>(
+      `${environment.apiUrl}/recommendations/ignored`
+    ).pipe(map(res => res.ignored));
+  }
+
+  addIgnored(tmdbId: number): Observable<any> {
+    return this.http.post(`${environment.apiUrl}/recommendations/ignored`, { tmdbId });
+  }
+
+  addIgnoredBulk(tmdbIds: number[]): Observable<any> {
+    return this.http.post(`${environment.apiUrl}/recommendations/ignored`, { tmdbIds });
+  }
+
+  removeIgnored(tmdbId: number): Observable<any> {
+    return this.http.delete(`${environment.apiUrl}/recommendations/ignored`, {
+      body: { tmdbId }
+    });
+  }
+
+  removeIgnoredBulk(tmdbIds: number[]): Observable<any> {
+    return this.http.delete(`${environment.apiUrl}/recommendations/ignored`, {
+      body: { tmdbIds }
+    });
+  }
 }

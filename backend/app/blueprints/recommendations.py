@@ -1,4 +1,5 @@
 from flask import Blueprint, jsonify, request, current_app
+from app.services import config_store
 
 recommendations_bp = Blueprint('recommendations', __name__)
 
@@ -98,3 +99,46 @@ def scan_progress():
     """Poll for scan progress."""
     progress = current_app.tmdb_service.scan_progress
     return jsonify(progress)
+
+
+@recommendations_bp.route('/ignored', methods=['GET'])
+def get_ignored():
+    """Return the list of ignored TMDB IDs."""
+    ignored = config_store.get('ignored_movies', [])
+    return jsonify(ignored=ignored)
+
+
+@recommendations_bp.route('/ignored', methods=['POST'])
+def add_ignored():
+    """Add one or more movies to the ignored list."""
+    data = request.get_json() or {}
+    tmdb_id = data.get('tmdbId')
+    tmdb_ids = data.get('tmdbIds', [])
+    if not tmdb_id and not tmdb_ids:
+        return jsonify(error='tmdbId or tmdbIds is required'), 400
+    ignored = config_store.get('ignored_movies', [])
+    ids_to_add = tmdb_ids if tmdb_ids else [tmdb_id]
+    changed = False
+    for tid in ids_to_add:
+        if tid not in ignored:
+            ignored.append(tid)
+            changed = True
+    if changed:
+        config_store.put('ignored_movies', ignored)
+    return jsonify(result='ok')
+
+
+@recommendations_bp.route('/ignored', methods=['DELETE'])
+def remove_ignored():
+    """Remove one or more movies from the ignored list."""
+    data = request.get_json() or {}
+    tmdb_id = data.get('tmdbId')
+    tmdb_ids = data.get('tmdbIds', [])
+    if not tmdb_id and not tmdb_ids:
+        return jsonify(error='tmdbId or tmdbIds is required'), 400
+    ignored = config_store.get('ignored_movies', [])
+    ids_to_remove = set(tmdb_ids if tmdb_ids else [tmdb_id])
+    new_ignored = [i for i in ignored if i not in ids_to_remove]
+    if len(new_ignored) != len(ignored):
+        config_store.put('ignored_movies', new_ignored)
+    return jsonify(result='ok')

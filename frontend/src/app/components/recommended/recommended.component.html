@@ -152,17 +152,31 @@
         <h5 class="regular-text mb-0" *ngIf="selectedMovie">
           Collection for: {{ selectedMovie.name }} ({{ selectedMovie.year }})
         </h5>
-        <div class="form-check ms-auto" *ngIf="missingCount > 0">
-          <input
-            class="form-check-input"
-            type="checkbox"
-            id="showOwned"
-            [(ngModel)]="showOwned"
-            (ngModelChange)="onShowOwnedChange()"
-          >
-          <label class="form-check-label text-muted" for="showOwned">
-            Show owned
-          </label>
+        <div class="d-flex ms-auto gap-3">
+          <div class="form-check" *ngIf="missingCount > 0">
+            <input
+              class="form-check-input"
+              type="checkbox"
+              id="showOwned"
+              [(ngModel)]="showOwned"
+              (ngModelChange)="onShowOwnedChange()"
+            >
+            <label class="form-check-label text-muted" for="showOwned">
+              Show owned
+            </label>
+          </div>
+          <div class="form-check" *ngIf="ignoredIds.size > 0">
+            <input
+              class="form-check-input"
+              type="checkbox"
+              id="showIgnored"
+              [(ngModel)]="showIgnored"
+              (ngModelChange)="onShowIgnoredChange()"
+            >
+            <label class="form-check-label text-muted" for="showIgnored">
+              Show ignored ({{ ignoredIds.size }})
+            </label>
+          </div>
         </div>
       </div>
 
@@ -177,10 +191,34 @@
 
       <!-- Collection groups -->
       <div *ngFor="let group of filteredGroups" class="collection-group mb-4">
-        <h6 class="collection-name">{{ group.name }}</h6>
+        <div class="d-flex align-items-center mb-2">
+          <h6 class="collection-name mb-0">{{ group.name }}</h6>
+          <button
+            *ngIf="collectionHasUnignoredGaps(group)"
+            class="btn btn-sm btn-outline-warning ms-2 collection-ignore-btn"
+            title="Ignore all missing movies in this collection"
+            (click)="ignoreCollection(group, $event)">
+            Ignore All
+          </button>
+          <button
+            *ngIf="showIgnored && !collectionHasUnignoredGaps(group)"
+            class="btn btn-sm btn-outline-secondary ms-2 collection-ignore-btn"
+            title="Unignore all movies in this collection"
+            (click)="unignoreCollection(group, $event)">
+            Unignore All
+          </button>
+        </div>
         <div class="rec-grid">
-          <div *ngFor="let gap of group.gaps" class="rec-card" [class.owned]="gap.owned">
+          <div *ngFor="let gap of group.gaps" class="rec-card" [class.owned]="gap.owned" [class.ignored]="isIgnored(gap)">
             <div class="owned-badge" *ngIf="gap.owned">Owned</div>
+            <div class="ignored-badge" *ngIf="isIgnored(gap)">Ignored</div>
+            <button
+              *ngIf="!gap.owned"
+              class="ignore-btn"
+              [title]="isIgnored(gap) ? 'Unignore this movie' : 'Ignore this movie'"
+              (click)="toggleIgnore(gap, $event)">
+              {{ isIgnored(gap) ? '&#10003;' : '&#10005;' }}
+            </button>
             <img
               *ngIf="gap.posterUrl"
               [src]="gap.posterUrl"
