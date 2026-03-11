@@ -8,6 +8,7 @@ class TmdbService:
         self._base_url = base_url
         self._image_base_url = image_base_url
         self._api_key: str | None = config_store.get('tmdb_api_key')
+        self._language: str = config_store.get('preferences', {}).get('language', 'en')
 
         # In-memory caches to avoid redundant TMDB API calls
         self._id_cache: dict[str, int | None] = {}
@@ -29,6 +30,10 @@ class TmdbService:
     @property
     def api_key(self) -> str | None:
         return self._api_key
+
+    def reload_preferences(self) -> None:
+        """Reload language preference from config store."""
+        self._language = config_store.get('preferences', {}).get('language', 'en')
 
     def clear_cache(self) -> None:
         """Clear all TMDB response caches for a fresh scan."""
@@ -88,7 +93,7 @@ class TmdbService:
             if cache_key in self._id_cache:
                 return self._id_cache[cache_key]
             try:
-                params = {"api_key": api_key, "query": title}
+                params = {"api_key": api_key, "query": title, "language": self._language}
                 if year:
                     params["year"] = year
                 resp = requests.get(
@@ -122,7 +127,7 @@ class TmdbService:
         try:
             resp = requests.get(
                 f"{self._base_url}/movie/{tmdb_id}",
-                params={"api_key": api_key},
+                params={"api_key": api_key, "language": self._language},
                 timeout=10,
             )
             if resp.status_code != 200:
@@ -145,7 +150,7 @@ class TmdbService:
         try:
             resp = requests.get(
                 f"{self._base_url}/collection/{collection_id}",
-                params={"api_key": api_key},
+                params={"api_key": api_key, "language": self._language},
                 timeout=10,
             )
             if resp.status_code != 200:

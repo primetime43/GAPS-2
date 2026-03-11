@@ -5,6 +5,7 @@ import { RecommendationService, ScanProgress } from '../../services/recommendati
 import { Movie } from '../../models/movie.model';
 import { CollectionGap } from '../../models/recommendation.model';
 import { ActiveServerResponse, PlexLibrary } from '../../models/plex.model';
+import { PreferencesService } from '../../services/preferences.service';
 
 interface CollectionGroup {
   name: string;
@@ -23,12 +24,23 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   movies: Movie[] = [];
   movieFilter = '';
   showOwned = false;
+  moviesPerPage = 50;
+  currentPage = 1;
   searchFilter = '';
 
   get filteredMovies(): Movie[] {
     const query = this.movieFilter.trim().toLowerCase();
-    if (!query) return this.movies;
-    return this.movies.filter(m => m.name.toLowerCase().includes(query));
+    const all = query ? this.movies.filter(m => m.name.toLowerCase().includes(query)) : this.movies;
+    return all;
+  }
+
+  get pagedMovies(): Movie[] {
+    const start = (this.currentPage - 1) * this.moviesPerPage;
+    return this.filteredMovies.slice(start, start + this.moviesPerPage);
+  }
+
+  get totalPages(): number {
+    return Math.ceil(this.filteredMovies.length / this.moviesPerPage);
   }
 
   // All gaps from backend (always includes owned)
@@ -58,22 +70,54 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     private plexService: PlexService,
     private libraryService: LibraryService,
     private recommendationService: RecommendationService,
+    private preferencesService: PreferencesService,
   ) {}
 
   ngOnInit(): void {
-    this.plexService.getActiveServer().subscribe({
-      next: (res: ActiveServerResponse) => {
-        if (res && res.server) {
-          this.hasServer = true;
-          this.libraries = Array.isArray(res.libraries)
-            ? res.libraries.filter((lib: PlexLibrary) => lib.type === 'movie')
-            : [];
-        }
-        this.loading = false;
+    this.preferencesService.load().subscribe({
+      next: (prefs) => {
+        this.moviesPerPage = prefs.moviesPerPage || 50;
+        this.showOwned = !prefs.hideOwnedByDefault;
+
+        this.plexService.getActiveServer().subscribe({
+          next: (res: ActiveServerResponse) => {
+            if (res && res.server) {
+              this.hasServer = true;
+              this.libraries = Array.isArray(res.libraries)
+                ? res.libraries.filter((lib: PlexLibrary) => lib.type === 'movie')
+                : [];
+
+              // Auto-select default library
+              if (prefs.defaultLibrary && this.libraries.some(l => l.title === prefs.defaultLibrary)) {
+                this.selectedLibrary = prefs.defaultLibrary;
+                this.onLibrarySelect();
+              }
+            }
+            this.loading = false;
+          },
+          error: () => {
+            this.hasServer = false;
+            this.loading = false;
+          }
+        });
       },
       error: () => {
-        this.hasServer = false;
-        this.loading = false;
+        // Fallback if preferences fail to load
+        this.plexService.getActiveServer().subscribe({
+          next: (res: ActiveServerResponse) => {
+            if (res && res.server) {
+              this.hasServer = true;
+              this.libraries = Array.isArray(res.libraries)
+                ? res.libraries.filter((lib: PlexLibrary) => lib.type === 'movie')
+                : [];
+            }
+            this.loading = false;
+          },
+          error: () => {
+            this.hasServer = false;
+            this.loading = false;
+          }
+        });
       }
     });
   }

@@ -75,9 +75,10 @@
         type="text"
         placeholder="Filter movies by name..."
         [(ngModel)]="movieFilter"
+        (ngModelChange)="currentPage = 1"
       >
       <div class="movie-grid">
-        <div *ngFor="let movie of filteredMovies" class="movie-card clickable" (click)="selectMovie(movie)">
+        <div *ngFor="let movie of pagedMovies" class="movie-card clickable" (click)="selectMovie(movie)">
           <img
             *ngIf="movie.posterUrl"
             [src]="movie.posterUrl"
@@ -91,6 +92,16 @@
             <div class="movie-year">{{ movie.year }}</div>
           </div>
         </div>
+      </div>
+      <!-- Pagination -->
+      <div *ngIf="totalPages > 1" class="pagination-controls mt-3 d-flex align-items-center justify-content-center gap-3">
+        <button class="btn btn-sm btn-outline-light" [disabled]="currentPage === 1" (click)="currentPage = currentPage - 1">
+          &larr; Prev
+        </button>
+        <span class="text-muted">Page {{ currentPage }} of {{ totalPages }}</span>
+        <button class="btn btn-sm btn-outline-light" [disabled]="currentPage === totalPages" (click)="currentPage = currentPage + 1">
+          Next &rarr;
+        </button>
       </div>
     </div>
 

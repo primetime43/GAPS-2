@@ -1,7 +1,68 @@
 <div class="top-margin">
-  <div class="coming-soon-card">
-    <h4>User Preferences</h4>
-    <p class="text-muted">Coming Soon</p>
-    <p class="text-muted">Customizable preferences will be available in a future release.</p>
+  <div *ngIf="loading" class="text-muted">Loading preferences...</div>
+
+  <div *ngIf="!loading">
+    <!-- Default Library -->
+    <div class="pref-card mb-3">
+      <h5>Default Library</h5>
+      <p class="text-muted small">Auto-select this library on the Missing page.</p>
+      <select class="form-select dark-select" [(ngModel)]="prefs.defaultLibrary">
+        <option value="">None (always ask)</option>
+        <option *ngFor="let lib of libraries" [value]="lib.title">{{ lib.title }}</option>
+      </select>
+    </div>
+
+    <!-- Movies Per Page -->
+    <div class="pref-card mb-3">
+      <h5>Movies Per Page</h5>
+      <p class="text-muted small">Number of movies to show in the grid.</p>
+      <select class="form-select dark-select" [(ngModel)]="prefs.moviesPerPage">
+        <option *ngFor="let size of pageSizeOptions" [ngValue]="size">{{ size }}</option>
+      </select>
+    </div>
+
+    <!-- Hide Owned by Default -->
+    <div class="pref-card mb-3">
+      <h5>Hide Owned Movies by Default</h5>
+      <p class="text-muted small">Gap results will hide movies you already own unless toggled.</p>
+      <label class="toggle-label">
+        <input type="checkbox" [(ngModel)]="prefs.hideOwnedByDefault">
+        <span class="ms-2">{{ prefs.hideOwnedByDefault ? 'Enabled' : 'Disabled' }}</span>
+      </label>
+    </div>
+
+    <!-- Language Filter -->
+    <div class="pref-card mb-3">
+      <h5>TMDB Language</h5>
+      <p class="text-muted small">Language for movie titles and descriptions from TMDB.</p>
+      <select class="form-select dark-select" [(ngModel)]="prefs.language">
+        <option *ngFor="let lang of languages" [value]="lang.code">{{ lang.name }}</option>
+      </select>
+    </div>
+
+    <!-- Port Number -->
+    <div class="pref-card mb-3">
+      <h5>Port Number</h5>
+      <p class="text-muted small">Server port for production/exe mode (requires restart to take effect). Does not apply during development.</p>
+      <input type="number" class="form-control dark-input" [(ngModel)]="prefs.port" min="1024" max="65535">
+    </div>
+
+    <!-- Auto-Open Browser -->
+    <div class="pref-card mb-3">
+      <h5>Auto-Open Browser</h5>
+      <p class="text-muted small">Automatically open the browser when launching the standalone exe.</p>
+      <label class="toggle-label">
+        <input type="checkbox" [(ngModel)]="prefs.autoOpenBrowser">
+        <span class="ms-2">{{ prefs.autoOpenBrowser ? 'Enabled' : 'Disabled' }}</span>
+      </label>
+    </div>
+
+    <!-- Save Button -->
+    <div class="mt-4">
+      <button class="btn btn-success" (click)="save()" [disabled]="saving">
+        {{ saving ? 'Saving...' : 'Save Preferences' }}
+      </button>
+      <span *ngIf="saved" class="text-success ms-3">Saved!</span>
+    </div>
   </div>
 </div>

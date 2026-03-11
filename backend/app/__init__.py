@@ -40,6 +40,7 @@ def create_app(config_name=None):
     from app.blueprints.recommendations import recommendations_bp
     from app.blueprints.schedule import schedule_bp
     from app.blueprints.notifications import notifications_bp
+    from app.blueprints.preferences import preferences_bp
 
     app.register_blueprint(plex_bp, url_prefix='/api/plex')
     app.register_blueprint(tmdb_bp, url_prefix='/api/tmdb')
@@ -47,6 +48,7 @@ def create_app(config_name=None):
     app.register_blueprint(recommendations_bp, url_prefix='/api/recommendations')
     app.register_blueprint(schedule_bp, url_prefix='/api/schedule')
     app.register_blueprint(notifications_bp, url_prefix='/api/notifications')
+    app.register_blueprint(preferences_bp, url_prefix='/api/preferences')
 
     # In production, serve Angular dist
     bundle_dir = _get_bundle_dir()
