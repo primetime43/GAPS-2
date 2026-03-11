@@ -19,6 +19,7 @@ import { EmbySettingsComponent } from './components/settings/emby-settings/emby-
 import { UserPreferencesSettingsComponent } from './components/settings/user-preferences-settings/user-preferences-settings.component';
 import { TmdbSettingsComponent } from './components/settings/tmdb-settings/tmdb-settings.component';
 import { SettingsComponent } from './components/settings/settings.component';
+import { ScheduleSettingsComponent } from './components/settings/schedule-settings/schedule-settings.component';
 import { ConfirmModalComponent } from './components/confirm-modal/confirm-modal.component';
 
 @NgModule({ declarations: [
@@ -34,6 +35,7 @@ import { ConfirmModalComponent } from './components/confirm-modal/confirm-modal.
         EmbySettingsComponent,
         UserPreferencesSettingsComponent,
         TmdbSettingsComponent,
+        ScheduleSettingsComponent,
         SettingsComponent
     ],
     bootstrap: [AppComponent], imports: [BrowserModule,

@@ -16,20 +16,25 @@ def create_app(config_name=None):
     # Initialize services and store on app
     from app.services.plex_service import PlexService
     from app.services.tmdb_service import TmdbService
+    from app.services.schedule_service import ScheduleService
 
     app.plex_service = PlexService()
     app.tmdb_service = TmdbService(app.config['TMDB_BASE_URL'], app.config['TMDB_IMAGE_BASE_URL'])
+    app.schedule_service = ScheduleService()
+    app.schedule_service.init_app(app)
 
     # Register blueprints under /api prefix
     from app.blueprints.plex import plex_bp
     from app.blueprints.tmdb import tmdb_bp
     from app.blueprints.libraries import libraries_bp
     from app.blueprints.recommendations import recommendations_bp
+    from app.blueprints.schedule import schedule_bp
 
     app.register_blueprint(plex_bp, url_prefix='/api/plex')
     app.register_blueprint(tmdb_bp, url_prefix='/api/tmdb')
     app.register_blueprint(libraries_bp, url_prefix='/api/libraries')
     app.register_blueprint(recommendations_bp, url_prefix='/api/recommendations')
+    app.register_blueprint(schedule_bp, url_prefix='/api/schedule')
 
     # In production, serve Angular dist
     dist_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), '..', 'frontend', 'dist', 'gaps-2')
