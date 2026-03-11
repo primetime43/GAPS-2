@@ -39,6 +39,16 @@ docker compose -f docker/docker-compose.yml up -d
 
 The app will be available at `http://localhost:5000`.
 
+### Images of v2.1.0
+<details>
+  <summary>Click to view screenshots of version 2.1.0</summary>
+<img width="1670" height="618" alt="image" src="https://github.com/user-attachments/assets/0d17e565-1fe0-4b0d-a297-f389a40eb806" />
+<img width="1187" height="263" alt="image" src="https://github.com/user-attachments/assets/ec18a8de-f842-453d-843c-4e6122ab1aab" />
+<img width="1529" height="442" alt="image" src="https://github.com/user-attachments/assets/c956ba5e-2268-4710-b71c-d8e1a3e31489" />
+<img width="1517" height="628" alt="image" src="https://github.com/user-attachments/assets/ecd2f78c-23e6-4c37-a89c-3d06ad31f276" />
+<img width="1535" height="987" alt="image" src="https://github.com/user-attachments/assets/9208cd60-eef1-4458-8df4-5671569b3cf1" />
+</details>
+  
 ### Development
 
 **One-command launch:**
