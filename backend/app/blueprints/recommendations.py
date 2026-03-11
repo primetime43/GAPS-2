@@ -57,12 +57,15 @@ def scan_library_gaps():
     """Start a library scan in the background."""
     data = request.get_json() or {}
     library_name = data.get('libraryName', '')
+    library_names = data.get('libraryNames', [])
     source = data.get('source', 'plex')
     show_existing = data.get('showExisting', False)
     fresh_scan = data.get('freshScan', False)
 
-    if not library_name:
-        return jsonify(error='libraryName is required'), 400
+    # Support both single and multiple library names
+    names = library_names if library_names else ([library_name] if library_name else [])
+    if not names:
+        return jsonify(error='libraryName or libraryNames is required'), 400
 
     api_key = current_app.tmdb_service.api_key
     if not api_key:
@@ -74,12 +77,23 @@ def scan_library_gaps():
         return jsonify(error='A scan is already in progress'), 409
 
     cache = _get_movies_cache(source)
-    library_data = cache.get(library_name, {})
-    owned_movies = library_data.get('movies', [])
-    owned_ids = set(library_data.get('tmdbIds', []))
+
+    # Merge movies and IDs from all selected libraries
+    owned_movies = []
+    owned_ids = set()
+    seen_keys = set()
+    for name in names:
+        library_data = cache.get(name, {})
+        for movie in library_data.get('movies', []):
+            # Deduplicate by tmdbId or name+year
+            key = movie.get('tmdbId') or f"{movie.get('name')}|{movie.get('year')}"
+            if key not in seen_keys:
+                seen_keys.add(key)
+                owned_movies.append(movie)
+        owned_ids.update(library_data.get('tmdbIds', []))
 
     if not owned_movies:
-        return jsonify(error='No movies loaded for this library. Browse the library first to load movie data.'), 400
+        return jsonify(error='No movies loaded for the selected libraries. Browse the libraries first to load movie data.'), 400
 
     if fresh_scan:
         tmdb.clear_cache()

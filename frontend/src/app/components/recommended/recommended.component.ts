@@ -26,6 +26,7 @@ interface CollectionGroup {
 export class RecommendedComponent implements OnInit, OnDestroy {
   libraries: PlexLibrary[] = [];
   selectedLibrary = '';
+  selectedLibraries: string[] = [];
   movies: Movie[] = [];
   movieFilter = '';
   showOwned = false;
@@ -128,6 +129,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
 
           if (prefs?.defaultLibrary && this.libraries.some(l => l.title === prefs.defaultLibrary)) {
             this.selectedLibrary = prefs.defaultLibrary;
+            this.selectedLibraries = [prefs.defaultLibrary];
             this.onLibrarySelect();
           }
         }
@@ -142,6 +144,10 @@ export class RecommendedComponent implements OnInit, OnDestroy {
 
   onLibrarySelect(): void {
     if (!this.selectedLibrary) return;
+    // Keep selectedLibraries in sync when using the dropdown
+    if (!this.selectedLibraries.includes(this.selectedLibrary)) {
+      this.selectedLibraries = [this.selectedLibrary];
+    }
     this.loadingMovies = true;
     this.movies = [];
     this.movieFilter = '';
@@ -161,6 +167,19 @@ export class RecommendedComponent implements OnInit, OnDestroy {
         this.loadingMovies = false;
       }
     });
+  }
+
+  toggleLibrarySelection(libTitle: string): void {
+    const idx = this.selectedLibraries.indexOf(libTitle);
+    if (idx >= 0) {
+      this.selectedLibraries.splice(idx, 1);
+    } else {
+      this.selectedLibraries.push(libTitle);
+    }
+  }
+
+  isLibrarySelected(libTitle: string): boolean {
+    return this.selectedLibraries.includes(libTitle);
   }
 
   scanLibrary(freshScan = false): void {
@@ -190,12 +209,27 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     this.scanProgress = null;
     this.errorMessage = '';
 
-    this.recommendationService.startScan(this.selectedLibrary, true, freshScan, this.activeSource).subscribe({
+    const scanLibraries = this.selectedLibraries.length > 0 ? this.selectedLibraries : [this.selectedLibrary];
+
+    // Pre-load movies for all selected libraries so the backend has them cached
+    const loadRequests = scanLibraries.map(lib =>
+      this.libraryService.getMovies(lib, this.activeSource).pipe(catchError(() => of({ movies: [] })))
+    );
+
+    forkJoin(loadRequests).subscribe({
       next: () => {
-        this.startPolling();
+        this.recommendationService.startScan(scanLibraries, true, freshScan, this.activeSource).subscribe({
+          next: () => {
+            this.startPolling();
+          },
+          error: (err) => {
+            this.errorMessage = err.error?.error || 'Failed to start scan.';
+            this.loadingGaps = false;
+          }
+        });
       },
-      error: (err) => {
-        this.errorMessage = err.error?.error || 'Failed to start scan.';
+      error: () => {
+        this.errorMessage = 'Failed to load movies from selected libraries.';
         this.loadingGaps = false;
       }
     });

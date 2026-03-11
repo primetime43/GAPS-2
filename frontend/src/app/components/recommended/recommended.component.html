@@ -37,6 +37,24 @@
           <option value="" disabled hidden>Choose a library...</option>
           <option *ngFor="let lib of libraries" [value]="lib.title">{{ lib.title }}</option>
         </select>
+        <!-- Multi-library selection for scanning -->
+        <div *ngIf="libraries.length > 1 && selectedLibrary" class="mt-2">
+          <label class="text-muted mb-1" style="font-size: 13px;">Include in scan:</label>
+          <div class="d-flex flex-wrap gap-2">
+            <div *ngFor="let lib of libraries" class="form-check form-check-inline">
+              <input
+                class="form-check-input"
+                type="checkbox"
+                [id]="'lib-' + lib.title"
+                [checked]="isLibrarySelected(lib.title)"
+                (change)="toggleLibrarySelection(lib.title)"
+              >
+              <label class="form-check-label text-muted" [for]="'lib-' + lib.title" style="font-size: 13px;">
+                {{ lib.title }}
+              </label>
+            </div>
+          </div>
+        </div>
       </div>
       <div class="col-md-4 d-flex align-items-end gap-3">
         <button

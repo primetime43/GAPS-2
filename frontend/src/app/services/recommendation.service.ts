@@ -54,14 +54,14 @@ export class RecommendationService {
   }
 
   startScan(
-    libraryName: string,
+    libraryNames: string[],
     showExisting: boolean,
     freshScan = false,
     source: string = 'plex'
   ): Observable<{ status: string; total: number }> {
     return this.http.post<{ status: string; total: number }>(
       `${environment.apiUrl}/recommendations/scan`,
-      { libraryName, showExisting, freshScan, source }
+      { libraryNames, showExisting, freshScan, source }
     );
   }
 
