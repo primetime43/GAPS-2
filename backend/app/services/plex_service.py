@@ -1,8 +1,12 @@
+import logging
+from urllib.parse import quote
 from plexapi.myplex import MyPlexPinLogin
 from plexapi.server import PlexServer
 from plexapi import BASE_HEADERS
 import requests
 from app.services import config_store
+
+logger = logging.getLogger(__name__)
 
 
 class PlexService:
@@ -36,6 +40,23 @@ class PlexService:
         if self._pin.token:
             return True
         return self._pin.checkLogin()
+
+    # -- Manual connection --
+
+    def connect_manual(self, server_url: str, token: str) -> tuple[bool, str | None, list | None, str | None]:
+        """Connect directly to a Plex server using URL and token."""
+        try:
+            server = PlexServer(server_url, token, timeout=5)
+            self._server_conn = server
+            self._server_conn_name = server.friendlyName
+            self._token = token
+            libraries = [
+                {'title': section.title, 'type': section.type}
+                for section in server.library.sections()
+            ]
+            return True, server.friendlyName, libraries, None
+        except Exception as e:
+            return False, None, None, str(e)
 
     # -- Servers --
 
@@ -72,6 +93,17 @@ class PlexService:
         if self._server_conn and self._server_conn_name == server_name:
             return self._server_conn
 
+        # Try direct URL from active server (manual connection)
+        if self._active_server and self._active_server.get('serverUrl'):
+            token = self._active_server.get('token', self._token)
+            try:
+                server = PlexServer(self._active_server['serverUrl'], token, timeout=5)
+                self._server_conn = server
+                self._server_conn_name = server_name
+                return server
+            except Exception as e:
+                logger.warning("Failed to connect to Plex via stored URL: %s", e)
+
         resource = self._resources.get(server_name)
         if resource is None:
             # Try re-fetching resources if cache is empty
@@ -83,8 +115,8 @@ class PlexService:
                             resource = r
                             self._resources[server_name] = r
                             break
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning("Failed to re-fetch Plex resources: %s", e)
             if resource is None:
                 return None
 
@@ -110,7 +142,8 @@ class PlexService:
                 self._server_conn = server
                 self._server_conn_name = server_name
                 return server
-            except Exception:
+            except Exception as e:
+                logger.debug("Plex connection attempt to %s failed: %s", url, e)
                 continue
 
         return None
@@ -131,12 +164,14 @@ class PlexService:
 
     # -- Active Server --
 
-    def save_active_server(self, server: str, token: str, libraries: list | None = None) -> tuple[bool, str | None]:
+    def save_active_server(self, server: str, token: str, libraries: list | None = None, server_url: str | None = None) -> tuple[bool, str | None]:
         self._active_server = {
             'server': server,
             'token': token,
             'libraries': libraries if isinstance(libraries, list) else [],
         }
+        if server_url:
+            self._active_server['serverUrl'] = server_url
         self._token = token
         config_store.put('plex', {
             'token': token,
@@ -174,9 +209,6 @@ class PlexService:
             library = server.library.section(library_name)
             movies = library.search(libtype='movie', includeGuids=True)
 
-            base_url = server._baseurl
-            token = self._active_server['token']
-
             movie_data = []
             tmdb_ids = []
 
@@ -200,7 +232,7 @@ class PlexService:
 
                 poster_url = None
                 if movie.thumb:
-                    poster_url = f"{base_url}{movie.thumb}?X-Plex-Token={token}"
+                    poster_url = f"/api/libraries/image-proxy?source=plex&thumb={quote(movie.thumb, safe='')}"
 
                 movie_data.append({
                     'name': movie.title,

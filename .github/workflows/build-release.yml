@@ -40,11 +40,14 @@ jobs:
       - name: Build Windows executable
         run: pyinstaller gaps2.spec --noconfirm
 
+      - name: Rename executable with version
+        run: mv dist/GAPS-2.exe dist/GAPS-2-${{ github.ref_name }}.exe
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: GAPS-2-windows
-          path: dist/GAPS-2.exe
+          path: dist/GAPS-2-${{ github.ref_name }}.exe
 
   build-docker:
     runs-on: ubuntu-latest
@@ -88,4 +91,4 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: GAPS-2.exe
+          files: GAPS-2-${{ github.ref_name }}.exe

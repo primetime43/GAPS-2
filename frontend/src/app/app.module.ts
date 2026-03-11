@@ -21,6 +21,7 @@ import { SettingsComponent } from './components/settings/settings.component';
 import { ScheduleSettingsComponent } from './components/settings/schedule-settings/schedule-settings.component';
 import { NotificationSettingsComponent } from './components/settings/notification-settings/notification-settings.component';
 import { ConfirmModalComponent } from './components/confirm-modal/confirm-modal.component';
+import { LogsComponent } from './components/logs/logs.component';
 
 @NgModule({ declarations: [
         AppComponent,
@@ -36,7 +37,8 @@ import { ConfirmModalComponent } from './components/confirm-modal/confirm-modal.
         TmdbSettingsComponent,
         ScheduleSettingsComponent,
         NotificationSettingsComponent,
-        SettingsComponent
+        SettingsComponent,
+        LogsComponent
     ],
     bootstrap: [AppComponent], imports: [BrowserModule,
         AppRoutingModule,

@@ -54,14 +54,14 @@ export class RecommendationService {
   }
 
   startScan(
-    libraryName: string,
+    libraryNames: string[],
     showExisting: boolean,
     freshScan = false,
     source: string = 'plex'
   ): Observable<{ status: string; total: number }> {
     return this.http.post<{ status: string; total: number }>(
       `${environment.apiUrl}/recommendations/scan`,
-      { libraryName, showExisting, freshScan, source }
+      { libraryNames, showExisting, freshScan, source }
     );
   }
 
@@ -69,5 +69,31 @@ export class RecommendationService {
     return this.http.get<ScanProgress>(
       `${environment.apiUrl}/recommendations/scan/progress`
     );
+  }
+
+  getIgnored(): Observable<number[]> {
+    return this.http.get<{ ignored: number[] }>(
+      `${environment.apiUrl}/recommendations/ignored`
+    ).pipe(map(res => res.ignored));
+  }
+
+  addIgnored(tmdbId: number): Observable<any> {
+    return this.http.post(`${environment.apiUrl}/recommendations/ignored`, { tmdbId });
+  }
+
+  addIgnoredBulk(tmdbIds: number[]): Observable<any> {
+    return this.http.post(`${environment.apiUrl}/recommendations/ignored`, { tmdbIds });
+  }
+
+  removeIgnored(tmdbId: number): Observable<any> {
+    return this.http.delete(`${environment.apiUrl}/recommendations/ignored`, {
+      body: { tmdbId }
+    });
+  }
+
+  removeIgnoredBulk(tmdbIds: number[]): Observable<any> {
+    return this.http.delete(`${environment.apiUrl}/recommendations/ignored`, {
+      body: { tmdbIds }
+    });
   }
 }

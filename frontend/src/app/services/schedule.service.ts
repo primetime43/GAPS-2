@@ -7,6 +7,7 @@ export interface ScheduleConfig {
   enabled: boolean;
   preset: string;
   library: string;
+  source: string;
   next_run: string | null;
   presets: { [key: string]: string };
 }
@@ -22,8 +23,8 @@ export class ScheduleService {
     return this.http.get<ScheduleConfig>(`${environment.apiUrl}/schedule`);
   }
 
-  setSchedule(preset: string, library: string): Observable<ScheduleConfig> {
-    return this.http.post<ScheduleConfig>(`${environment.apiUrl}/schedule`, { preset, library });
+  setSchedule(preset: string, library: string, source: string): Observable<ScheduleConfig> {
+    return this.http.post<ScheduleConfig>(`${environment.apiUrl}/schedule`, { preset, library, source });
   }
 
   disableSchedule(): Observable<ScheduleConfig> {

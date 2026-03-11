@@ -15,6 +15,19 @@ def check_login():
     return jsonify(authenticated=logged_in)
 
 
+@plex_bp.route('/connect-manual', methods=['POST'])
+def connect_manual():
+    data = request.get_json() or {}
+    server_url = data.get('serverUrl', '').strip()
+    token = data.get('token', '').strip()
+    if not server_url or not token:
+        return jsonify(connected=False, error='Server URL and token are required.'), 400
+    ok, server_name, libraries, error = current_app.plex_service.connect_manual(server_url, token)
+    if not ok:
+        return jsonify(connected=False, error=error), 400
+    return jsonify(connected=True, serverName=server_name, libraries=libraries)
+
+
 @plex_bp.route('/fetch-servers', methods=['POST'])
 def fetch_servers():
     servers, token = current_app.plex_service.fetch_servers()
@@ -37,12 +50,13 @@ def fetch_libraries(server_name):
 
 @plex_bp.route('/save-data', methods=['POST'])
 def save_data():
-    data = request.get_json()
+    data = request.get_json() or {}
     server = data.get('server')
     token = data.get('token')
     libraries = data.get('libraries')
+    server_url = data.get('serverUrl')
 
-    success, error = current_app.plex_service.save_active_server(server, token, libraries)
+    success, error = current_app.plex_service.save_active_server(server, token, libraries, server_url)
     if success:
         return jsonify(result='Success')
     return jsonify(result='Error', error=error)

@@ -1,3 +1,4 @@
+import logging
 import os
 import sys
 from flask import Flask, send_from_directory
@@ -20,6 +21,13 @@ def create_app(config_name=None):
         app.config.from_object('app.config.DevelopmentConfig')
 
     CORS(app)
+
+    # Set up buffered log handler so the UI can display logs
+    from app.services.log_handler import log_handler
+    log_handler.setFormatter(logging.Formatter('%(name)s - %(message)s'))
+    root_logger = logging.getLogger()
+    root_logger.addHandler(log_handler)
+    root_logger.setLevel(logging.DEBUG)
 
     # Initialize services and store on app
     from app.services.plex_service import PlexService
@@ -47,6 +55,7 @@ def create_app(config_name=None):
     from app.blueprints.preferences import preferences_bp
     from app.blueprints.jellyfin import jellyfin_bp
     from app.blueprints.emby import emby_bp
+    from app.blueprints.logs import logs_bp
 
     app.register_blueprint(plex_bp, url_prefix='/api/plex')
     app.register_blueprint(jellyfin_bp, url_prefix='/api/jellyfin')
@@ -57,6 +66,7 @@ def create_app(config_name=None):
     app.register_blueprint(schedule_bp, url_prefix='/api/schedule')
     app.register_blueprint(notifications_bp, url_prefix='/api/notifications')
     app.register_blueprint(preferences_bp, url_prefix='/api/preferences')
+    app.register_blueprint(logs_bp, url_prefix='/api/logs')
 
     # In production, serve Angular dist
     bundle_dir = _get_bundle_dir()

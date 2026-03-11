@@ -56,15 +56,58 @@
   <!-- Setup flow (only when no active server or changing) -->
   <div *ngIf="!hasActiveServer" class="setup-flow">
 
-    <!-- Step 1: Connect -->
-    <div class="step-card" *ngIf="step === 'idle'">
-      <p class="text-muted mb-3">Connect your Plex account to get started. You'll be redirected to Plex to sign in.</p>
-      <button class="btn btn-primary" (click)="connectPlex()">
-        Connect Plex Account
+    <!-- Mode chooser -->
+    <div class="step-card" *ngIf="step === 'idle' && connectionMode === 'choose'">
+      <p class="text-muted mb-3">Choose how to connect your Plex server.</p>
+      <button class="btn btn-primary me-2" (click)="connectionMode = 'oauth'; connectPlex()">
+        Sign in with Plex
+      </button>
+      <button class="btn btn-outline-primary" (click)="connectionMode = 'manual'">
+        Connect Manually
       </button>
     </div>
 
-    <!-- Step 2: Waiting for auth (auto-polling) -->
+    <!-- Manual connection form -->
+    <div class="step-card" *ngIf="connectionMode === 'manual' && (step === 'idle' || step === 'manual-connecting')">
+      <p class="text-muted mb-3">Enter your Plex server URL and token. You can find your token at
+        <a href="https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/" target="_blank" class="text-info">plex.tv</a>.
+      </p>
+      <div class="mb-3">
+        <label class="form-label text-muted">Server URL</label>
+        <input type="text" class="form-control dark-input" [(ngModel)]="manualServerUrl" placeholder="http://192.168.1.100:32400">
+      </div>
+      <div class="mb-3">
+        <label class="form-label text-muted">Plex Token</label>
+        <div class="input-group">
+          <input [type]="tokenVisible ? 'text' : 'password'" class="form-control dark-input" [(ngModel)]="manualToken" placeholder="Enter Plex token">
+          <button class="btn btn-outline-secondary" type="button" (click)="togglePlexTokenVisibility()">
+            {{ tokenVisible ? 'Hide' : 'Show' }}
+          </button>
+        </div>
+      </div>
+      <button class="btn btn-primary" (click)="connectManual()" [disabled]="!manualServerUrl || !manualToken || step === 'manual-connecting'">
+        {{ step === 'manual-connecting' ? 'Connecting...' : 'Connect' }}
+      </button>
+      <button class="btn btn-outline-secondary ms-2" (click)="connectionMode = 'choose'; step = 'idle'">Back</button>
+    </div>
+
+    <!-- Manual connected - show libraries and save -->
+    <div class="step-card" *ngIf="step === 'manual-connected' || (connectionMode === 'manual' && step === 'saving')">
+      <h5 class="text-success mb-3">Connected to {{ manualServerName }}</h5>
+      <div class="libraries-row mb-3" *ngIf="movieLibraries.length > 0">
+        <span class="text-muted lib-label">Movie libraries:</span>
+        <span *ngFor="let lib of movieLibraries" class="lib-tag lib-tag-movie">{{ lib.title }}</span>
+      </div>
+      <div *ngIf="libraries.length > 0 && movieLibraries.length === 0" class="text-muted mb-3">
+        No movie libraries found on this server.
+      </div>
+      <button class="btn btn-success" (click)="saveManual()" [disabled]="step === 'saving'">
+        {{ step === 'saving' ? 'Saving...' : 'Save as Active Server' }}
+      </button>
+      <button class="btn btn-outline-secondary ms-2" (click)="connectionMode = 'manual'; step = 'idle'">Back</button>
+    </div>
+
+    <!-- OAuth: Waiting for auth (auto-polling) -->
     <div class="step-card text-center" *ngIf="step === 'waiting'">
       <div class="spinner"></div>
       <p class="text-muted mt-2 mb-0">Waiting for Plex sign-in to complete...</p>
@@ -74,7 +117,7 @@
     </div>
 
     <!-- Loading state -->
-    <div class="step-card text-center" *ngIf="step === 'authenticating' || step === 'fetching' || step === 'saving'">
+    <div class="step-card text-center" *ngIf="step === 'authenticating' || step === 'fetching' || (connectionMode === 'oauth' && step === 'saving')">
       <div class="spinner"></div>
       <p class="text-muted mt-2 mb-0">
         <span *ngIf="step === 'authenticating'">Connecting to Plex...</span>
@@ -83,7 +126,7 @@
       </p>
     </div>
 
-    <!-- Step 3: Select server & save -->
+    <!-- OAuth: Select server & save -->
     <div *ngIf="step === 'selecting'">
       <!-- Server dropdown -->
       <div class="mb-3">
@@ -115,7 +158,7 @@
       <button class="btn btn-success" (click)="setAsActive()" [disabled]="!selectedServer || isLoading">
         Save as Active Server
       </button>
-      <button class="btn btn-outline-secondary ms-2" (click)="step = 'idle'">Cancel</button>
+      <button class="btn btn-outline-secondary ms-2" (click)="connectionMode = 'choose'; step = 'idle'">Cancel</button>
     </div>
   </div>
 </div>

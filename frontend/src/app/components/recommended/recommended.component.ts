@@ -9,7 +9,7 @@ import { LibraryService } from '../../services/library.service';
 import { RecommendationService, ScanProgress } from '../../services/recommendation.service';
 import { Movie } from '../../models/movie.model';
 import { CollectionGap } from '../../models/recommendation.model';
-import { ActiveServerResponse, PlexLibrary } from '../../models/plex.model';
+import { ActiveServerResponse, MediaLibrary } from '../../models/media-server.model';
 import { PreferencesService } from '../../services/preferences.service';
 
 interface CollectionGroup {
@@ -24,8 +24,9 @@ interface CollectionGroup {
     standalone: false
 })
 export class RecommendedComponent implements OnInit, OnDestroy {
-  libraries: PlexLibrary[] = [];
+  libraries: MediaLibrary[] = [];
   selectedLibrary = '';
+  selectedLibraries: string[] = [];
   movies: Movie[] = [];
   movieFilter = '';
   showOwned = false;
@@ -53,6 +54,9 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   // Filtered view
   collectionGroups: CollectionGroup[] = [];
   filteredGroups: CollectionGroup[] = [];
+  // Ignored movies
+  ignoredIds: Set<number> = new Set();
+  showIgnored = false;
   selectedMovie: Movie | null = null;
   scanMode = false;
 
@@ -85,6 +89,10 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit(): void {
+    this.recommendationService.getIgnored().pipe(
+      catchError(() => of([]))
+    ).subscribe(ids => this.ignoredIds = new Set(ids));
+
     this.preferencesService.load().pipe(
       catchError(() => of(null))
     ).subscribe((prefs) => {
@@ -116,11 +124,12 @@ export class RecommendedComponent implements OnInit, OnDestroy {
           this.hasServer = true;
           this.activeServerName = res.server;
           this.libraries = Array.isArray(res.libraries)
-            ? res.libraries.filter((lib: PlexLibrary) => lib.type === 'movie')
+            ? res.libraries.filter((lib: MediaLibrary) => lib.type === 'movie')
             : [];
 
           if (prefs?.defaultLibrary && this.libraries.some(l => l.title === prefs.defaultLibrary)) {
             this.selectedLibrary = prefs.defaultLibrary;
+            this.selectedLibraries = [prefs.defaultLibrary];
             this.onLibrarySelect();
           }
         }
@@ -135,6 +144,10 @@ export class RecommendedComponent implements OnInit, OnDestroy {
 
   onLibrarySelect(): void {
     if (!this.selectedLibrary) return;
+    // Keep selectedLibraries in sync when using the dropdown
+    if (!this.selectedLibraries.includes(this.selectedLibrary)) {
+      this.selectedLibraries = [this.selectedLibrary];
+    }
     this.loadingMovies = true;
     this.movies = [];
     this.movieFilter = '';
@@ -154,6 +167,19 @@ export class RecommendedComponent implements OnInit, OnDestroy {
         this.loadingMovies = false;
       }
     });
+  }
+
+  toggleLibrarySelection(libTitle: string): void {
+    const idx = this.selectedLibraries.indexOf(libTitle);
+    if (idx >= 0) {
+      this.selectedLibraries.splice(idx, 1);
+    } else {
+      this.selectedLibraries.push(libTitle);
+    }
+  }
+
+  isLibrarySelected(libTitle: string): boolean {
+    return this.selectedLibraries.includes(libTitle);
   }
 
   scanLibrary(freshScan = false): void {
@@ -183,12 +209,27 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     this.scanProgress = null;
     this.errorMessage = '';
 
-    this.recommendationService.startScan(this.selectedLibrary, true, freshScan, this.activeSource).subscribe({
+    const scanLibraries = this.selectedLibraries.length > 0 ? this.selectedLibraries : [this.selectedLibrary];
+
+    // Pre-load movies for all selected libraries so the backend has them cached
+    const loadRequests = scanLibraries.map(lib =>
+      this.libraryService.getMovies(lib, this.activeSource).pipe(catchError(() => of({ movies: [] })))
+    );
+
+    forkJoin(loadRequests).subscribe({
       next: () => {
-        this.startPolling();
+        this.recommendationService.startScan(scanLibraries, true, freshScan, this.activeSource).subscribe({
+          next: () => {
+            this.startPolling();
+          },
+          error: (err) => {
+            this.errorMessage = err.error?.error || 'Failed to start scan.';
+            this.loadingGaps = false;
+          }
+        });
       },
-      error: (err) => {
-        this.errorMessage = err.error?.error || 'Failed to start scan.';
+      error: () => {
+        this.errorMessage = 'Failed to load movies from selected libraries.';
         this.loadingGaps = false;
       }
     });
@@ -264,6 +305,64 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     this.applyFilter();
   }
 
+  isIgnored(gap: CollectionGap): boolean {
+    return this.ignoredIds.has(gap.tmdbId);
+  }
+
+  toggleIgnore(gap: CollectionGap, event: Event): void {
+    event.stopPropagation();
+    if (this.ignoredIds.has(gap.tmdbId)) {
+      this.ignoredIds.delete(gap.tmdbId);
+      this.recommendationService.removeIgnored(gap.tmdbId).subscribe({
+        error: () => this.ignoredIds.add(gap.tmdbId)
+      });
+    } else {
+      this.ignoredIds.add(gap.tmdbId);
+      this.recommendationService.addIgnored(gap.tmdbId).subscribe({
+        error: () => this.ignoredIds.delete(gap.tmdbId)
+      });
+    }
+    this.applyFilter();
+  }
+
+  ignoreCollection(group: CollectionGroup, event: Event): void {
+    event.stopPropagation();
+    const idsToIgnore = group.gaps
+      .filter(g => !g.owned && !this.ignoredIds.has(g.tmdbId))
+      .map(g => g.tmdbId);
+    if (idsToIgnore.length === 0) return;
+    for (const id of idsToIgnore) {
+      this.ignoredIds.add(id);
+    }
+    this.recommendationService.addIgnoredBulk(idsToIgnore).subscribe({
+      error: () => { for (const id of idsToIgnore) this.ignoredIds.delete(id); this.applyFilter(); }
+    });
+    this.applyFilter();
+  }
+
+  unignoreCollection(group: CollectionGroup, event: Event): void {
+    event.stopPropagation();
+    const idsToUnignore = group.gaps
+      .filter(g => this.ignoredIds.has(g.tmdbId))
+      .map(g => g.tmdbId);
+    if (idsToUnignore.length === 0) return;
+    for (const id of idsToUnignore) {
+      this.ignoredIds.delete(id);
+    }
+    this.recommendationService.removeIgnoredBulk(idsToUnignore).subscribe({
+      error: () => { for (const id of idsToUnignore) this.ignoredIds.add(id); this.applyFilter(); }
+    });
+    this.applyFilter();
+  }
+
+  collectionHasUnignoredGaps(group: CollectionGroup): boolean {
+    return group.gaps.some(g => !g.owned && !this.ignoredIds.has(g.tmdbId));
+  }
+
+  onShowIgnoredChange(): void {
+    this.applyFilter();
+  }
+
   clearResults(): void {
     this.selectedMovie = null;
     this.scanMode = false;
@@ -275,11 +374,15 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   }
 
   applyFilter(): void {
-    const filtered = this.showOwned
+    let filtered = this.showOwned
       ? this.allGaps
       : this.allGaps.filter(g => !g.owned);
 
-    this.missingCount = this.allGaps.filter(g => !g.owned).length;
+    if (!this.showIgnored) {
+      filtered = filtered.filter(g => !this.ignoredIds.has(g.tmdbId));
+    }
+
+    this.missingCount = this.allGaps.filter(g => !g.owned && !this.ignoredIds.has(g.tmdbId)).length;
 
     const groups = new Map<string, CollectionGap[]>();
     for (const gap of filtered) {

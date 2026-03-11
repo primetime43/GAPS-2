@@ -1,7 +1,11 @@
 import { Component, OnInit } from '@angular/core';
+import { forkJoin, of } from 'rxjs';
+import { catchError } from 'rxjs/operators';
 import { PreferencesService, UserPreferences } from '../../../services/preferences.service';
 import { PlexService } from '../../../services/plex.service';
-import { PlexLibrary } from '../../../models/plex.model';
+import { JellyfinService } from '../../../services/jellyfin.service';
+import { EmbyService } from '../../../services/emby.service';
+import { MediaLibrary, ActiveServerResponse } from '../../../models/media-server.model';
 
 @Component({
     selector: 'app-user-preferences-settings',
@@ -19,7 +23,7 @@ export class UserPreferencesSettingsComponent implements OnInit {
     autoOpenBrowser: true,
   };
 
-  libraries: PlexLibrary[] = [];
+  libraries: MediaLibrary[] = [];
   saving = false;
   saved = false;
   loading = true;
@@ -47,6 +51,8 @@ export class UserPreferencesSettingsComponent implements OnInit {
   constructor(
     private preferencesService: PreferencesService,
     private plexService: PlexService,
+    private jellyfinService: JellyfinService,
+    private embyService: EmbyService,
   ) {}
 
   ngOnInit(): void {
@@ -60,13 +66,25 @@ export class UserPreferencesSettingsComponent implements OnInit {
       }
     });
 
-    this.plexService.getActiveServer().subscribe({
-      next: (res) => {
-        if (res && res.libraries) {
-          this.libraries = res.libraries.filter((lib: PlexLibrary) => lib.type === 'movie');
-        }
-      },
-      error: () => {}
+    // Check all media servers for libraries
+    forkJoin({
+      plex: this.plexService.getActiveServer().pipe(catchError(() => of(null))),
+      jellyfin: this.jellyfinService.getActiveServer().pipe(catchError(() => of(null))),
+      emby: this.embyService.getActiveServer().pipe(catchError(() => of(null))),
+    }).subscribe((servers) => {
+      let res: ActiveServerResponse | null = null;
+
+      if (servers.plex && (servers.plex as any).server) {
+        res = servers.plex as ActiveServerResponse;
+      } else if (servers.jellyfin && (servers.jellyfin as any).server) {
+        res = servers.jellyfin as ActiveServerResponse;
+      } else if (servers.emby && (servers.emby as any).server) {
+        res = servers.emby as ActiveServerResponse;
+      }
+
+      if (res && res.libraries) {
+        this.libraries = res.libraries.filter((lib: MediaLibrary) => lib.type === 'movie');
+      }
     });
   }
 

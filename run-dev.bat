@@ -4,9 +4,9 @@ REM Starts both the Flask backend and Angular frontend dev servers
 
 setlocal
 
-set ROOT_DIR=%~dp0
-set BACKEND_DIR=%ROOT_DIR%backend
-set FRONTEND_DIR=%ROOT_DIR%frontend
+set "ROOT_DIR=%~dp0"
+set "BACKEND_DIR=%ROOT_DIR%backend"
+set "FRONTEND_DIR=%ROOT_DIR%frontend"
 
 echo === Setting up Backend ===
 
@@ -18,12 +18,15 @@ if %errorlevel% neq 0 (
 )
 
 REM Create virtual environment if needed
-if not exist "%BACKEND_DIR%\venv" (
+if not exist "%BACKEND_DIR%\venv\Scripts\activate.bat" (
     echo Creating Python virtual environment...
     python -m venv "%BACKEND_DIR%\venv"
 )
 
+REM Activate and install dependencies
 call "%BACKEND_DIR%\venv\Scripts\activate.bat"
+echo Installing Python dependencies...
+pip install -r "%BACKEND_DIR%\requirements.txt" --quiet
 
 echo.
 echo === Setting up Frontend ===
@@ -31,7 +34,7 @@ echo === Setting up Frontend ===
 REM Check Node
 where node >nul 2>&1
 if %errorlevel% neq 0 (
-    echo ERROR: Node.js not found. Please install Node.js 18+
+    echo ERROR: Node.js not found. Please install Node.js 20+
     exit /b 1
 )
 
@@ -48,14 +51,14 @@ echo.
 
 REM Start backend in a new window
 echo Starting Flask backend on http://localhost:5000
-start "GAPS2 Backend" cmd /k "cd /d "%BACKEND_DIR%" && call venv\Scripts\activate.bat && python run.py"
+start "GAPS2 Backend" cmd /k "cd /d %BACKEND_DIR% && call venv\Scripts\activate.bat && python run.py"
 
 REM Wait for backend to start
 timeout /t 3 /nobreak >nul
 
 REM Start frontend in a new window
 echo Starting Angular frontend on http://localhost:4200
-start "GAPS2 Frontend" cmd /k "cd /d "%FRONTEND_DIR%" && npx ng serve --proxy-config proxy.conf.json --open"
+start "GAPS2 Frontend" cmd /k "cd /d %FRONTEND_DIR% && npx ng serve --proxy-config proxy.conf.json --open"
 
 echo.
 echo Both servers are running!

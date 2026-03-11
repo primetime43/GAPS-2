@@ -1,0 +1,58 @@
+.log-viewer {
+  background-color: #1a1a2e;
+  border: 1px solid #333;
+  border-radius: 6px;
+  padding: 12px;
+  height: 65vh;
+  overflow-y: auto;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.log-line {
+  padding: 2px 4px;
+  border-radius: 2px;
+  white-space: pre-wrap;
+  word-break: break-all;
+
+  &:hover {
+    background-color: rgba(255, 255, 255, 0.04);
+  }
+}
+
+.log-timestamp {
+  color: #6c757d;
+  margin-right: 8px;
+}
+
+.log-level {
+  display: inline-block;
+  min-width: 60px;
+  margin-right: 8px;
+  font-weight: 600;
+}
+
+.log-message {
+  color: #ccc;
+}
+
+// Level colors
+.log-error {
+  .log-level { color: #e74c3c; }
+  .log-message { color: #e8a0a0; }
+}
+
+.log-warning {
+  .log-level { color: #f39c12; }
+  .log-message { color: #f0d0a0; }
+}
+
+.log-info {
+  .log-level { color: #00bc8c; }
+}
+
+.log-debug {
+  .log-level { color: #6c757d; }
+  .log-message { color: #888; }
+}

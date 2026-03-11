@@ -30,7 +30,12 @@
 
     <!-- No libraries warning -->
     <div *ngIf="libraries.length === 0" class="text-muted">
-      No movie libraries found. Configure a Plex server first.
+      No movie libraries found. Configure a media server first.
+    </div>
+
+    <!-- Active server info -->
+    <div *ngIf="libraries.length > 0" class="text-muted mb-3" style="font-size: 13px;">
+      Using {{ activeSource | titlecase }} server: {{ activeServerName }}
     </div>
 
     <!-- Config form -->
