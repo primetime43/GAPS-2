@@ -2,6 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { marked } from 'marked';
+import { environment } from '../../../environments/environment';
 
 interface GitHubRelease {
   tag_name: string;
@@ -19,6 +20,7 @@ interface GitHubRelease {
     standalone: false
 })
 export class AboutComponent implements OnInit {
+  version = environment.version;
   releases: GitHubRelease[] = [];
   releasesLoading = true;
   releasesError = '';
