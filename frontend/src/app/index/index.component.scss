@@ -39,3 +39,26 @@
   color: #999;
   margin-bottom: 0;
 }
+
+.quick-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.action-btn {
+  display: inline-block;
+  padding: 10px 20px;
+  background-color: #00bc8c;
+  color: #fff;
+  border-radius: 6px;
+  text-decoration: none;
+  font-weight: 500;
+  transition: background-color 0.2s;
+
+  &:hover {
+    background-color: #00a379;
+    color: #fff;
+    text-decoration: none;
+  }
+}

@@ -2,7 +2,6 @@ import { NgModule } from '@angular/core';
 import { RouterModule, Routes } from '@angular/router';
 
 import { RecommendedComponent } from './components/recommended/recommended.component';
-import { UpdatesComponent } from './components/updates/updates.component';
 import { AboutComponent } from './components/about/about.component';
 import { IndexComponent } from './index/index.component';
 
@@ -17,11 +16,9 @@ import { NotificationSettingsComponent } from './components/settings/notificatio
 import { SettingsComponent } from './components/settings/settings.component';
 
 const routes: Routes = [
-  { path: '', redirectTo: '/index', pathMatch: 'full' },
+  { path: '', component: IndexComponent },
   { path: 'recommended', component: RecommendedComponent },
-  { path: 'updates', component: UpdatesComponent },
   { path: 'about', component: AboutComponent },
-  { path: 'index', component: IndexComponent },
   { path: 'settings', component: SettingsComponent, children: [
     { path: '', redirectTo: 'tmdb', pathMatch: 'full' },
     { path: 'tmdb', component: TmdbSettingsComponent },
@@ -32,7 +29,7 @@ const routes: Routes = [
     { path: 'notifications', component: NotificationSettingsComponent },
     { path: 'user-preferences', component: UserPreferencesSettingsComponent },
   ]},
-  { path: '**', redirectTo: '/index' }
+  { path: '**', redirectTo: '/' }
 ];
 
 @NgModule({

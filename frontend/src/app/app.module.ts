@@ -10,7 +10,6 @@ import { AppComponent } from './app.component';
 import { provideHttpClient, withInterceptorsFromDi } from '@angular/common/http';
 import { HeaderComponent } from './components/header/header.component';
 import { RecommendedComponent } from './components/recommended/recommended.component';
-import { UpdatesComponent } from './components/updates/updates.component';
 import { AboutComponent } from './components/about/about.component';
 import { IndexComponent } from './index/index.component';
 import { PlexSettingsComponent } from './components/settings/plex-settings/plex-settings.component';
@@ -28,7 +27,6 @@ import { ConfirmModalComponent } from './components/confirm-modal/confirm-modal.
         HeaderComponent,
         ConfirmModalComponent,
         RecommendedComponent,
-        UpdatesComponent,
         AboutComponent,
         IndexComponent,
         PlexSettingsComponent,
