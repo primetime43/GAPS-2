@@ -1,3 +1,4 @@
+from urllib.parse import quote
 from plexapi.myplex import MyPlexPinLogin
 from plexapi.server import PlexServer
 from plexapi import BASE_HEADERS
@@ -204,9 +205,6 @@ class PlexService:
             library = server.library.section(library_name)
             movies = library.search(libtype='movie', includeGuids=True)
 
-            base_url = server._baseurl
-            token = self._active_server['token']
-
             movie_data = []
             tmdb_ids = []
 
@@ -230,7 +228,7 @@ class PlexService:
 
                 poster_url = None
                 if movie.thumb:
-                    poster_url = f"{base_url}{movie.thumb}?X-Plex-Token={token}"
+                    poster_url = f"/api/libraries/image-proxy?source=plex&thumb={quote(movie.thumb, safe='')}"
 
                 movie_data.append({
                     'name': movie.title,

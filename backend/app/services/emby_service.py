@@ -189,7 +189,7 @@ class EmbyService:
 
                 poster_url = None
                 if item.get('ImageTags', {}).get('Primary'):
-                    poster_url = f"{self._base()}/Items/{item['Id']}/Images/Primary?api_key={self._api_key}&maxHeight=300"
+                    poster_url = f"/api/libraries/image-proxy?source=emby&itemId={item['Id']}"
 
                 year = item.get('ProductionYear')
 
