@@ -12,7 +12,7 @@ class PlexService:
     def __init__(self):
         self._pin: MyPlexPinLogin | None = None
         self._token: str | None = None
-        self._resources: dict = {}          # server_name -> raw JSON from plex.tv
+        self._resources: dict = {}          # server_name -> connection info for dropdown
         self._server_conn: PlexServer | None = None
         self._server_conn_name: str | None = None
         self._active_server: dict | None = None
@@ -77,14 +77,12 @@ class PlexService:
             resources = [r for r in account.resources()
                          if r.owned and r.connections and 'server' in r.provides]
             servers = [r.name for r in resources]
-            # Keep raw resources for fallback
+            # Store connection info for the connection URL dropdown
             self._resources = {}
             for r in resources:
                 self._resources[r.name] = {
-                    'name': r.name,
-                    'accessToken': r.accessToken,
                     'connections': [
-                        {'uri': c.uri, 'local': c.local, 'address': c.address, 'port': c.port}
+                        {'uri': c.uri, 'local': c.local}
                         for c in r.connections
                     ],
                 }
@@ -126,46 +124,20 @@ class PlexService:
         return None
 
     def get_connections(self, server_name: str) -> list[dict]:
-        """Return available connection URLs for a server."""
+        """Return available connection URLs for a server from the cached resources."""
         connections = []
+        resource = self._resources.get(server_name)
+        if not resource:
+            return connections
         seen = set()
-
-        # Try from MyPlexAccount resources
-        if self._token:
-            try:
-                account = MyPlexAccount(token=self._token)
-                resources = [r for r in account.resources() if r.owned and r.name == server_name]
-                if resources:
-                    for conn in resources[0].connections:
-                        url = conn.httpuri if hasattr(conn, 'httpuri') else conn.uri
-                        if not url or url in seen:
-                            continue
-                        seen.add(url)
-                        is_local = conn.local
-                        label = f"{'Local' if is_local else 'Remote'}: {url}"
-                        connections.append({'url': url, 'local': is_local, 'label': label})
-                        # Also offer direct HTTP for local connections
-                        if is_local and conn.address and conn.port:
-                            direct_url = f"http://{conn.address}:{conn.port}"
-                            if direct_url not in seen:
-                                seen.add(direct_url)
-                                connections.append({'url': direct_url, 'local': True, 'label': f"Local (direct): {direct_url}"})
-            except Exception as e:
-                logger.warning("Failed to get connections from MyPlexAccount: %s", e)
-
-        # Fallback to raw resources cache
-        if not connections:
-            resource = self._resources.get(server_name)
-            if resource:
-                for conn in resource.get('connections', []):
-                    url = conn.get('uri', '')
-                    if not url or url in seen:
-                        continue
-                    seen.add(url)
-                    is_local = conn.get('local', False)
-                    label = f"{'Local' if is_local else 'Remote'}: {url}"
-                    connections.append({'url': url, 'local': is_local, 'label': label})
-
+        for conn in resource.get('connections', []):
+            url = conn.get('uri', '')
+            if not url or url in seen:
+                continue
+            seen.add(url)
+            is_local = conn.get('local', False)
+            label = f"{'Local' if is_local else 'Remote'}: {url}"
+            connections.append({'url': url, 'local': is_local, 'label': label})
         return connections
 
     # -- Connection testing --
@@ -214,17 +186,12 @@ class PlexService:
     def fetch_libraries(self, server_name: str, connection_url: str | None = None) -> tuple[list | None, str | None, str | None]:
         server = None
 
-        # If a specific connection URL was chosen, try that first
-        if connection_url:
-            token = self._token
-            if self._active_server:
-                token = self._active_server.get('token', self._token)
-            # Also check resource accessToken
-            resource = self._resources.get(server_name)
-            if resource:
-                token = resource.get('accessToken', token)
+        # If a specific connection URL was chosen, connect via that URL
+        if connection_url and self._token:
             try:
-                server = PlexServer(connection_url, token, timeout=5)
+                account = MyPlexAccount(token=self._token)
+                resource = account.resource(server_name)
+                server = resource.connect(url=connection_url, timeout=10)
                 self._server_conn = server
                 self._server_conn_name = server_name
                 logger.info("Connected to '%s' via selected URL %s", server_name, connection_url)
@@ -236,19 +203,10 @@ class PlexService:
             server = self._get_server(server_name)
 
         if server is None:
-            # Fall back to stored libraries if the server can't be reached right now
-            stored_libs = None
+            # Fall back to stored libraries if the server can't be reached
             if self._active_server and self._active_server.get('libraries'):
-                stored_libs = self._active_server['libraries']
-            # Also check _resources for the server name in case active_server was cleared
-            if not stored_libs:
-                resource = self._resources.get(server_name)
-                if resource:
-                    logger.info("Server '%s' found in resources but unreachable — saving with empty libraries", server_name)
-                    return [], self._token, None
-            if stored_libs:
                 logger.info("Using stored libraries for '%s' (server unreachable)", server_name)
-                return stored_libs, self._token, None
+                return self._active_server['libraries'], self._token, None
             return None, None, 'Server not found'
 
         libraries = [
