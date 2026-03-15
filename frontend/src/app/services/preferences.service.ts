@@ -10,6 +10,8 @@ export interface UserPreferences {
   language: string;
   port: number;
   autoOpenBrowser: boolean;
+  posterPrefetch: boolean;
+  imageCacheEnabled: boolean;
 }
 
 @Injectable({

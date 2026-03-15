@@ -10,6 +10,8 @@ DEFAULTS = {
     'language': 'en',
     'port': 5000,
     'autoOpenBrowser': True,
+    'posterPrefetch': False,
+    'imageCacheEnabled': False,
 }
 
 

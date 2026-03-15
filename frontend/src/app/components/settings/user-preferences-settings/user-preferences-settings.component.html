@@ -57,6 +57,26 @@
       </label>
     </div>
 
+    <!-- Poster Prefetch -->
+    <div class="pref-card mb-3">
+      <h5>Poster Prefetch</h5>
+      <p class="text-muted small">Preload posters for the next page in the background so they display instantly when you navigate.</p>
+      <label class="toggle-label">
+        <input type="checkbox" [(ngModel)]="prefs.posterPrefetch">
+        <span class="ms-2">{{ prefs.posterPrefetch ? 'Enabled' : 'Disabled' }}</span>
+      </label>
+    </div>
+
+    <!-- Server Image Cache -->
+    <div class="pref-card mb-3">
+      <h5>Server Image Cache</h5>
+      <p class="text-muted small">Cache poster images on the server to reduce requests to your media server. Uses up to ~10 MB of memory.</p>
+      <label class="toggle-label">
+        <input type="checkbox" [(ngModel)]="prefs.imageCacheEnabled">
+        <span class="ms-2">{{ prefs.imageCacheEnabled ? 'Enabled' : 'Disabled' }}</span>
+      </label>
+    </div>
+
     <!-- Save Button -->
     <div class="mt-4">
       <button class="btn btn-success" (click)="save()" [disabled]="saving">

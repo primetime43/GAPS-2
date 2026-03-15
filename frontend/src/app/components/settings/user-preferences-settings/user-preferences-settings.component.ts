@@ -21,6 +21,8 @@ export class UserPreferencesSettingsComponent implements OnInit {
     language: 'en',
     port: 5000,
     autoOpenBrowser: true,
+    posterPrefetch: false,
+    imageCacheEnabled: false,
   };
 
   libraries: MediaLibrary[] = [];

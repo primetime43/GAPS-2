@@ -33,6 +33,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   moviesPerPage = 50;
   currentPage = 1;
   searchFilter = '';
+  posterPrefetch = false;
 
   get filteredMovies(): Movie[] {
     const query = this.movieFilter.trim().toLowerCase();
@@ -99,6 +100,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
       if (prefs) {
         this.moviesPerPage = prefs.moviesPerPage || 50;
         this.showOwned = !prefs.hideOwnedByDefault;
+        this.posterPrefetch = prefs.posterPrefetch || false;
       }
 
       // Check all three media servers in parallel
@@ -161,6 +163,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
       next: (res: any) => {
         this.movies = Array.isArray(res) ? res : (res.movies || []);
         this.loadingMovies = false;
+        this.prefetchNextPage();
       },
       error: () => {
         this.errorMessage = 'Failed to load movies from library.';
@@ -371,6 +374,25 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     this.filteredGroups = [];
     this.searchFilter = '';
     this.errorMessage = '';
+  }
+
+  onPageChange(delta: number): void {
+    this.currentPage += delta;
+    this.prefetchNextPage();
+  }
+
+  prefetchNextPage(): void {
+    if (!this.posterPrefetch) return;
+    const nextPage = this.currentPage + 1;
+    if (nextPage > this.totalPages) return;
+    const start = (nextPage - 1) * this.moviesPerPage;
+    const nextMovies = this.filteredMovies.slice(start, start + this.moviesPerPage);
+    for (const movie of nextMovies) {
+      if (movie.posterUrl) {
+        const img = new Image();
+        img.src = movie.posterUrl;
+      }
+    }
   }
 
   applyFilter(): void {
