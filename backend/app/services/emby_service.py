@@ -102,6 +102,33 @@ class EmbyService:
         except Exception as e:
             return None, str(e)
 
+    def test_active_connection(self) -> tuple[bool, str | None]:
+        """Test if the active server is reachable."""
+        if not self._server_url or not self._api_key:
+            return False, 'Not connected'
+        return self.test_connection(self._server_url, self._api_key)
+
+    def refresh_connection(self) -> tuple[bool, str | None, list | None]:
+        """Re-test connection and refresh libraries."""
+        if not self._server_url or not self._api_key:
+            return False, 'Not connected', None
+        ok, server_name = self.test_connection(self._server_url, self._api_key)
+        if not ok:
+            return False, 'Could not reach server', None
+        self._movies_cache = {}
+        libs, err = self.fetch_libraries()
+        if err:
+            return False, err, None
+        if self._active_server:
+            self._active_server['libraries'] = libs
+            config_store.put('emby', {
+                'server_url': self._server_url,
+                'api_key': self._api_key,
+                'user_id': self._user_id,
+                'active_server': self._active_server,
+            })
+        return True, None, libs
+
     # -- Active Server --
 
     def save_active_server(self, server_url: str, api_key: str, server_name: str, libraries: list | None = None) -> None:

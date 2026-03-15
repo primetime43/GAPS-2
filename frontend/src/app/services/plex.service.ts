@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../environments/environment';
-import { PlexAuthResponse, PlexServersResponse, ActiveServerResponse, PlexLibrary } from '../models/plex.model';
+import { PlexAuthResponse, PlexServersResponse, ActiveServerResponse, PlexLibrary, PlexConnection } from '../models/plex.model';
 import { ApiResult } from '../models/api-response.model';
 
 @Injectable({
@@ -30,10 +30,12 @@ export class PlexService {
     return this.http.post<PlexServersResponse>(`${environment.apiUrl}/plex/fetch-servers`, {});
   }
 
-  fetchLibraries(serverName: string): Observable<{ libraries: PlexLibrary[], token: string }> {
-    return this.http.get<{ libraries: PlexLibrary[], token: string }>(
-      `${environment.apiUrl}/plex/libraries/${encodeURIComponent(serverName)}`
-    );
+  fetchLibraries(serverName: string, connectionUrl?: string): Observable<{ libraries: PlexLibrary[], token: string, connections: PlexConnection[] }> {
+    let url = `${environment.apiUrl}/plex/libraries/${encodeURIComponent(serverName)}`;
+    if (connectionUrl) {
+      url += `?connectionUrl=${encodeURIComponent(connectionUrl)}`;
+    }
+    return this.http.get<{ libraries: PlexLibrary[], token: string, connections: PlexConnection[] }>(url);
   }
 
   saveData(server: string, token: string, libraries: PlexLibrary[], serverUrl?: string): Observable<ApiResult> {
@@ -51,5 +53,17 @@ export class PlexService {
 
   removeServer(): Observable<ApiResult> {
     return this.http.delete<ApiResult>(`${environment.apiUrl}/plex/active-server`);
+  }
+
+  testConnection(): Observable<{ connected: boolean; serverName?: string; error?: string }> {
+    return this.http.post<{ connected: boolean; serverName?: string; error?: string }>(
+      `${environment.apiUrl}/plex/test-active`, {}
+    );
+  }
+
+  refreshConnection(): Observable<{ connected: boolean; libraries?: any[]; error?: string }> {
+    return this.http.post<{ connected: boolean; libraries?: any[]; error?: string }>(
+      `${environment.apiUrl}/plex/refresh`, {}
+    );
   }
 }

@@ -38,4 +38,16 @@ export class EmbyService {
   removeServer(): Observable<ApiResult> {
     return this.http.delete<ApiResult>(`${environment.apiUrl}/emby/active-server`);
   }
+
+  testConnection(): Observable<{ connected: boolean; serverName?: string; error?: string }> {
+    return this.http.post<{ connected: boolean; serverName?: string; error?: string }>(
+      `${environment.apiUrl}/emby/test-active`, {}
+    );
+  }
+
+  refreshConnection(): Observable<{ connected: boolean; libraries?: any[]; error?: string }> {
+    return this.http.post<{ connected: boolean; libraries?: any[]; error?: string }>(
+      `${environment.apiUrl}/emby/refresh`, {}
+    );
+  }
 }

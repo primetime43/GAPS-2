@@ -80,7 +80,10 @@
     </div>
 
     <!-- Error -->
-    <div *ngIf="errorMessage" class="alert alert-danger mt-3">{{ errorMessage }}</div>
+    <div *ngIf="errorMessage" class="alert alert-danger mt-3">
+      {{ errorMessage }}
+      <a *ngIf="errorMessage.includes('Settings')" [routerLink]="['/settings']" class="alert-link ms-1">Go to Settings</a>
+    </div>
 
     <!-- Movie picker (when library loaded, no scan/movie selected) -->
     <div *ngIf="!loadingMovies && movies.length > 0 && !scanMode && !selectedMovie && !loadingGaps">
@@ -171,6 +174,15 @@
           Collection for: {{ selectedMovie.name }} ({{ selectedMovie.year }})
         </h5>
         <div class="d-flex ms-auto gap-3">
+          <div class="dropdown">
+            <button class="btn btn-sm btn-outline-info dropdown-toggle" type="button" data-bs-toggle="dropdown">
+              Export
+            </button>
+            <ul class="dropdown-menu dropdown-menu-dark dropdown-menu-end">
+              <li><a class="dropdown-item" (click)="exportResults('csv')">Export as CSV</a></li>
+              <li><a class="dropdown-item" (click)="exportResults('xlsx')">Export as Excel</a></li>
+            </ul>
+          </div>
           <div class="form-check" *ngIf="missingCount > 0">
             <input
               class="form-check-input"

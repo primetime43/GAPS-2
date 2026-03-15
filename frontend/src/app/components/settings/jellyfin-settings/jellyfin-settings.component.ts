@@ -23,6 +23,8 @@ export class JellyfinSettingsComponent implements OnInit {
   statusMessage = '';
   statusType: 'success' | 'error' | '' = '';
   apiKeyVisible = false;
+  testing = false;
+  refreshing = false;
 
   constructor(private jellyfinService: JellyfinService) {}
 
@@ -66,6 +68,33 @@ export class JellyfinSettingsComponent implements OnInit {
         this.step = 'connected';
       }
     });
+  }
+
+  testConnection(): void {
+    this.testing = true;
+    this.clearMessage();
+    this.jellyfinService.testConnection().subscribe({
+      next: (res) => {
+        this.testing = false;
+        if (res.connected) {
+          this.showMessage('Connection successful!', 'success');
+        } else {
+          this.showMessage(res.error || 'Connection failed.', 'error');
+        }
+      },
+      error: () => {
+        this.testing = false;
+        this.showMessage('Connection test failed.', 'error');
+      }
+    });
+  }
+
+  refreshConnection(): void {
+    this.clearMessage();
+    this.hasActiveServer = false;
+    this.serverExpanded = false;
+    this.step = 'idle';
+    this.showMessage('Please re-enter your credentials to reconnect.', 'success');
   }
 
   disconnect(): void {

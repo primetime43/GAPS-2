@@ -11,6 +11,7 @@ import { Movie } from '../../models/movie.model';
 import { CollectionGap } from '../../models/recommendation.model';
 import { ActiveServerResponse, MediaLibrary } from '../../models/media-server.model';
 import { PreferencesService } from '../../services/preferences.service';
+import { ExportService, ExportFormat } from '../../services/export.service';
 
 interface CollectionGroup {
   name: string;
@@ -87,6 +88,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     private libraryService: LibraryService,
     private recommendationService: RecommendationService,
     private preferencesService: PreferencesService,
+    private exportService: ExportService,
   ) {}
 
   ngOnInit(): void {
@@ -161,12 +163,17 @@ export class RecommendedComponent implements OnInit, OnDestroy {
 
     this.libraryService.getMovies(this.selectedLibrary, this.activeSource).subscribe({
       next: (res: any) => {
+        if (res.error) {
+          this.errorMessage = this.friendlyError(res.error);
+          this.loadingMovies = false;
+          return;
+        }
         this.movies = Array.isArray(res) ? res : (res.movies || []);
         this.loadingMovies = false;
         this.prefetchNextPage();
       },
-      error: () => {
-        this.errorMessage = 'Failed to load movies from library.';
+      error: (err) => {
+        this.errorMessage = this.friendlyError(err.error?.error || 'Failed to load movies from library.');
         this.loadingMovies = false;
       }
     });
@@ -374,6 +381,25 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     this.filteredGroups = [];
     this.searchFilter = '';
     this.errorMessage = '';
+  }
+
+  exportResults(format: ExportFormat): void {
+    const gaps = this.filteredGroups.flatMap(g => g.gaps);
+    this.exportService.exportGaps(gaps, format);
+  }
+
+  private friendlyError(msg: string): string {
+    const lower = msg.toLowerCase();
+    if (lower.includes('server not found') || lower.includes('no active server')) {
+      return `${msg}. Your media server session may have expired — try reconnecting in Settings.`;
+    }
+    if (lower.includes('not connected')) {
+      return `${msg}. Your media server is not connected — check your configuration in Settings.`;
+    }
+    if (lower.includes('invalid token') || lower.includes('unauthorized')) {
+      return `${msg}. Your authentication token may have expired — try logging in again in Settings.`;
+    }
+    return msg;
   }
 
   onPageChange(delta: number): void {

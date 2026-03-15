@@ -1,6 +1,6 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
 import { PlexService } from '../../../services/plex.service';
-import { PlexLibrary } from '../../../models/plex.model';
+import { PlexLibrary, PlexConnection } from '../../../models/plex.model';
 
 @Component({
     selector: 'app-plex-settings',
@@ -28,12 +28,19 @@ export class PlexSettingsComponent implements OnInit, OnDestroy {
   manualServerName = '';
   connectionMode: 'choose' | 'oauth' | 'manual' = 'choose';
 
+  // Connection URLs
+  connections: PlexConnection[] = [];
+  selectedConnectionUrl = '';
+  serverConnections: { [name: string]: PlexConnection[] } = {};
+
   // UI state
   step: 'idle' | 'authenticating' | 'waiting' | 'fetching' | 'selecting' | 'saving' | 'manual-connecting' | 'manual-connected' = 'idle';
   tokenVisible = false;
   statusMessage = '';
   statusType: 'success' | 'error' | '' = '';
 
+  testing = false;
+  refreshing = false;
   private pollTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(private plexService: PlexService) {}
@@ -68,14 +75,15 @@ export class PlexSettingsComponent implements OnInit, OnDestroy {
     this.step = 'fetching';
     this.clearMessage();
     this.plexService.fetchServers().subscribe({
-      next: (res) => {
+      next: (res: any) => {
         this.servers = res.servers || [];
         this.plexToken = res.token || '';
+        this.serverConnections = res.serverConnections || {};
         if (this.servers.length > 0) {
           this.step = 'selecting';
           if (this.servers.length === 1) {
             this.selectedServer = this.servers[0];
-            this.onServerSelect();
+            this.connections = this.serverConnections[this.selectedServer] || [];
           }
         } else {
           this.showMessage('No servers found. Please try authenticating again.', 'error');
@@ -91,9 +99,16 @@ export class PlexSettingsComponent implements OnInit, OnDestroy {
 
   onServerSelect(): void {
     if (!this.selectedServer) return;
-    this.step = 'fetching';
     this.libraries = [];
-    this.plexService.fetchLibraries(this.selectedServer).subscribe({
+    this.connections = this.serverConnections[this.selectedServer] || [];
+    this.selectedConnectionUrl = '';
+    this.clearMessage();
+  }
+
+  connectToServer(): void {
+    this.step = 'fetching';
+    this.clearMessage();
+    this.plexService.fetchLibraries(this.selectedServer, this.selectedConnectionUrl || undefined).subscribe({
       next: (res) => {
         if (res.libraries && Array.isArray(res.libraries)) {
           this.libraries = res.libraries;
@@ -101,10 +116,12 @@ export class PlexSettingsComponent implements OnInit, OnDestroy {
         if (res.token) {
           this.plexToken = res.token;
         }
+        this.showMessage('Connected!', 'success');
         this.step = 'selecting';
       },
-      error: () => {
-        this.showMessage('Failed to fetch libraries.', 'error');
+      error: (err) => {
+        const msg = err.error?.error || 'Failed to connect.';
+        this.showMessage(msg, 'error');
         this.step = 'selecting';
       }
     });
@@ -158,7 +175,7 @@ export class PlexSettingsComponent implements OnInit, OnDestroy {
     if (!this.selectedServer || !this.plexToken) return;
     this.step = 'saving';
     this.clearMessage();
-    this.plexService.saveData(this.selectedServer, this.plexToken, this.libraries).subscribe({
+    this.plexService.saveData(this.selectedServer, this.plexToken, this.libraries, this.selectedConnectionUrl || undefined).subscribe({
       next: () => {
         this.showMessage('Server saved successfully!', 'success');
         this.step = 'idle';
@@ -172,6 +189,35 @@ export class PlexSettingsComponent implements OnInit, OnDestroy {
         this.step = 'selecting';
       }
     });
+  }
+
+  testConnection(): void {
+    this.testing = true;
+    this.clearMessage();
+    this.plexService.testConnection().subscribe({
+      next: (res) => {
+        this.testing = false;
+        if (res.connected) {
+          this.showMessage('Connection successful!', 'success');
+        } else {
+          this.showMessage(res.error || 'Connection failed.', 'error');
+        }
+      },
+      error: () => {
+        this.testing = false;
+        this.showMessage('Connection test failed.', 'error');
+      }
+    });
+  }
+
+  refreshConnection(): void {
+    // Clear current state and re-enter the setup flow so the user can re-authenticate
+    this.clearMessage();
+    this.serverExpanded = false;
+    this.hasActiveServer = false;
+    this.connectionMode = 'choose';
+    this.step = 'idle';
+    this.showMessage('Please sign in again to refresh your connection.', 'success');
   }
 
   disconnect(): void {
@@ -224,22 +270,28 @@ export class PlexSettingsComponent implements OnInit, OnDestroy {
 
   private startPolling(): void {
     this.stopPolling();
-    this.pollTimer = setInterval(() => {
+    const poll = () => {
       this.plexService.checkLogin().subscribe({
         next: (res) => {
           if (res.authenticated) {
             this.stopPolling();
             this.fetchServers();
+          } else {
+            // Only schedule next poll after current one completes
+            this.pollTimer = setTimeout(poll, 500);
           }
         },
-        error: () => {}
+        error: () => {
+          this.pollTimer = setTimeout(poll, 1000);
+        }
       });
-    }, 2000);
+    };
+    poll();
   }
 
   private stopPolling(): void {
     if (this.pollTimer) {
-      clearInterval(this.pollTimer);
+      clearTimeout(this.pollTimer);
       this.pollTimer = null;
     }
   }
