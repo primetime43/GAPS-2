@@ -61,6 +61,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   showIgnored = false;
   selectedMovie: Movie | null = null;
   scanMode = false;
+  crossCheckLibraries: string[] = [];
 
   // Media server source
   activeSource: 'plex' | 'jellyfin' | 'emby' = 'plex';
@@ -286,14 +287,39 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     this.loadingGaps = true;
     this.allGaps = [];
     this.collectionGroups = [];
+    this.crossCheckLibraries = [];
     this.errorMessage = '';
+
+    this.fetchGapsForSelectedMovie();
+  }
+
+  toggleCrossCheckLibrary(libTitle: string): void {
+    const idx = this.crossCheckLibraries.indexOf(libTitle);
+    if (idx >= 0) {
+      this.crossCheckLibraries.splice(idx, 1);
+    } else {
+      this.crossCheckLibraries.push(libTitle);
+      // Pre-load movies for that library so the backend has them cached
+      this.libraryService.getMovies(libTitle, this.activeSource).subscribe();
+    }
+  }
+
+  recheckWithLibraries(): void {
+    this.loadingGaps = true;
+    this.errorMessage = '';
+    this.fetchGapsForSelectedMovie();
+  }
+
+  private fetchGapsForSelectedMovie(): void {
+    if (!this.selectedMovie) return;
 
     // Always fetch with showExisting=true; backend uses fallback chain for ID resolution
     this.recommendationService.getGapsForMovie(
-      movie,
+      this.selectedMovie,
       this.selectedLibrary,
       true,
-      this.activeSource
+      this.activeSource,
+      this.crossCheckLibraries
     ).subscribe({
       next: (gaps) => {
         this.allGaps = gaps;

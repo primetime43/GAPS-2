@@ -210,6 +210,38 @@
         </div>
       </div>
 
+      <!-- Cross-check other libraries -->
+      <div *ngIf="selectedMovie && libraries.length > 1" class="pref-card mb-3 p-3">
+        <div class="d-flex align-items-center justify-content-between">
+          <div>
+            <strong class="text-muted">Check ownership across other libraries</strong>
+            <p class="text-muted small mb-2">Mark movies as owned if they exist in any of the selected libraries.</p>
+            <div class="d-flex flex-wrap gap-2">
+              <div *ngFor="let lib of libraries" class="form-check form-check-inline mb-0">
+                <input
+                  class="form-check-input"
+                  type="checkbox"
+                  [id]="'cross-' + lib.title"
+                  [checked]="lib.title === selectedLibrary || crossCheckLibraries.includes(lib.title)"
+                  [disabled]="lib.title === selectedLibrary"
+                  (change)="toggleCrossCheckLibrary(lib.title)"
+                >
+                <label class="form-check-label text-muted" [for]="'cross-' + lib.title">
+                  {{ lib.title }}
+                </label>
+              </div>
+            </div>
+          </div>
+          <button
+            *ngIf="crossCheckLibraries.length > 0"
+            class="btn btn-sm btn-primary"
+            (click)="recheckWithLibraries()"
+            [disabled]="loadingGaps">
+            Re-check
+          </button>
+        </div>
+      </div>
+
       <!-- Search filter -->
       <input
         class="form-control dark-input mb-3"

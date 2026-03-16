@@ -22,6 +22,7 @@ def get_gaps_for_movie():
     title = request.args.get('title', default=None, type=str)
     year = request.args.get('year', default=None, type=int)
     library_name = request.args.get('libraryName', default='', type=str)
+    library_names = request.args.getlist('libraryNames')
     source = request.args.get('source', default='plex', type=str)
     show_existing = request.args.get('showExisting', 'false').lower() == 'true'
 
@@ -33,8 +34,12 @@ def get_gaps_for_movie():
         return jsonify(error='No TMDB API key configured'), 400
 
     cache = _get_movies_cache(source)
-    library_data = cache.get(library_name, {})
-    owned_ids = set(library_data.get('tmdbIds', []))
+    # Merge owned IDs from all specified libraries
+    names = library_names if library_names else ([library_name] if library_name else [])
+    owned_ids = set()
+    for name in names:
+        library_data = cache.get(name, {})
+        owned_ids.update(library_data.get('tmdbIds', []))
 
     gaps, error = current_app.tmdb_service.find_gaps_for_movie(
         api_key=api_key,
