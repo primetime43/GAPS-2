@@ -25,6 +25,12 @@
         </div>
       </div>
       <div class="active-server-actions mt-3">
+        <button class="btn btn-sm btn-outline-info" (click)="testConnection(); $event.stopPropagation()" [disabled]="testing || refreshing">
+          {{ testing ? 'Testing...' : 'Test Connection' }}
+        </button>
+        <button class="btn btn-sm btn-outline-primary" (click)="refreshConnection(); $event.stopPropagation()" [disabled]="testing">
+          Reconnect
+        </button>
         <button class="btn btn-sm btn-outline-secondary" (click)="disconnect(); $event.stopPropagation()">Change Server</button>
         <button class="btn btn-sm btn-outline-danger" (click)="removeServer(); $event.stopPropagation()">Remove</button>
       </div>

@@ -8,3 +8,9 @@ export interface PlexServersResponse {
   servers: string[];
   token: string;
 }
+
+export interface PlexConnection {
+  url: string;
+  local: boolean;
+  label: string;
+}

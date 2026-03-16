@@ -40,7 +40,12 @@
 
       <!-- Actions -->
       <div class="active-server-actions mt-3">
-        <button class="btn btn-sm btn-outline-secondary" (click)="disconnect(); $event.stopPropagation()">Change Server</button>
+        <button class="btn btn-sm btn-outline-info" (click)="testConnection(); $event.stopPropagation()" [disabled]="testing || refreshing">
+          {{ testing ? 'Testing...' : 'Test Connection' }}
+        </button>
+        <button class="btn btn-sm btn-outline-primary" (click)="refreshConnection(); $event.stopPropagation()" [disabled]="testing">
+          Reconnect
+        </button>
         <button class="btn btn-sm btn-outline-danger" (click)="removeServer(); $event.stopPropagation()">Remove</button>
       </div>
     </div>
@@ -137,6 +142,22 @@
         </select>
       </div>
 
+      <!-- Connection URL -->
+      <div class="mb-3" *ngIf="connections.length > 0">
+        <label class="form-label text-muted">Connection</label>
+        <select class="form-select dark-select" [(ngModel)]="selectedConnectionUrl">
+          <option value="">Auto (try all)</option>
+          <option *ngFor="let conn of connections" [value]="conn.url">{{ conn.label }}</option>
+        </select>
+      </div>
+
+      <!-- Connect button -->
+      <div class="mb-3" *ngIf="selectedServer">
+        <button class="btn btn-primary" (click)="connectToServer()" [disabled]="isLoading">
+          Connect
+        </button>
+      </div>
+
       <!-- Movie libraries found -->
       <div class="libraries-row mb-3" *ngIf="movieLibraries.length > 0">
         <span class="text-muted lib-label">Movie libraries:</span>
@@ -155,10 +176,10 @@
       </div>
 
       <!-- Save -->
-      <button class="btn btn-success" (click)="setAsActive()" [disabled]="!selectedServer || isLoading">
+      <button *ngIf="libraries.length > 0" class="btn btn-success" (click)="setAsActive()" [disabled]="isLoading">
         Save as Active Server
       </button>
-      <button class="btn btn-outline-secondary ms-2" (click)="connectionMode = 'choose'; step = 'idle'">Cancel</button>
+      <button class="btn btn-outline-secondary" [class.ms-2]="libraries.length > 0" (click)="connectionMode = 'choose'; step = 'idle'">Cancel</button>
     </div>
   </div>
 </div>

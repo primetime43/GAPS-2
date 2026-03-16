@@ -33,19 +33,20 @@ def fetch_servers():
     servers, token = current_app.plex_service.fetch_servers()
     if not servers:
         return jsonify({'message': 'User is not authenticated', 'servers': [], 'token': None})
-    return jsonify(servers=servers, token=token)
+    # Include connection URLs for each server so the UI can show them immediately
+    server_connections = {}
+    for name in servers:
+        server_connections[name] = current_app.plex_service.get_connections(name)
+    return jsonify(servers=servers, token=token, serverConnections=server_connections)
 
 
 @plex_bp.route('/libraries/<path:server_name>', methods=['GET'])
 def fetch_libraries(server_name):
     libraries, token, error = current_app.plex_service.fetch_libraries(server_name)
+    connections = current_app.plex_service.get_connections(server_name)
     if error:
-        msg = current_app.config['RESPONSE_MESSAGES'].get(
-            'plex_data_not_found' if 'not found' in error.lower() else 'server_not_found',
-            error,
-        )
-        return jsonify(error=msg), 404
-    return jsonify(libraries=libraries, token=token)
+        return jsonify(error=error, connections=connections), 404
+    return jsonify(libraries=libraries, token=token, connections=connections)
 
 
 @plex_bp.route('/save-data', methods=['POST'])
@@ -60,6 +61,22 @@ def save_data():
     if success:
         return jsonify(result='Success')
     return jsonify(result='Error', error=error)
+
+
+@plex_bp.route('/test-active', methods=['POST'])
+def test_active_connection():
+    ok, server_name = current_app.plex_service.test_active_connection()
+    if ok:
+        return jsonify(connected=True, serverName=server_name)
+    return jsonify(connected=False, error=server_name or 'Connection failed')
+
+
+@plex_bp.route('/refresh', methods=['POST'])
+def refresh_connection():
+    ok, error, libraries = current_app.plex_service.refresh_connection()
+    if ok:
+        return jsonify(connected=True, libraries=libraries)
+    return jsonify(connected=False, error=error or 'Refresh failed')
 
 
 @plex_bp.route('/active-server', methods=['GET'])

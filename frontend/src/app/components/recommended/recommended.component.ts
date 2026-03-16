@@ -11,6 +11,7 @@ import { Movie } from '../../models/movie.model';
 import { CollectionGap } from '../../models/recommendation.model';
 import { ActiveServerResponse, MediaLibrary } from '../../models/media-server.model';
 import { PreferencesService } from '../../services/preferences.service';
+import { ExportService, ExportFormat } from '../../services/export.service';
 
 interface CollectionGroup {
   name: string;
@@ -33,6 +34,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   moviesPerPage = 50;
   currentPage = 1;
   searchFilter = '';
+  posterPrefetch = false;
 
   get filteredMovies(): Movie[] {
     const query = this.movieFilter.trim().toLowerCase();
@@ -59,6 +61,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   showIgnored = false;
   selectedMovie: Movie | null = null;
   scanMode = false;
+  crossCheckLibraries: string[] = [];
 
   // Media server source
   activeSource: 'plex' | 'jellyfin' | 'emby' = 'plex';
@@ -86,6 +89,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     private libraryService: LibraryService,
     private recommendationService: RecommendationService,
     private preferencesService: PreferencesService,
+    private exportService: ExportService,
   ) {}
 
   ngOnInit(): void {
@@ -99,6 +103,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
       if (prefs) {
         this.moviesPerPage = prefs.moviesPerPage || 50;
         this.showOwned = !prefs.hideOwnedByDefault;
+        this.posterPrefetch = prefs.posterPrefetch || false;
       }
 
       // Check all three media servers in parallel
@@ -159,11 +164,17 @@ export class RecommendedComponent implements OnInit, OnDestroy {
 
     this.libraryService.getMovies(this.selectedLibrary, this.activeSource).subscribe({
       next: (res: any) => {
+        if (res.error) {
+          this.errorMessage = this.friendlyError(res.error);
+          this.loadingMovies = false;
+          return;
+        }
         this.movies = Array.isArray(res) ? res : (res.movies || []);
         this.loadingMovies = false;
+        this.prefetchNextPage();
       },
-      error: () => {
-        this.errorMessage = 'Failed to load movies from library.';
+      error: (err) => {
+        this.errorMessage = this.friendlyError(err.error?.error || 'Failed to load movies from library.');
         this.loadingMovies = false;
       }
     });
@@ -276,14 +287,39 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     this.loadingGaps = true;
     this.allGaps = [];
     this.collectionGroups = [];
+    this.crossCheckLibraries = [];
     this.errorMessage = '';
+
+    this.fetchGapsForSelectedMovie();
+  }
+
+  toggleCrossCheckLibrary(libTitle: string): void {
+    const idx = this.crossCheckLibraries.indexOf(libTitle);
+    if (idx >= 0) {
+      this.crossCheckLibraries.splice(idx, 1);
+    } else {
+      this.crossCheckLibraries.push(libTitle);
+      // Pre-load movies for that library so the backend has them cached
+      this.libraryService.getMovies(libTitle, this.activeSource).subscribe();
+    }
+  }
+
+  recheckWithLibraries(): void {
+    this.loadingGaps = true;
+    this.errorMessage = '';
+    this.fetchGapsForSelectedMovie();
+  }
+
+  private fetchGapsForSelectedMovie(): void {
+    if (!this.selectedMovie) return;
 
     // Always fetch with showExisting=true; backend uses fallback chain for ID resolution
     this.recommendationService.getGapsForMovie(
-      movie,
+      this.selectedMovie,
       this.selectedLibrary,
       true,
-      this.activeSource
+      this.activeSource,
+      this.crossCheckLibraries
     ).subscribe({
       next: (gaps) => {
         this.allGaps = gaps;
@@ -371,6 +407,44 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     this.filteredGroups = [];
     this.searchFilter = '';
     this.errorMessage = '';
+  }
+
+  exportResults(format: ExportFormat): void {
+    const gaps = this.filteredGroups.flatMap(g => g.gaps);
+    this.exportService.exportGaps(gaps, format);
+  }
+
+  private friendlyError(msg: string): string {
+    const lower = msg.toLowerCase();
+    if (lower.includes('server not found') || lower.includes('no active server')) {
+      return `${msg}. Your media server session may have expired — try reconnecting in Settings.`;
+    }
+    if (lower.includes('not connected')) {
+      return `${msg}. Your media server is not connected — check your configuration in Settings.`;
+    }
+    if (lower.includes('invalid token') || lower.includes('unauthorized')) {
+      return `${msg}. Your authentication token may have expired — try logging in again in Settings.`;
+    }
+    return msg;
+  }
+
+  onPageChange(delta: number): void {
+    this.currentPage += delta;
+    this.prefetchNextPage();
+  }
+
+  prefetchNextPage(): void {
+    if (!this.posterPrefetch) return;
+    const nextPage = this.currentPage + 1;
+    if (nextPage > this.totalPages) return;
+    const start = (nextPage - 1) * this.moviesPerPage;
+    const nextMovies = this.filteredMovies.slice(start, start + this.moviesPerPage);
+    for (const movie of nextMovies) {
+      if (movie.posterUrl) {
+        const img = new Image();
+        img.src = movie.posterUrl;
+      }
+    }
   }
 
   applyFilter(): void {

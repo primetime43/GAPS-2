@@ -28,12 +28,18 @@ export class RecommendationService {
     movie: Movie,
     libraryName: string,
     showExisting: boolean,
-    source: string = 'plex'
+    source: string = 'plex',
+    additionalLibraries: string[] = []
   ): Observable<CollectionGap[]> {
     let params = new HttpParams()
-      .set('libraryName', libraryName)
       .set('showExisting', showExisting.toString())
       .set('source', source);
+
+    // Send all libraries to check ownership across
+    const allLibs = [libraryName, ...additionalLibraries.filter(l => l !== libraryName)];
+    for (const lib of allLibs) {
+      params = params.append('libraryNames', lib);
+    }
 
     if (movie.tmdbId) {
       params = params.set('movieId', movie.tmdbId.toString());

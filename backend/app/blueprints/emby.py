@@ -53,6 +53,22 @@ def save():
     return jsonify(result='Success')
 
 
+@emby_bp.route('/test-active', methods=['POST'])
+def test_active_connection():
+    ok, server_name = current_app.emby_service.test_active_connection()
+    if ok:
+        return jsonify(connected=True, serverName=server_name)
+    return jsonify(connected=False, error='Could not reach Emby server')
+
+
+@emby_bp.route('/refresh', methods=['POST'])
+def refresh():
+    ok, error, libraries = current_app.emby_service.refresh_connection()
+    if ok:
+        return jsonify(connected=True, libraries=libraries)
+    return jsonify(connected=False, error=error or 'Refresh failed')
+
+
 @emby_bp.route('/active-server', methods=['GET'])
 def get_active_server():
     result = current_app.emby_service.get_active_server()

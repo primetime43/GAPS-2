@@ -1,10 +1,42 @@
 import logging
+import threading
+import time
+from collections import OrderedDict
+
 import requests as http_requests
 from flask import Blueprint, jsonify, request, current_app, Response
 
 logger = logging.getLogger(__name__)
 
 libraries_bp = Blueprint('libraries', __name__)
+
+# ---------- In-memory LRU image cache ----------
+_IMAGE_CACHE_MAX = 200
+_IMAGE_CACHE_TTL = 3600  # 1 hour
+
+_image_cache: OrderedDict[str, tuple[bytes, str, float]] = OrderedDict()
+_image_cache_lock = threading.Lock()
+
+
+def _cache_get(key: str) -> tuple[bytes, str] | None:
+    with _image_cache_lock:
+        entry = _image_cache.get(key)
+        if entry is None:
+            return None
+        data, content_type, ts = entry
+        if time.time() - ts > _IMAGE_CACHE_TTL:
+            _image_cache.pop(key, None)
+            return None
+        _image_cache.move_to_end(key)
+        return data, content_type
+
+
+def _cache_put(key: str, data: bytes, content_type: str) -> None:
+    with _image_cache_lock:
+        _image_cache[key] = (data, content_type, time.time())
+        _image_cache.move_to_end(key)
+        while len(_image_cache) > _IMAGE_CACHE_MAX:
+            _image_cache.popitem(last=False)
 
 
 def _get_service(source: str):
@@ -42,6 +74,22 @@ def image_proxy():
     if not source or (not item_id and not thumb):
         return jsonify(error='Missing parameters'), 400
 
+    # Check if server-side image cache is enabled
+    from app.services import config_store
+    prefs = config_store.get('preferences', {})
+    use_cache = prefs.get('imageCacheEnabled', False)
+
+    cache_key = f"{source}:{item_id or thumb}"
+
+    if use_cache:
+        cached = _cache_get(cache_key)
+        if cached:
+            return Response(
+                cached[0],
+                content_type=cached[1],
+                headers={'Cache-Control': 'public, max-age=86400'},
+            )
+
     try:
         if source == 'plex':
             service = current_app.plex_service
@@ -73,8 +121,13 @@ def image_proxy():
             return Response('Image not found', status=404)
 
         content_type = resp.headers.get('Content-Type', 'image/jpeg')
+        image_data = resp.content
+
+        if use_cache:
+            _cache_put(cache_key, image_data, content_type)
+
         return Response(
-            resp.content,
+            image_data,
             content_type=content_type,
             headers={'Cache-Control': 'public, max-age=86400'},
         )

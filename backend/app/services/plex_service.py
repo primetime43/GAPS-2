@@ -1,21 +1,18 @@
 import logging
 from urllib.parse import quote
-from plexapi.myplex import MyPlexPinLogin
+from plexapi.myplex import MyPlexPinLogin, MyPlexAccount
 from plexapi.server import PlexServer
-from plexapi import BASE_HEADERS
-import requests
 from app.services import config_store
 
 logger = logging.getLogger(__name__)
 
 
 class PlexService:
-    RESOURCES_URL = 'https://plex.tv/api/v2/resources?includeHttps=1&includeRelay=1'
 
     def __init__(self):
         self._pin: MyPlexPinLogin | None = None
         self._token: str | None = None
-        self._resources: dict = {}          # server_name -> raw JSON from plex.tv
+        self._resources: dict = {}          # server_name -> connection info for dropdown
         self._server_conn: PlexServer | None = None
         self._server_conn_name: str | None = None
         self._active_server: dict | None = None
@@ -60,13 +57,6 @@ class PlexService:
 
     # -- Servers --
 
-    def _fetch_resources(self) -> list[dict]:
-        """Fetch resources JSON directly from Plex.tv (single API call)."""
-        headers = {**BASE_HEADERS, 'Accept': 'application/json', 'X-Plex-Token': self._token}
-        resp = requests.get(self.RESOURCES_URL, headers=headers, timeout=10)
-        resp.raise_for_status()
-        return resp.json()
-
     def fetch_servers(self) -> tuple[list[str], str | None]:
         # Get token from OAuth pin or persisted state
         if self._pin and self._pin.token:
@@ -74,17 +64,32 @@ class PlexService:
         if not self._token:
             return [], None
 
-        resources_json = self._fetch_resources()
+        # Clear stale connection so _get_server uses fresh credentials
+        self._server_conn = None
+        self._server_conn_name = None
 
-        self._resources = {}
-        servers = []
-        for r in resources_json:
-            if r.get('owned') and r.get('connections') and 'server' in r.get('provides', ''):
-                name = r['name']
-                servers.append(name)
-                self._resources[name] = r
+        # Update active server token if it exists so _get_server uses the new token
+        if self._active_server:
+            self._active_server['token'] = self._token
 
-        return servers, self._token
+        try:
+            account = MyPlexAccount(token=self._token)
+            resources = [r for r in account.resources()
+                         if r.owned and r.connections and 'server' in r.provides]
+            servers = [r.name for r in resources]
+            # Store connection info for the connection URL dropdown
+            self._resources = {}
+            for r in resources:
+                self._resources[r.name] = {
+                    'connections': [
+                        {'uri': c.uri, 'local': c.local}
+                        for c in r.connections
+                    ],
+                }
+            return servers, self._token
+        except Exception as e:
+            logger.warning("Failed to fetch servers via MyPlexAccount: %s", e)
+            return [], None
 
     # -- Server connection (cached) --
 
@@ -104,55 +109,88 @@ class PlexService:
             except Exception as e:
                 logger.warning("Failed to connect to Plex via stored URL: %s", e)
 
-        resource = self._resources.get(server_name)
-        if resource is None:
-            # Try re-fetching resources if cache is empty
-            if self._token:
-                try:
-                    resources_json = self._fetch_resources()
-                    for r in resources_json:
-                        if r.get('owned') and r.get('name') == server_name:
-                            resource = r
-                            self._resources[server_name] = r
-                            break
-                except Exception as e:
-                    logger.warning("Failed to re-fetch Plex resources: %s", e)
-            if resource is None:
-                return None
-
-        # Connect directly using connection URLs from the JSON.
-        # Try HTTPS connections first, then HTTP. Prioritize local, then remote.
-        token = resource.get('accessToken', self._token)
-        connections = resource.get('connections', [])
-
-        # Sort: local first, then remote; HTTPS preferred
-        def conn_priority(c):
-            is_local = c.get('local', False)
-            is_https = c.get('protocol', '') == 'https'
-            return (not is_local, not is_https)
-
-        connections.sort(key=conn_priority)
-
-        for conn in connections:
-            url = conn.get('uri')
-            if not url:
-                continue
+        # Use MyPlexAccount to connect — lets plexapi handle connection negotiation
+        if self._token:
             try:
-                server = PlexServer(url, token, timeout=5)
+                account = MyPlexAccount(token=self._token)
+                server = account.resource(server_name).connect(timeout=10)
                 self._server_conn = server
                 self._server_conn_name = server_name
+                logger.info("Connected to Plex server '%s' via MyPlexAccount", server_name)
                 return server
             except Exception as e:
-                logger.debug("Plex connection attempt to %s failed: %s", url, e)
-                continue
+                logger.warning("MyPlexAccount connection to '%s' failed: %s", server_name, e)
 
         return None
+
+    def get_connections(self, server_name: str) -> list[dict]:
+        """Return available connection URLs for a server from the cached resources."""
+        connections = []
+        resource = self._resources.get(server_name)
+        if not resource:
+            return connections
+        seen = set()
+        for conn in resource.get('connections', []):
+            url = conn.get('uri', '')
+            if not url or url in seen:
+                continue
+            seen.add(url)
+            is_local = conn.get('local', False)
+            label = f"{'Local' if is_local else 'Remote'}: {url}"
+            connections.append({'url': url, 'local': is_local, 'label': label})
+        return connections
+
+    # -- Connection testing --
+
+    def test_active_connection(self) -> tuple[bool, str | None]:
+        """Test if the active server is reachable."""
+        if not self._active_server:
+            return False, 'No active server'
+        server_name = self._active_server['server']
+        # Clear cached connection to force a fresh attempt
+        self._server_conn = None
+        self._server_conn_name = None
+        server = self._get_server(server_name)
+        if server is None:
+            return False, 'Could not reach server'
+        return True, server_name
+
+    def refresh_connection(self) -> tuple[bool, str | None, list | None]:
+        """Re-establish connection and refresh libraries."""
+        if not self._active_server:
+            return False, 'No active server', None
+        server_name = self._active_server['server']
+        # Clear cached connection
+        self._server_conn = None
+        self._server_conn_name = None
+        self._movies_cache = {}
+        server = self._get_server(server_name)
+        if server is None:
+            return False, 'Could not reach server', None
+        try:
+            libraries = [
+                {'title': section.title, 'type': section.type}
+                for section in server.library.sections()
+            ]
+            self._active_server['libraries'] = libraries
+            config_store.put('plex', {
+                'token': self._token,
+                'active_server': self._active_server,
+            })
+            return True, None, libraries
+        except Exception as e:
+            return False, str(e), None
 
     # -- Libraries --
 
     def fetch_libraries(self, server_name: str) -> tuple[list | None, str | None, str | None]:
         server = self._get_server(server_name)
+
         if server is None:
+            # Fall back to stored libraries if the server can't be reached
+            if self._active_server and self._active_server.get('libraries'):
+                logger.info("Using stored libraries for '%s' (server unreachable)", server_name)
+                return self._active_server['libraries'], self._token, None
             return None, None, 'Server not found'
 
         libraries = [
