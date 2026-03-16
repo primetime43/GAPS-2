@@ -42,8 +42,7 @@ def fetch_servers():
 
 @plex_bp.route('/libraries/<path:server_name>', methods=['GET'])
 def fetch_libraries(server_name):
-    connection_url = request.args.get('connectionUrl', '')
-    libraries, token, error = current_app.plex_service.fetch_libraries(server_name, connection_url or None)
+    libraries, token, error = current_app.plex_service.fetch_libraries(server_name)
     connections = current_app.plex_service.get_connections(server_name)
     if error:
         return jsonify(error=error, connections=connections), 404

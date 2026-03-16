@@ -108,7 +108,7 @@ export class PlexSettingsComponent implements OnInit, OnDestroy {
   connectToServer(): void {
     this.step = 'fetching';
     this.clearMessage();
-    this.plexService.fetchLibraries(this.selectedServer, this.selectedConnectionUrl || undefined).subscribe({
+    this.plexService.fetchLibraries(this.selectedServer).subscribe({
       next: (res) => {
         if (res.libraries && Array.isArray(res.libraries)) {
           this.libraries = res.libraries;

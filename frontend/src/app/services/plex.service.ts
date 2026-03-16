@@ -30,12 +30,10 @@ export class PlexService {
     return this.http.post<PlexServersResponse>(`${environment.apiUrl}/plex/fetch-servers`, {});
   }
 
-  fetchLibraries(serverName: string, connectionUrl?: string): Observable<{ libraries: PlexLibrary[], token: string, connections: PlexConnection[] }> {
-    let url = `${environment.apiUrl}/plex/libraries/${encodeURIComponent(serverName)}`;
-    if (connectionUrl) {
-      url += `?connectionUrl=${encodeURIComponent(connectionUrl)}`;
-    }
-    return this.http.get<{ libraries: PlexLibrary[], token: string, connections: PlexConnection[] }>(url);
+  fetchLibraries(serverName: string): Observable<{ libraries: PlexLibrary[], token: string, connections: PlexConnection[] }> {
+    return this.http.get<{ libraries: PlexLibrary[], token: string, connections: PlexConnection[] }>(
+      `${environment.apiUrl}/plex/libraries/${encodeURIComponent(serverName)}`
+    );
   }
 
   saveData(server: string, token: string, libraries: PlexLibrary[], serverUrl?: string): Observable<ApiResult> {

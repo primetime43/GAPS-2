@@ -46,7 +46,6 @@
         <button class="btn btn-sm btn-outline-primary" (click)="refreshConnection(); $event.stopPropagation()" [disabled]="testing">
           Reconnect
         </button>
-        <button class="btn btn-sm btn-outline-secondary" (click)="disconnect(); $event.stopPropagation()">Change Server</button>
         <button class="btn btn-sm btn-outline-danger" (click)="removeServer(); $event.stopPropagation()">Remove</button>
       </div>
     </div>
@@ -177,10 +176,10 @@
       </div>
 
       <!-- Save -->
-      <button class="btn btn-success" (click)="setAsActive()" [disabled]="!selectedServer || isLoading">
+      <button *ngIf="libraries.length > 0" class="btn btn-success" (click)="setAsActive()" [disabled]="isLoading">
         Save as Active Server
       </button>
-      <button class="btn btn-outline-secondary ms-2" (click)="connectionMode = 'choose'; step = 'idle'">Cancel</button>
+      <button class="btn btn-outline-secondary" [class.ms-2]="libraries.length > 0" (click)="connectionMode = 'choose'; step = 'idle'">Cancel</button>
     </div>
   </div>
 </div>

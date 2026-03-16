@@ -183,24 +183,8 @@ class PlexService:
 
     # -- Libraries --
 
-    def fetch_libraries(self, server_name: str, connection_url: str | None = None) -> tuple[list | None, str | None, str | None]:
-        server = None
-
-        # If a specific connection URL was chosen, connect via that URL
-        if connection_url and self._token:
-            try:
-                account = MyPlexAccount(token=self._token)
-                resource = account.resource(server_name)
-                server = resource.connect(url=connection_url, timeout=10)
-                self._server_conn = server
-                self._server_conn_name = server_name
-                logger.info("Connected to '%s' via selected URL %s", server_name, connection_url)
-            except Exception as e:
-                logger.warning("Failed to connect via selected URL %s: %s", connection_url, e)
-                return None, None, f'Could not connect to {connection_url}: {e}'
-
-        if server is None:
-            server = self._get_server(server_name)
+    def fetch_libraries(self, server_name: str) -> tuple[list | None, str | None, str | None]:
+        server = self._get_server(server_name)
 
         if server is None:
             # Fall back to stored libraries if the server can't be reached
