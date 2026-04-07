@@ -4,14 +4,19 @@ from app.services import config_store
 recommendations_bp = Blueprint('recommendations', __name__)
 
 
+def _get_service(source: str):
+    """Get the appropriate media server service."""
+    if source == 'jellyfin':
+        return current_app.jellyfin_service
+    elif source == 'emby':
+        return current_app.emby_service
+    else:
+        return current_app.plex_service
+
+
 def _get_movies_cache(source: str) -> dict:
     """Get the movies cache from the appropriate media server service."""
-    if source == 'jellyfin':
-        return current_app.jellyfin_service.movies_cache
-    elif source == 'emby':
-        return current_app.emby_service.movies_cache
-    else:
-        return current_app.plex_service.movies_cache
+    return _get_service(source).movies_cache
 
 
 @recommendations_bp.route('/movie', methods=['GET'])
@@ -81,7 +86,17 @@ def scan_library_gaps():
     if tmdb.scan_progress.get('status') == 'scanning':
         return jsonify(error='A scan is already in progress'), 409
 
-    cache = _get_movies_cache(source)
+    service = _get_service(source)
+
+    if fresh_scan:
+        tmdb.clear_cache()
+        # Clear cached movie lists so we re-fetch from the media server
+        service._movies_cache = {}
+        # Re-fetch movies for the selected libraries
+        for name in names:
+            service.get_movies(name)
+
+    cache = service.movies_cache
 
     # Merge movies and IDs from all selected libraries
     owned_movies = []
@@ -99,9 +114,6 @@ def scan_library_gaps():
 
     if not owned_movies:
         return jsonify(error='No movies loaded for the selected libraries. Browse the libraries first to load movie data.'), 400
-
-    if fresh_scan:
-        tmdb.clear_cache()
 
     tmdb.start_scan(
         api_key=api_key,
