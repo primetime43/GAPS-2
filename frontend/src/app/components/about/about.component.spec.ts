@@ -1,21 +1,73 @@
-import { ComponentFixture, TestBed } from '@angular/core/testing';
-
+import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
+import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 import { AboutComponent } from './about.component';
+import { environment } from '../../../environments/environment';
 
 describe('AboutComponent', () => {
   let component: AboutComponent;
   let fixture: ComponentFixture<AboutComponent>;
+  let httpMock: HttpTestingController;
 
-  beforeEach(() => {
-    TestBed.configureTestingModule({
-      declarations: [AboutComponent]
-    });
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      imports: [HttpClientTestingModule],
+      declarations: [AboutComponent],
+    }).compileComponents();
+
     fixture = TestBed.createComponent(AboutComponent);
     component = fixture.componentInstance;
-    fixture.detectChanges();
+    httpMock = TestBed.inject(HttpTestingController);
+  });
+
+  afterEach(() => {
+    httpMock.verify();
   });
 
   it('should create', () => {
     expect(component).toBeTruthy();
   });
+
+  it('should set version from environment', () => {
+    expect(component.version).toEqual(environment.version);
+  });
+
+  it('should start in loading state', () => {
+    expect(component.releasesLoading).toBeTrue();
+    expect(component.releases).toEqual([]);
+  });
+
+  it('should load and parse releases from GitHub API on init', fakeAsync(() => {
+    fixture.detectChanges();
+
+    const req = httpMock.expectOne('https://api.github.com/repos/primetime43/GAPS-2/releases');
+    expect(req.request.method).toBe('GET');
+
+    req.flush([
+      {
+        tag_name: 'v2.1.0',
+        name: 'Release 2.1.0',
+        body: '**New features**',
+        published_at: '2025-01-01T00:00:00Z',
+        html_url: 'https://github.com/primetime43/GAPS-2/releases/tag/v2.1.0',
+      }
+    ]);
+    tick();
+
+    expect(component.releasesLoading).toBeFalse();
+    expect(component.releases.length).toBe(1);
+    expect(component.releases[0].tag_name).toBe('v2.1.0');
+    expect(component.releases[0].bodyHtml).toBeTruthy();
+  }));
+
+  it('should handle GitHub API error gracefully', fakeAsync(() => {
+    fixture.detectChanges();
+
+    const req = httpMock.expectOne('https://api.github.com/repos/primetime43/GAPS-2/releases');
+    req.error(new ProgressEvent('Network error'));
+    tick();
+
+    expect(component.releasesLoading).toBeFalse();
+    expect(component.releasesError).toBe('Could not load releases from GitHub.');
+    expect(component.releases).toEqual([]);
+  }));
 });
