@@ -209,13 +209,23 @@
   padding: 10px;
 }
 
-.rec-title {
+.rec-title,
+.rec-title-link {
   color: #fff;
   font-size: 14px;
   font-weight: 500;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  display: block;
+}
+
+.rec-title-link {
+  text-decoration: none;
+
+  &:hover {
+    color: #00bc8c;
+  }
 }
 
 .rec-year {
