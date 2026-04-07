@@ -12,6 +12,7 @@ export interface UserPreferences {
   autoOpenBrowser: boolean;
   posterPrefetch: boolean;
   imageCacheEnabled: boolean;
+  mediaServerTimeout: number;
 }
 
 @Injectable({

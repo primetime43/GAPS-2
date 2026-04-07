@@ -195,7 +195,9 @@ class EmbyService:
             else:
                 url = f"{self._base()}/Items"
 
-            resp = requests.get(url, headers=self._headers(), params=params, timeout=30)
+            prefs = config_store.get('preferences', {})
+            timeout = prefs.get('mediaServerTimeout', 30)
+            resp = requests.get(url, headers=self._headers(), params=params, timeout=timeout)
             if resp.status_code != 200:
                 return None, f'Failed to fetch movies (HTTP {resp.status_code})'
 

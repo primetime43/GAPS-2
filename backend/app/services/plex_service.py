@@ -40,10 +40,14 @@ class PlexService:
 
     # -- Manual connection --
 
+    def _timeout(self) -> int:
+        prefs = config_store.get('preferences', {})
+        return prefs.get('mediaServerTimeout', 30)
+
     def connect_manual(self, server_url: str, token: str) -> tuple[bool, str | None, list | None, str | None]:
         """Connect directly to a Plex server using URL and token."""
         try:
-            server = PlexServer(server_url, token, timeout=5)
+            server = PlexServer(server_url, token, timeout=self._timeout())
             self._server_conn = server
             self._server_conn_name = server.friendlyName
             self._token = token
@@ -102,7 +106,7 @@ class PlexService:
         if self._active_server and self._active_server.get('serverUrl'):
             token = self._active_server.get('token', self._token)
             try:
-                server = PlexServer(self._active_server['serverUrl'], token, timeout=5)
+                server = PlexServer(self._active_server['serverUrl'], token, timeout=self._timeout())
                 self._server_conn = server
                 self._server_conn_name = server_name
                 return server
@@ -113,7 +117,7 @@ class PlexService:
         if self._token:
             try:
                 account = MyPlexAccount(token=self._token)
-                server = account.resource(server_name).connect(timeout=10)
+                server = account.resource(server_name).connect(timeout=self._timeout())
                 self._server_conn = server
                 self._server_conn_name = server_name
                 logger.info("Connected to Plex server '%s' via MyPlexAccount", server_name)

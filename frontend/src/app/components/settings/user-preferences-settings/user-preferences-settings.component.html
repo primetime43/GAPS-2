@@ -77,6 +77,13 @@
       </label>
     </div>
 
+    <!-- Media Server Timeout -->
+    <div class="pref-card mb-3">
+      <h5>Media Server Timeout</h5>
+      <p class="text-muted small">Timeout in seconds for requests to Plex, Emby, and Jellyfin. Increase for large libraries (3000+ movies).</p>
+      <input type="number" class="form-control dark-input" [(ngModel)]="prefs.mediaServerTimeout" min="10" max="300">
+    </div>
+
     <!-- Save Button -->
     <div class="mt-4 mb-4">
       <button class="btn btn-success" (click)="save()" [disabled]="saving">
