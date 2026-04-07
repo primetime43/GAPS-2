@@ -12,6 +12,7 @@ DEFAULTS = {
     'autoOpenBrowser': True,
     'posterPrefetch': False,
     'imageCacheEnabled': False,
+    'mediaServerTimeout': 30,
 }
 
 

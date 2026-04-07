@@ -23,6 +23,7 @@ export class UserPreferencesSettingsComponent implements OnInit {
     autoOpenBrowser: true,
     posterPrefetch: false,
     imageCacheEnabled: false,
+    mediaServerTimeout: 30,
   };
 
   libraries: MediaLibrary[] = [];

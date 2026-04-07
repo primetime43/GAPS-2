@@ -281,16 +281,31 @@
               (click)="toggleIgnore(gap, $event)">
               {{ isIgnored(gap) ? '&#10003;' : '&#10005;' }}
             </button>
-            <img
-              *ngIf="gap.posterUrl"
-              [src]="gap.posterUrl"
-              [alt]="gap.name"
-              class="rec-poster"
-              loading="lazy"
-            >
-            <div *ngIf="!gap.posterUrl" class="rec-poster-placeholder">No Image</div>
+            <a *ngIf="gap.tmdbId" [href]="'https://www.themoviedb.org/movie/' + gap.tmdbId" target="_blank" rel="noopener noreferrer">
+              <img
+                *ngIf="gap.posterUrl"
+                [src]="gap.posterUrl"
+                [alt]="gap.name"
+                class="rec-poster"
+                loading="lazy"
+              >
+              <div *ngIf="!gap.posterUrl" class="rec-poster-placeholder">No Image</div>
+            </a>
+            <ng-container *ngIf="!gap.tmdbId">
+              <img
+                *ngIf="gap.posterUrl"
+                [src]="gap.posterUrl"
+                [alt]="gap.name"
+                class="rec-poster"
+                loading="lazy"
+              >
+              <div *ngIf="!gap.posterUrl" class="rec-poster-placeholder">No Image</div>
+            </ng-container>
             <div class="rec-info">
-              <div class="rec-title">{{ gap.name }}</div>
+              <a *ngIf="gap.tmdbId" [href]="'https://www.themoviedb.org/movie/' + gap.tmdbId" target="_blank" rel="noopener noreferrer" class="rec-title-link">
+                {{ gap.name }}
+              </a>
+              <div *ngIf="!gap.tmdbId" class="rec-title">{{ gap.name }}</div>
               <div class="rec-year">{{ gap.year }}</div>
             </div>
           </div>
