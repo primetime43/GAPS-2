@@ -12,7 +12,7 @@ WORKDIR /app
 
 # Create app user/group
 RUN addgroup --gid 1000 appgroup && \
-    adduser --uid 1000 --ingroup appgroup --gecos "" --no-create-home --shell /bin/false appuser
+    adduser --uid 1000 --ingroup appgroup --gecos "" --shell /bin/false appuser
 
 # Install gosu to drop privileges
 RUN apt-get update && \
