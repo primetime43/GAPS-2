@@ -2,7 +2,15 @@
   <img loading="lazy" src="assets/images/final-2.svg" alt="Gaps Logo" style="width:50%;height:50%;" class="center">
 
   <h3 class="mt-4">About</h3>
-  <p class="text-muted mb-2" style="font-size: 14px;">Version <strong>{{ version }}</strong></p>
+  <p class="text-muted mb-2" style="font-size: 14px;">
+    Version <strong>{{ version }}</strong><ng-container *ngIf="shortCommit">
+      &nbsp;&mdash;
+      <a *ngIf="commitUrl; else plainCommit" [href]="commitUrl" target="_blank" rel="noopener" class="activeLink">
+        <code>{{ shortCommit }}</code>
+      </a>
+      <ng-template #plainCommit><code>{{ shortCommit }}</code></ng-template>
+    </ng-container>
+  </p>
 
   <p class="text-muted">
     <a class="activeLink" href="https://github.com/primetime43/GAPS-2" target="_blank">GAPS 2</a> is a rewrite of the original

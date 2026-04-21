@@ -39,6 +39,8 @@ describe('AboutComponent', () => {
   it('should load and parse releases from GitHub API on init', fakeAsync(() => {
     fixture.detectChanges();
 
+    httpMock.expectOne('/api/about').flush({ version: '2.2.0', commit: 'dev' });
+
     const req = httpMock.expectOne('https://api.github.com/repos/primetime43/GAPS-2/releases');
     expect(req.request.method).toBe('GET');
 
@@ -62,6 +64,8 @@ describe('AboutComponent', () => {
   it('should handle GitHub API error gracefully', fakeAsync(() => {
     fixture.detectChanges();
 
+    httpMock.expectOne('/api/about').flush({ version: '2.2.0', commit: 'dev' });
+
     const req = httpMock.expectOne('https://api.github.com/repos/primetime43/GAPS-2/releases');
     req.error(new ProgressEvent('Network error'));
     tick();
@@ -69,5 +73,16 @@ describe('AboutComponent', () => {
     expect(component.releasesLoading).toBeFalse();
     expect(component.releasesError).toBe('Could not load releases from GitHub.');
     expect(component.releases).toEqual([]);
+  }));
+
+  it('should expose a short commit and commit URL', fakeAsync(() => {
+    fixture.detectChanges();
+
+    httpMock.expectOne('/api/about').flush({ version: '2.2.0', commit: 'a1b2c3d4e5f6' });
+    httpMock.expectOne('https://api.github.com/repos/primetime43/GAPS-2/releases').flush([]);
+    tick();
+
+    expect(component.shortCommit).toBe('a1b2c3d');
+    expect(component.commitUrl).toBe('https://github.com/primetime43/GAPS-2/commit/a1b2c3d4e5f6');
   }));
 });

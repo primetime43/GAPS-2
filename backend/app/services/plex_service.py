@@ -113,14 +113,25 @@ class PlexService:
             except Exception as e:
                 logger.warning("Failed to connect to Plex via stored URL: %s", e)
 
-        # Use MyPlexAccount to connect — lets plexapi handle connection negotiation
+        # Fall back to MyPlexAccount discovery. plexapi tries all connection URIs
+        # in parallel, so a short per-URI timeout caps the total wait — important
+        # when running in environments (e.g. Docker) where plex.direct DNS names
+        # don't resolve and several URIs are unreachable.
         if self._token:
             try:
                 account = MyPlexAccount(token=self._token)
-                server = account.resource(server_name).connect(timeout=self._timeout())
+                server = account.resource(server_name).connect(timeout=8)
                 self._server_conn = server
                 self._server_conn_name = server_name
-                logger.info("Connected to Plex server '%s' via MyPlexAccount", server_name)
+                working_url = getattr(server, '_baseurl', None)
+                logger.info("Connected to Plex server '%s' via MyPlexAccount (%s)", server_name, working_url)
+                # Cache the URL that actually worked so future connects skip discovery.
+                if working_url and self._active_server and self._active_server.get('serverUrl') != working_url:
+                    self._active_server['serverUrl'] = working_url
+                    config_store.put('plex', {
+                        'token': self._token,
+                        'active_server': self._active_server,
+                    })
                 return server
             except Exception as e:
                 logger.warning("MyPlexAccount connection to '%s' failed: %s", server_name, e)

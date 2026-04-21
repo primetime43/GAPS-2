@@ -25,6 +25,9 @@ RUN apt-get update && \
 ENV PUID=1000
 ENV PGID=1000
 
+ARG APP_COMMIT=dev
+ENV APP_COMMIT=${APP_COMMIT}
+
 
 COPY backend/requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt gunicorn
