@@ -39,6 +39,14 @@ docker compose -f docker/docker-compose.yml up -d
 
 The app will be available at `http://localhost:5000`.
 
+**Development builds:** unreleased changes on the `develop` branch are published to Docker Hub on every push. Use these for testing upcoming features — they are not considered stable.
+
+```bash
+docker pull primetime43/gaps-2:develop
+```
+
+Pin to a specific commit with `primetime43/gaps-2:develop-<short-sha>`.
+
 ### Images of v2.1.0
 <details>
   <summary>Click to view screenshots of version 2.1.0</summary>
