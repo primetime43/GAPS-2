@@ -18,7 +18,7 @@ import { SettingsComponent } from './components/settings/settings.component';
 
 const routes: Routes = [
   { path: '', component: IndexComponent },
-  { path: 'recommended', component: RecommendedComponent },
+  { path: 'recommended', component: RecommendedComponent, data: { reuse: true } },
   { path: 'about', component: AboutComponent },
   { path: 'logs', component: LogsComponent },
   { path: 'settings', component: SettingsComponent, children: [

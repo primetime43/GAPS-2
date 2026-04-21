@@ -8,6 +8,8 @@ import { AppRoutingModule } from './app-routing.module';
 import { AppComponent } from './app.component';
 
 import { provideHttpClient, withInterceptorsFromDi } from '@angular/common/http';
+import { RouteReuseStrategy } from '@angular/router';
+import { ReusableRouteStrategy } from './reusable-route.strategy';
 import { HeaderComponent } from './components/header/header.component';
 import { RecommendedComponent } from './components/recommended/recommended.component';
 import { AboutComponent } from './components/about/about.component';
@@ -43,5 +45,8 @@ import { LogsComponent } from './components/logs/logs.component';
     bootstrap: [AppComponent], imports: [BrowserModule,
         AppRoutingModule,
         ReactiveFormsModule,
-        FormsModule], providers: [provideHttpClient(withInterceptorsFromDi())] })
+        FormsModule], providers: [
+        provideHttpClient(withInterceptorsFromDi()),
+        { provide: RouteReuseStrategy, useClass: ReusableRouteStrategy },
+    ] })
 export class AppModule { }
