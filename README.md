@@ -45,6 +45,8 @@ The app will be available at `http://localhost:4277`.
 docker pull primetime43/gaps-2:develop
 ```
 
+> **Heads up — config is machine-bound.** GAPS encrypts saved settings (API keys, tokens, server URLs) in `backend/data/config.enc` using a key derived from the host's MAC address and hostname. That means the file **cannot be moved between machines** and may become unreadable after a VM migration, a Docker network recreation that rotates the container's MAC, or migrating between NAS models. If that happens, delete `config.enc` and re-enter your settings from the UI. Nothing critical is stored there that can't be re-entered in a minute or two.
+
 ### Images of v2.1.0
 <details>
   <summary>Click to view screenshots of version 2.1.0</summary>

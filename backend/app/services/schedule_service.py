@@ -1,6 +1,10 @@
+import logging
+
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from app.services import config_store
+
+logger = logging.getLogger(__name__)
 
 # Preset schedule options with cron expressions
 SCHEDULE_PRESETS = {
@@ -39,48 +43,67 @@ class ScheduleService:
     def _run_scan(self):
         """Execute a scan using the saved library config."""
         if not self._app:
+            logger.error("Scheduled scan skipped: app context not initialized")
             return
 
         with self._app.app_context():
-            config = config_store.get('schedule', {})
-            library_name = config.get('library', '')
-            source = config.get('source', 'plex')
-            if not library_name:
-                return
+            try:
+                config = config_store.get('schedule', {})
+                library_name = config.get('library', '')
+                source = config.get('source', 'plex')
+                if not library_name:
+                    logger.warning("Scheduled scan skipped: no library configured")
+                    return
 
-            tmdb = self._app.tmdb_service
-            media_service = self._get_media_service(source)
+                logger.info("Scheduled scan started for library '%s' (source=%s)", library_name, source)
 
-            api_key = tmdb.api_key
-            if not api_key:
-                return
+                tmdb = self._app.tmdb_service
+                media_service = self._get_media_service(source)
 
-            # Load movies if not cached
-            cache = media_service.movies_cache
-            if library_name not in cache:
-                media_service.get_movies(library_name)
+                api_key = tmdb.api_key
+                if not api_key:
+                    logger.warning("Scheduled scan skipped: no TMDB API key configured")
+                    return
+
+                # Load movies if not cached
                 cache = media_service.movies_cache
+                if library_name not in cache:
+                    media_service.get_movies(library_name)
+                    cache = media_service.movies_cache
 
-            library_data = cache.get(library_name, {})
-            owned_movies = library_data.get('movies', [])
-            owned_ids = set(library_data.get('tmdbIds', []))
+                library_data = cache.get(library_name, {})
+                owned_movies = library_data.get('movies', [])
+                owned_ids = set(library_data.get('tmdbIds', []))
 
-            if not owned_movies:
-                return
+                if not owned_movies:
+                    logger.warning(
+                        "Scheduled scan skipped: library '%s' has no movies (server unreachable or library empty)",
+                        library_name,
+                    )
+                    return
 
-            gaps, _ = tmdb.find_collection_gaps(
-                api_key=api_key,
-                owned_movies=owned_movies,
-                owned_tmdb_ids=owned_ids,
-                show_existing=True,
-            )
+                gaps, error = tmdb.find_collection_gaps(
+                    api_key=api_key,
+                    owned_movies=owned_movies,
+                    owned_tmdb_ids=owned_ids,
+                    show_existing=True,
+                )
+                if error:
+                    logger.error("Scheduled scan failed finding gaps for '%s': %s", library_name, error)
+                    return
 
-            # Send notifications
-            missing = [g for g in (gaps or []) if not g.get('owned')]
-            collections = len(set(g['collectionName'] for g in missing)) if missing else 0
-            self._app.notification_service.notify_scan_results(
-                len(missing), collections, library_name
-            )
+                # Send notifications
+                missing = [g for g in (gaps or []) if not g.get('owned')]
+                collections = len(set(g['collectionName'] for g in missing)) if missing else 0
+                logger.info(
+                    "Scheduled scan complete for '%s': %d missing across %d collections",
+                    library_name, len(missing), collections,
+                )
+                self._app.notification_service.notify_scan_results(
+                    len(missing), collections, library_name
+                )
+            except Exception:
+                logger.exception("Scheduled scan crashed unexpectedly")
 
     def _add_job(self, preset: str) -> None:
         """Add or replace the scheduled job."""
