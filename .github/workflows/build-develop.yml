@@ -19,7 +19,6 @@ jobs:
           images: primetime43/gaps-2
           tags: |
             type=raw,value=develop
-            type=sha,prefix=develop-
 
       - name: Log in to Docker Hub
         uses: docker/login-action@v3

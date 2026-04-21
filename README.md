@@ -45,8 +45,6 @@ The app will be available at `http://localhost:4277`.
 docker pull primetime43/gaps-2:develop
 ```
 
-Pin to a specific commit with `primetime43/gaps-2:develop-<short-sha>`.
-
 ### Images of v2.1.0
 <details>
   <summary>Click to view screenshots of version 2.1.0</summary>
