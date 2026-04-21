@@ -64,6 +64,15 @@ def save(data: dict) -> None:
     encrypted = _fernet.encrypt(plaintext)
     with open(_CONFIG_FILE, 'wb') as f:
         f.write(encrypted)
+    # Restrict to owner-only read/write so other users on a shared host
+    # (or other containers on a shared volume) can't read the encrypted blob.
+    # Defense-in-depth: the contents are already Fernet-encrypted with a
+    # machine-bound key, so this guards against opportunistic copy-offs.
+    try:
+        os.chmod(_CONFIG_FILE, 0o600)
+    except OSError:
+        # Windows has a limited chmod; best-effort — encryption still protects contents.
+        pass
 
 
 def get(key: str, default=None):

@@ -48,4 +48,9 @@ RUN chmod +x /entrypoint.sh
 
 ENTRYPOINT ["/entrypoint.sh"]
 
+# Single worker is intentional: services hold in-memory state (movie caches,
+# Plex server connections, scan progress, tokens). Multiple worker processes
+# would each have their own copy, breaking scan progress polling and causing
+# inconsistent auth state between requests. If the worker crashes, gunicorn's
+# master auto-respawns it; Docker's restart policy handles master-level failures.
 CMD ["gunicorn", "--bind", "0.0.0.0:4277", "--workers", "1", "--threads", "4", "run:app"]

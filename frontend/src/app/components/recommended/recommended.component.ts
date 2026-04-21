@@ -1,7 +1,7 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
 import { NavigationEnd, Router } from '@angular/router';
-import { forkJoin, Subscription } from 'rxjs';
-import { catchError, filter, skip } from 'rxjs/operators';
+import { forkJoin, Subject, Subscription, timer } from 'rxjs';
+import { catchError, filter, skip, switchMap, takeUntil } from 'rxjs/operators';
 import { of } from 'rxjs';
 import { PlexService } from '../../services/plex.service';
 import { JellyfinService } from '../../services/jellyfin.service';
@@ -81,8 +81,8 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   scanProgress: ScanProgress | null = null;
   freshScanActive = false;
   showFreshScanConfirm = false;
-  private pollTimer: ReturnType<typeof setInterval> | null = null;
-  private routerSub: Subscription | null = null;
+  private pollSub: Subscription | null = null;
+  private destroy$ = new Subject<void>();
 
   constructor(
     private plexService: PlexService,
@@ -100,16 +100,18 @@ export class RecommendedComponent implements OnInit, OnDestroy {
 
     // Re-load context on every return to /recommended so prefs / server changes
     // made in Settings are picked up without a full page reload.
-    this.routerSub = this.router.events.pipe(
+    this.router.events.pipe(
       filter((e): e is NavigationEnd => e instanceof NavigationEnd),
       filter(e => e.urlAfterRedirects.split(/[?#]/)[0] === '/recommended'),
       skip(1),
+      takeUntil(this.destroy$),
     ).subscribe(() => this.loadContext(false));
   }
 
   ngOnDestroy(): void {
     this.stopPolling();
-    this.routerSub?.unsubscribe();
+    this.destroy$.next();
+    this.destroy$.complete();
   }
 
   private loadContext(autoSelectLibrary: boolean): void {
@@ -272,8 +274,10 @@ export class RecommendedComponent implements OnInit, OnDestroy {
 
   private startPolling(): void {
     this.stopPolling();
-    this.pollTimer = setInterval(() => {
-      this.recommendationService.getScanProgress().subscribe({
+    this.pollSub = timer(0, 1000).pipe(
+      takeUntil(this.destroy$),
+      switchMap(() => this.recommendationService.getScanProgress()),
+    ).subscribe({
         next: (progress) => {
           this.scanProgress = progress;
 
@@ -295,14 +299,11 @@ export class RecommendedComponent implements OnInit, OnDestroy {
           // Ignore transient polling errors
         }
       });
-    }, 1000);
   }
 
   private stopPolling(): void {
-    if (this.pollTimer) {
-      clearInterval(this.pollTimer);
-      this.pollTimer = null;
-    }
+    this.pollSub?.unsubscribe();
+    this.pollSub = null;
   }
 
   selectMovie(movie: Movie): void {
