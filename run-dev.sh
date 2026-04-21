@@ -71,7 +71,7 @@ echo ""
 echo -e "${GREEN}=== Starting Servers ===${NC}"
 
 # Start backend
-echo -e "Starting Flask backend on ${YELLOW}http://localhost:5000${NC}"
+echo -e "Starting Flask backend on ${YELLOW}http://localhost:4277${NC}"
 (cd "$BACKEND_DIR" && "$PYTHON" run.py) &
 BACKEND_PID=$!
 
@@ -86,7 +86,7 @@ FRONTEND_PID=$!
 echo ""
 echo -e "${GREEN}Both servers are running!${NC}"
 echo -e "  Frontend: ${YELLOW}http://localhost:4200${NC}"
-echo -e "  Backend:  ${YELLOW}http://localhost:5000${NC}"
+echo -e "  Backend:  ${YELLOW}http://localhost:4277${NC}"
 echo ""
 echo "Press Ctrl+C to stop both servers."
 

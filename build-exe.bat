@@ -60,4 +60,4 @@ echo  Output: dist\GAPS-2.exe
 echo ===================================
 echo.
 echo Run it with: dist\GAPS-2.exe
-echo Then open http://localhost:5000
+echo Then open http://localhost:4277

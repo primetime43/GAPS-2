@@ -37,7 +37,7 @@ COPY --from=frontend-build /app/frontend/dist/gaps-2 /app/frontend/dist/gaps-2
 # Create data directory for persistent config
 RUN mkdir -p /app/data
 
-EXPOSE 5000
+EXPOSE 4277
 
 # Copy entrypoint
 COPY entrypoint.sh /entrypoint.sh
@@ -45,4 +45,4 @@ RUN chmod +x /entrypoint.sh
 
 ENTRYPOINT ["/entrypoint.sh"]
 
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "1", "--threads", "4", "run:app"]
+CMD ["gunicorn", "--bind", "0.0.0.0:4277", "--workers", "1", "--threads", "4", "run:app"]

@@ -19,7 +19,7 @@ export class UserPreferencesSettingsComponent implements OnInit {
     moviesPerPage: 50,
     hideOwnedByDefault: false,
     language: 'en',
-    port: 5000,
+    port: 4277,
     autoOpenBrowser: true,
     posterPrefetch: false,
     imageCacheEnabled: false,
