@@ -18,7 +18,8 @@ class TmdbService:
         self._movie_collection_cache: dict[int, int | None] = {}
         self._collection_cache: dict[int, dict] = {}
 
-        # Scan progress tracking
+        # Scan progress tracking (shared between request thread and scan thread)
+        self._scan_progress_lock = threading.Lock()
         self._scan_progress: dict = {
             'status': 'idle',    # idle | scanning | done | error
             'processed': 0,
@@ -46,7 +47,7 @@ class TmdbService:
 
     def test_api_key(self, api_key: str) -> tuple[bool, int]:
         url = f"{self._base_url}/configuration?api_key={api_key}"
-        response = requests.get(url)
+        response = requests.get(url, timeout=10)
         return response.status_code == 200, response.status_code
 
     def save_api_key(self, api_key: str) -> tuple[bool, int]:
@@ -195,7 +196,8 @@ class TmdbService:
 
     @property
     def scan_progress(self) -> dict:
-        return dict(self._scan_progress)
+        with self._scan_progress_lock:
+            return dict(self._scan_progress)
 
     def start_scan(
         self,
@@ -205,19 +207,19 @@ class TmdbService:
         show_existing: bool = False,
     ) -> None:
         """Start a library scan in a background thread."""
-        if self._scan_progress['status'] == 'scanning':
-            return  # Already running
-
-        self._scan_progress = {
-            'status': 'scanning',
-            'processed': 0,
-            'total': len(owned_movies),
-            'current_movie': '',
-            'collections_found': 0,
-            'gaps': [],
-            'total_owned': len(owned_tmdb_ids),
-            'error': None,
-        }
+        with self._scan_progress_lock:
+            if self._scan_progress['status'] == 'scanning':
+                return  # Already running
+            self._scan_progress = {
+                'status': 'scanning',
+                'processed': 0,
+                'total': len(owned_movies),
+                'current_movie': '',
+                'collections_found': 0,
+                'gaps': [],
+                'total_owned': len(owned_tmdb_ids),
+                'error': None,
+            }
 
         thread = threading.Thread(
             target=self._run_scan,
@@ -236,12 +238,14 @@ class TmdbService:
         """Background scan worker."""
         try:
             gaps, _ = self.find_collection_gaps(api_key, owned_movies, owned_tmdb_ids, show_existing)
-            self._scan_progress['gaps'] = gaps or []
-            self._scan_progress['total_owned'] = len(owned_tmdb_ids)
-            self._scan_progress['status'] = 'done'
+            with self._scan_progress_lock:
+                self._scan_progress['gaps'] = gaps or []
+                self._scan_progress['total_owned'] = len(owned_tmdb_ids)
+                self._scan_progress['status'] = 'done'
         except Exception as e:
-            self._scan_progress['error'] = str(e)
-            self._scan_progress['status'] = 'error'
+            with self._scan_progress_lock:
+                self._scan_progress['error'] = str(e)
+                self._scan_progress['status'] = 'error'
 
     def find_collection_gaps(
         self,
@@ -262,8 +266,9 @@ class TmdbService:
 
         for i, movie in enumerate(owned_movies):
             # Update progress
-            self._scan_progress['processed'] = i + 1
-            self._scan_progress['current_movie'] = movie.get('name', '')
+            with self._scan_progress_lock:
+                self._scan_progress['processed'] = i + 1
+                self._scan_progress['current_movie'] = movie.get('name', '')
 
             tmdb_id = self.resolve_tmdb_id(
                 api_key,
@@ -281,7 +286,8 @@ class TmdbService:
             if not collection_id or collection_id in seen_collections:
                 continue
             seen_collections.add(collection_id)
-            self._scan_progress['collections_found'] = len(seen_collections)
+            with self._scan_progress_lock:
+                self._scan_progress['collections_found'] = len(seen_collections)
 
             coll_data = self._get_collection(api_key, collection_id)
             if not coll_data:

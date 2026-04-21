@@ -1,6 +1,5 @@
 import { Component, OnInit } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { marked } from 'marked';
 import { environment } from '../../../environments/environment';
 
@@ -10,7 +9,7 @@ interface GitHubRelease {
   body: string;
   published_at: string;
   html_url: string;
-  bodyHtml?: SafeHtml;
+  bodyHtml?: string;
 }
 
 @Component({
@@ -26,7 +25,7 @@ export class AboutComponent implements OnInit {
   releasesLoading = true;
   releasesError = '';
 
-  constructor(private http: HttpClient, private sanitizer: DomSanitizer) {}
+  constructor(private http: HttpClient) {}
 
   get shortCommit(): string {
     return this.commit ? this.commit.slice(0, 7) : '';
@@ -53,9 +52,7 @@ export class AboutComponent implements OnInit {
       next: (data) => {
         this.releases = data.map(r => ({
           ...r,
-          bodyHtml: this.sanitizer.bypassSecurityTrustHtml(
-            marked.parse(r.body || '', { async: false }) as string
-          )
+          bodyHtml: marked.parse(r.body || '', { async: false }) as string,
         }));
         this.releasesLoading = false;
       },

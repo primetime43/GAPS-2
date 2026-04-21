@@ -74,7 +74,7 @@ def get_active_server():
     result = current_app.emby_service.get_active_server()
     if result:
         return jsonify(**result)
-    return jsonify(error='No active Emby server')
+    return jsonify(error='No active Emby server'), 404
 
 
 @emby_bp.route('/active-server', methods=['DELETE'])

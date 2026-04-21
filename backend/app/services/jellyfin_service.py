@@ -1,4 +1,5 @@
 import logging
+import threading
 import requests
 from app.services import config_store
 
@@ -14,6 +15,7 @@ class JellyfinService:
         self._user_id: str | None = None
         self._active_server: dict | None = None
         self._movies_cache: dict[str, dict] = {}
+        self._movies_cache_lock = threading.Lock()
 
         # Restore persisted state
         saved = config_store.get('jellyfin', {})
@@ -115,7 +117,7 @@ class JellyfinService:
         ok, server_name = self.test_connection(self._server_url, self._api_key)
         if not ok:
             return False, 'Could not reach server', None
-        self._movies_cache = {}
+        self.clear_movies_cache()
         libs, err = self.fetch_libraries()
         if err:
             return False, err, None
@@ -154,14 +156,20 @@ class JellyfinService:
         self._server_url = None
         self._api_key = None
         self._user_id = None
-        self._movies_cache = {}
+        self.clear_movies_cache()
         config_store.remove('jellyfin')
 
     # -- Movies --
 
+    def clear_movies_cache(self) -> None:
+        with self._movies_cache_lock:
+            self._movies_cache = {}
+
     def get_movies(self, library_name: str) -> tuple[list[dict] | None, str | None]:
-        if library_name in self._movies_cache:
-            return self._movies_cache[library_name]['movies'], None
+        with self._movies_cache_lock:
+            cached = self._movies_cache.get(library_name)
+        if cached is not None:
+            return cached['movies'], None
 
         if not self._server_url or not self._api_key:
             return None, 'Not connected'
@@ -238,10 +246,11 @@ class JellyfinService:
                 if tmdb_id:
                     tmdb_ids.append(tmdb_id)
 
-            self._movies_cache[library_name] = {
-                'movies': movie_data,
-                'tmdbIds': tmdb_ids,
-            }
+            with self._movies_cache_lock:
+                self._movies_cache[library_name] = {
+                    'movies': movie_data,
+                    'tmdbIds': tmdb_ids,
+                }
 
             return movie_data, None
 
@@ -250,4 +259,5 @@ class JellyfinService:
 
     @property
     def movies_cache(self) -> dict:
-        return self._movies_cache
+        with self._movies_cache_lock:
+            return dict(self._movies_cache)
