@@ -1,4 +1,6 @@
 import { Component, OnInit, OnDestroy, ViewChild, ElementRef, AfterViewChecked } from '@angular/core';
+import { Subject, Subscription, timer } from 'rxjs';
+import { switchMap, takeUntil } from 'rxjs/operators';
 import { LogService, LogEntry } from '../../services/log.service';
 
 @Component({
@@ -20,7 +22,8 @@ export class LogsComponent implements OnInit, OnDestroy, AfterViewChecked {
 
   levels = ['', 'DEBUG', 'INFO', 'WARNING', 'ERROR'];
 
-  private refreshInterval: any;
+  private refreshSub: Subscription | null = null;
+  private destroy$ = new Subject<void>();
   private needsScroll = false;
 
   constructor(private logService: LogService) {}
@@ -32,6 +35,8 @@ export class LogsComponent implements OnInit, OnDestroy, AfterViewChecked {
 
   ngOnDestroy(): void {
     this.stopAutoRefresh();
+    this.destroy$.next();
+    this.destroy$.complete();
   }
 
   ngAfterViewChecked(): void {
@@ -43,17 +48,19 @@ export class LogsComponent implements OnInit, OnDestroy, AfterViewChecked {
   }
 
   fetchLogs(): void {
-    this.logService.getLogs(this.filterLevel || undefined).subscribe({
-      next: (res) => {
-        this.entries = res.entries;
-        this.applySearch();
-        this.loading = false;
-        this.needsScroll = true;
-      },
-      error: () => {
-        this.loading = false;
-      }
-    });
+    this.logService.getLogs(this.filterLevel || undefined)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (res) => {
+          this.entries = res.entries;
+          this.applySearch();
+          this.loading = false;
+          this.needsScroll = true;
+        },
+        error: () => {
+          this.loading = false;
+        }
+      });
   }
 
   applySearch(): void {
@@ -104,13 +111,21 @@ export class LogsComponent implements OnInit, OnDestroy, AfterViewChecked {
 
   private startAutoRefresh(): void {
     this.stopAutoRefresh();
-    this.refreshInterval = setInterval(() => this.fetchLogs(), 3000);
+    this.refreshSub = timer(3000, 3000).pipe(
+      takeUntil(this.destroy$),
+      switchMap(() => this.logService.getLogs(this.filterLevel || undefined)),
+    ).subscribe({
+      next: (res) => {
+        this.entries = res.entries;
+        this.applySearch();
+        this.needsScroll = true;
+      },
+      error: () => {},
+    });
   }
 
   private stopAutoRefresh(): void {
-    if (this.refreshInterval) {
-      clearInterval(this.refreshInterval);
-      this.refreshInterval = null;
-    }
+    this.refreshSub?.unsubscribe();
+    this.refreshSub = null;
   }
 }

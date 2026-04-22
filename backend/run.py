@@ -10,7 +10,7 @@ app = create_app(config)
 
 if __name__ == '__main__':
     prefs = config_store.get('preferences', {})
-    port = prefs.get('port', 5000)
+    port = prefs.get('port', 4277)
     auto_open = prefs.get('autoOpenBrowser', True)
 
     if auto_open and is_production:

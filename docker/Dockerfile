@@ -12,7 +12,7 @@ WORKDIR /app
 
 # Create app user/group
 RUN addgroup --gid 1000 appgroup && \
-    adduser --uid 1000 --ingroup appgroup --gecos "" --no-create-home --shell /bin/false appuser
+    adduser --uid 1000 --ingroup appgroup --gecos "" --shell /bin/false appuser
 
 # Install gosu to drop privileges
 RUN apt-get update && \
@@ -24,6 +24,9 @@ RUN apt-get update && \
 
 ENV PUID=1000
 ENV PGID=1000
+
+ARG APP_COMMIT=dev
+ENV APP_COMMIT=${APP_COMMIT}
 
 
 COPY backend/requirements.txt ./
@@ -37,7 +40,7 @@ COPY --from=frontend-build /app/frontend/dist/gaps-2 /app/frontend/dist/gaps-2
 # Create data directory for persistent config
 RUN mkdir -p /app/data
 
-EXPOSE 5000
+EXPOSE 4277
 
 # Copy entrypoint
 COPY entrypoint.sh /entrypoint.sh
@@ -45,4 +48,9 @@ RUN chmod +x /entrypoint.sh
 
 ENTRYPOINT ["/entrypoint.sh"]
 
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "1", "--threads", "4", "run:app"]
+# Single worker is intentional: services hold in-memory state (movie caches,
+# Plex server connections, scan progress, tokens). Multiple worker processes
+# would each have their own copy, breaking scan progress polling and causing
+# inconsistent auth state between requests. If the worker crashes, gunicorn's
+# master auto-respawns it; Docker's restart policy handles master-level failures.
+CMD ["gunicorn", "--bind", "0.0.0.0:4277", "--workers", "1", "--threads", "4", "run:app"]

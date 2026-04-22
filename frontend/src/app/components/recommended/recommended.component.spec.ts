@@ -1,5 +1,6 @@
 import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
+import { RouterTestingModule } from '@angular/router/testing';
 import { FormsModule } from '@angular/forms';
 import { Component, Input, Output, EventEmitter } from '@angular/core';
 import { of, throwError } from 'rxjs';
@@ -59,7 +60,7 @@ describe('RecommendedComponent', () => {
       moviesPerPage: 50,
       hideOwnedByDefault: false,
       language: 'en',
-      port: 5000,
+      port: 4277,
       autoOpenBrowser: true,
       posterPrefetch: false,
       imageCacheEnabled: false,
@@ -67,7 +68,7 @@ describe('RecommendedComponent', () => {
     }));
 
     await TestBed.configureTestingModule({
-      imports: [HttpClientTestingModule, FormsModule],
+      imports: [HttpClientTestingModule, FormsModule, RouterTestingModule],
       declarations: [RecommendedComponent, MockConfirmModalComponent],
       providers: [
         { provide: PlexService, useValue: plexService },
@@ -129,7 +130,7 @@ describe('RecommendedComponent', () => {
       moviesPerPage: 25,
       hideOwnedByDefault: true,
       language: 'en',
-      port: 5000,
+      port: 4277,
       autoOpenBrowser: true,
       posterPrefetch: false,
       imageCacheEnabled: false,

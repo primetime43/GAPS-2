@@ -1,3 +1,12 @@
+import os
+
+
+def _cors_origins(default: str) -> list[str]:
+    """Parse GAPS_CORS_ORIGINS env var (comma-separated) or fall back to default."""
+    raw = os.environ.get('GAPS_CORS_ORIGINS', default)
+    return [o.strip() for o in raw.split(',') if o.strip()]
+
+
 class BaseConfig:
     TMDB_BASE_URL = "https://api.themoviedb.org/3"
     TMDB_IMAGE_BASE_URL = "https://image.tmdb.org/t/p/w500"
@@ -17,9 +26,9 @@ class BaseConfig:
 
 class DevelopmentConfig(BaseConfig):
     DEBUG = True
-    CORS_ORIGINS = ["http://localhost:4200"]
+    CORS_ORIGINS = _cors_origins("http://localhost:4200")
 
 
 class ProductionConfig(BaseConfig):
     DEBUG = False
-    CORS_ORIGINS = ["*"]
+    CORS_ORIGINS = _cors_origins("*")

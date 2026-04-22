@@ -21,14 +21,14 @@ For example, if you own *Alien (1979)*, GAPS will recommend *Aliens (1986)* and 
 
 ### Windows Executable
 
-Download `GAPS-2.exe` from the [latest release](https://github.com/primetime43/GAPS-2/releases) and run it. The app opens in your browser at `http://localhost:5000`.
+Download `GAPS-2.exe` from the [latest release](https://github.com/primetime43/GAPS-2/releases) and run it. The app opens in your browser at `http://localhost:4277`.
 
 ### Docker
 
 Pull from [Docker Hub](https://hub.docker.com/r/primetime43/gaps-2):
 
 ```bash
-docker run -d -p 5000:5000 -v gaps2-data:/app/data primetime43/gaps-2:latest
+docker run -d -p 4277:4277 -v gaps2-data:/app/data primetime43/gaps-2:latest
 ```
 
 Or use Docker Compose:
@@ -37,7 +37,15 @@ Or use Docker Compose:
 docker compose -f docker/docker-compose.yml up -d
 ```
 
-The app will be available at `http://localhost:5000`.
+The app will be available at `http://localhost:4277`.
+
+**Development builds:** unreleased changes on the `develop` branch are published to Docker Hub on every push. Use these for testing upcoming features — they are not considered stable.
+
+```bash
+docker pull primetime43/gaps-2:develop
+```
+
+> **Heads up — config is machine-bound.** GAPS encrypts saved settings (API keys, tokens, server URLs) in `backend/data/config.enc` using a key derived from the host's MAC address and hostname. That means the file **cannot be moved between machines** and may become unreadable after a VM migration, a Docker network recreation that rotates the container's MAC, or migrating between NAS models. If that happens, delete `config.enc` and re-enter your settings from the UI. Nothing critical is stored there that can't be re-entered in a minute or two.
 
 ### Images of v2.1.0
 <details>
@@ -79,7 +87,7 @@ npm install
 npm start
 ```
 
-The Angular dev server starts at `http://localhost:4200` and proxies API requests to the Flask backend at `http://localhost:5000`.
+The Angular dev server starts at `http://localhost:4200` and proxies API requests to the Flask backend at `http://localhost:4277`.
 
 ## Usage
 

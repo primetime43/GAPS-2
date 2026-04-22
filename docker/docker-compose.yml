@@ -6,7 +6,7 @@ services:
       context: ..
       dockerfile: docker/Dockerfile
     ports:
-      - "5000:5000"
+      - "4277:4277"
     volumes:
       - gaps2-data:/app/data
     environment:

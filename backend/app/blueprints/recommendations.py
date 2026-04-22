@@ -91,7 +91,7 @@ def scan_library_gaps():
     if fresh_scan:
         tmdb.clear_cache()
         # Clear cached movie lists so we re-fetch from the media server
-        service._movies_cache = {}
+        service.clear_movies_cache()
         # Re-fetch movies for the selected libraries
         for name in names:
             service.get_movies(name)

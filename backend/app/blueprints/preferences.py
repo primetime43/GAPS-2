@@ -8,7 +8,7 @@ DEFAULTS = {
     'moviesPerPage': 50,
     'hideOwnedByDefault': False,
     'language': 'en',
-    'port': 5000,
+    'port': 4277,
     'autoOpenBrowser': True,
     'posterPrefetch': False,
     'imageCacheEnabled': False,

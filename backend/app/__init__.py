@@ -56,6 +56,7 @@ def create_app(config_name=None):
     from app.blueprints.jellyfin import jellyfin_bp
     from app.blueprints.emby import emby_bp
     from app.blueprints.logs import logs_bp
+    from app.blueprints.about import about_bp
 
     app.register_blueprint(plex_bp, url_prefix='/api/plex')
     app.register_blueprint(jellyfin_bp, url_prefix='/api/jellyfin')
@@ -67,6 +68,7 @@ def create_app(config_name=None):
     app.register_blueprint(notifications_bp, url_prefix='/api/notifications')
     app.register_blueprint(preferences_bp, url_prefix='/api/preferences')
     app.register_blueprint(logs_bp, url_prefix='/api/logs')
+    app.register_blueprint(about_bp, url_prefix='/api/about')
 
     # In production, serve Angular dist
     bundle_dir = _get_bundle_dir()

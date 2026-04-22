@@ -60,7 +60,7 @@ def get_movies():
     service = _get_service(source)
     movies, error = service.get_movies(library_name)
     if error:
-        return jsonify(error=error)
+        return jsonify(error=error), 500
     return jsonify(movies=movies)
 
 

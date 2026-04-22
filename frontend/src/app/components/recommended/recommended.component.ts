@@ -1,6 +1,7 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
-import { forkJoin } from 'rxjs';
-import { catchError } from 'rxjs/operators';
+import { NavigationEnd, Router } from '@angular/router';
+import { forkJoin, Subject, Subscription, timer } from 'rxjs';
+import { catchError, filter, skip, switchMap, takeUntil } from 'rxjs/operators';
 import { of } from 'rxjs';
 import { PlexService } from '../../services/plex.service';
 import { JellyfinService } from '../../services/jellyfin.service';
@@ -80,7 +81,8 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   scanProgress: ScanProgress | null = null;
   freshScanActive = false;
   showFreshScanConfirm = false;
-  private pollTimer: ReturnType<typeof setInterval> | null = null;
+  private pollSub: Subscription | null = null;
+  private destroy$ = new Subject<void>();
 
   constructor(
     private plexService: PlexService,
@@ -90,9 +92,29 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     private recommendationService: RecommendationService,
     private preferencesService: PreferencesService,
     private exportService: ExportService,
+    private router: Router,
   ) {}
 
   ngOnInit(): void {
+    this.loadContext(true);
+
+    // Re-load context on every return to /recommended so prefs / server changes
+    // made in Settings are picked up without a full page reload.
+    this.router.events.pipe(
+      filter((e): e is NavigationEnd => e instanceof NavigationEnd),
+      filter(e => e.urlAfterRedirects.split(/[?#]/)[0] === '/recommended'),
+      skip(1),
+      takeUntil(this.destroy$),
+    ).subscribe(() => this.loadContext(false));
+  }
+
+  ngOnDestroy(): void {
+    this.stopPolling();
+    this.destroy$.next();
+    this.destroy$.complete();
+  }
+
+  private loadContext(autoSelectLibrary: boolean): void {
     this.recommendationService.getIgnored().pipe(
       catchError(() => of([]))
     ).subscribe(ids => this.ignoredIds = new Set(ids));
@@ -105,46 +127,50 @@ export class RecommendedComponent implements OnInit, OnDestroy {
         this.showOwned = !prefs.hideOwnedByDefault;
         this.posterPrefetch = prefs.posterPrefetch || false;
       }
-
-      // Check all three media servers in parallel
-      forkJoin({
-        plex: this.plexService.getActiveServer().pipe(catchError(() => of(null))),
-        jellyfin: this.jellyfinService.getActiveServer().pipe(catchError(() => of(null))),
-        emby: this.embyService.getActiveServer().pipe(catchError(() => of(null))),
-      }).subscribe((servers) => {
-        let res: ActiveServerResponse | null = null;
-
-        if (servers.plex && (servers.plex as any).server) {
-          res = servers.plex as ActiveServerResponse;
-          this.activeSource = 'plex';
-        } else if (servers.jellyfin && (servers.jellyfin as any).server) {
-          res = servers.jellyfin as ActiveServerResponse;
-          this.activeSource = 'jellyfin';
-        } else if (servers.emby && (servers.emby as any).server) {
-          res = servers.emby as ActiveServerResponse;
-          this.activeSource = 'emby';
-        }
-
-        if (res && res.server) {
-          this.hasServer = true;
-          this.activeServerName = res.server;
-          this.libraries = Array.isArray(res.libraries)
-            ? res.libraries.filter((lib: MediaLibrary) => lib.type === 'movie')
-            : [];
-
-          if (prefs?.defaultLibrary && this.libraries.some(l => l.title === prefs.defaultLibrary)) {
-            this.selectedLibrary = prefs.defaultLibrary;
-            this.selectedLibraries = [prefs.defaultLibrary];
-            this.onLibrarySelect();
-          }
-        }
-        this.loading = false;
-      });
+      this.detectActiveServer(prefs, autoSelectLibrary);
     });
   }
 
-  ngOnDestroy(): void {
-    this.stopPolling();
+  private detectActiveServer(prefs: any, autoSelectLibrary: boolean): void {
+    forkJoin({
+      plex: this.plexService.getActiveServer().pipe(catchError(() => of(null))),
+      jellyfin: this.jellyfinService.getActiveServer().pipe(catchError(() => of(null))),
+      emby: this.embyService.getActiveServer().pipe(catchError(() => of(null))),
+    }).subscribe((servers) => {
+      let res: ActiveServerResponse | null = null;
+      let source: 'plex' | 'jellyfin' | 'emby' = this.activeSource;
+
+      if (servers.plex && (servers.plex as any).server) {
+        res = servers.plex as ActiveServerResponse;
+        source = 'plex';
+      } else if (servers.jellyfin && (servers.jellyfin as any).server) {
+        res = servers.jellyfin as ActiveServerResponse;
+        source = 'jellyfin';
+      } else if (servers.emby && (servers.emby as any).server) {
+        res = servers.emby as ActiveServerResponse;
+        source = 'emby';
+      }
+
+      if (res && res.server) {
+        this.hasServer = true;
+        this.activeSource = source;
+        this.activeServerName = res.server;
+        this.libraries = Array.isArray(res.libraries)
+          ? res.libraries.filter((lib: MediaLibrary) => lib.type === 'movie')
+          : [];
+
+        if (autoSelectLibrary && prefs?.defaultLibrary && this.libraries.some(l => l.title === prefs.defaultLibrary)) {
+          this.selectedLibrary = prefs.defaultLibrary;
+          this.selectedLibraries = [prefs.defaultLibrary];
+          this.onLibrarySelect();
+        }
+      } else {
+        this.hasServer = false;
+        this.activeServerName = '';
+        this.libraries = [];
+      }
+      this.loading = false;
+    });
   }
 
   onLibrarySelect(): void {
@@ -248,8 +274,10 @@ export class RecommendedComponent implements OnInit, OnDestroy {
 
   private startPolling(): void {
     this.stopPolling();
-    this.pollTimer = setInterval(() => {
-      this.recommendationService.getScanProgress().subscribe({
+    this.pollSub = timer(0, 1000).pipe(
+      takeUntil(this.destroy$),
+      switchMap(() => this.recommendationService.getScanProgress()),
+    ).subscribe({
         next: (progress) => {
           this.scanProgress = progress;
 
@@ -271,14 +299,11 @@ export class RecommendedComponent implements OnInit, OnDestroy {
           // Ignore transient polling errors
         }
       });
-    }, 1000);
   }
 
   private stopPolling(): void {
-    if (this.pollTimer) {
-      clearInterval(this.pollTimer);
-      this.pollTimer = null;
-    }
+    this.pollSub?.unsubscribe();
+    this.pollSub = null;
   }
 
   selectMovie(movie: Movie): void {

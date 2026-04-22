@@ -1,4 +1,5 @@
 import logging
+import threading
 from urllib.parse import quote
 from plexapi.myplex import MyPlexPinLogin, MyPlexAccount
 from plexapi.server import PlexServer
@@ -17,6 +18,7 @@ class PlexService:
         self._server_conn_name: str | None = None
         self._active_server: dict | None = None
         self._movies_cache: dict[str, dict] = {}
+        self._movies_cache_lock = threading.Lock()
 
         # Restore persisted state
         saved = config_store.get('plex', {})
@@ -113,14 +115,25 @@ class PlexService:
             except Exception as e:
                 logger.warning("Failed to connect to Plex via stored URL: %s", e)
 
-        # Use MyPlexAccount to connect — lets plexapi handle connection negotiation
+        # Fall back to MyPlexAccount discovery. plexapi tries all connection URIs
+        # in parallel, so a short per-URI timeout caps the total wait — important
+        # when running in environments (e.g. Docker) where plex.direct DNS names
+        # don't resolve and several URIs are unreachable.
         if self._token:
             try:
                 account = MyPlexAccount(token=self._token)
-                server = account.resource(server_name).connect(timeout=self._timeout())
+                server = account.resource(server_name).connect(timeout=8)
                 self._server_conn = server
                 self._server_conn_name = server_name
-                logger.info("Connected to Plex server '%s' via MyPlexAccount", server_name)
+                working_url = getattr(server, '_baseurl', None)
+                logger.info("Connected to Plex server '%s' via MyPlexAccount (%s)", server_name, working_url)
+                # Cache the URL that actually worked so future connects skip discovery.
+                if working_url and self._active_server and self._active_server.get('serverUrl') != working_url:
+                    self._active_server['serverUrl'] = working_url
+                    config_store.put('plex', {
+                        'token': self._token,
+                        'active_server': self._active_server,
+                    })
                 return server
             except Exception as e:
                 logger.warning("MyPlexAccount connection to '%s' failed: %s", server_name, e)
@@ -167,7 +180,7 @@ class PlexService:
         # Clear cached connection
         self._server_conn = None
         self._server_conn_name = None
-        self._movies_cache = {}
+        self.clear_movies_cache()
         server = self._get_server(server_name)
         if server is None:
             return False, 'Could not reach server', None
@@ -230,14 +243,20 @@ class PlexService:
         self._active_server = None
         self._server_conn = None
         self._server_conn_name = None
-        self._movies_cache = {}
+        self.clear_movies_cache()
         config_store.remove('plex')
 
     # -- Movies --
 
+    def clear_movies_cache(self) -> None:
+        with self._movies_cache_lock:
+            self._movies_cache = {}
+
     def get_movies(self, library_name: str) -> tuple[list[dict] | None, str | None]:
-        if library_name in self._movies_cache:
-            return self._movies_cache[library_name]['movies'], None
+        with self._movies_cache_lock:
+            cached = self._movies_cache.get(library_name)
+        if cached is not None:
+            return cached['movies'], None
 
         if not self._active_server:
             return None, 'No active server'
@@ -288,10 +307,11 @@ class PlexService:
                 if tmdb_id:
                     tmdb_ids.append(tmdb_id)
 
-            self._movies_cache[library_name] = {
-                'movies': movie_data,
-                'tmdbIds': tmdb_ids,
-            }
+            with self._movies_cache_lock:
+                self._movies_cache[library_name] = {
+                    'movies': movie_data,
+                    'tmdbIds': tmdb_ids,
+                }
 
             return movie_data, None
 
@@ -300,4 +320,5 @@ class PlexService:
 
     @property
     def movies_cache(self) -> dict:
-        return self._movies_cache
+        with self._movies_cache_lock:
+            return dict(self._movies_cache)

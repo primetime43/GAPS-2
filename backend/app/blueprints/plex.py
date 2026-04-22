@@ -85,9 +85,9 @@ def get_active_server():
         result = current_app.plex_service.get_active_server()
         if result:
             return jsonify(**result)
-        return jsonify(error='No active server found')
+        return jsonify(error='No active server found'), 404
     except Exception as e:
-        return jsonify(error=str(e))
+        return jsonify(error=str(e)), 500
 
 
 @plex_bp.route('/active-server', methods=['DELETE'])

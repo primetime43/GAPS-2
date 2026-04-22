@@ -34,6 +34,8 @@ a = Analysis(
         'app.services.notification_service',
         'app.services.log_handler',
         'app.blueprints.logs',
+        'app.blueprints.about',
+        'app._build_info',
     ],
     hookspath=[],
     hooksconfig={},

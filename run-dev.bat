@@ -50,7 +50,7 @@ echo === Starting Servers ===
 echo.
 
 REM Start backend in a new window
-echo Starting Flask backend on http://localhost:5000
+echo Starting Flask backend on http://localhost:4277
 start "GAPS2 Backend" cmd /k "cd /d %BACKEND_DIR% && call venv\Scripts\activate.bat && python run.py"
 
 REM Wait for backend to start
@@ -63,7 +63,7 @@ start "GAPS2 Frontend" cmd /k "cd /d %FRONTEND_DIR% && npx ng serve --proxy-conf
 echo.
 echo Both servers are running!
 echo   Frontend: http://localhost:4200
-echo   Backend:  http://localhost:5000
+echo   Backend:  http://localhost:4277
 echo.
 echo Close the server windows to stop them.
 pause

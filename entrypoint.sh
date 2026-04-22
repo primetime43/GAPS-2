@@ -10,7 +10,7 @@ groupmod -o -g "${PGID}" appgroup
 usermod -o -u "${PUID}" appuser
 
 # Ensure app data dir is owned by appuser:appgroup
-chown -R appuser:appgroup /app
+chown -R appuser:appgroup /app /home/appuser
 
 # Exec gunicorn as the appuser via su-exec
 exec gosu appuser:appgroup "$@"

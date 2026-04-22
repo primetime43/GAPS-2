@@ -37,6 +37,10 @@ jobs:
         working-directory: frontend
         run: npm run build
 
+      - name: Inject build info
+        shell: bash
+        run: echo "COMMIT = \"${{ github.sha }}\"" > backend/app/_build_info.py
+
       - name: Build Windows executable
         run: pyinstaller gaps2.spec --noconfirm
 
@@ -78,6 +82,8 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            APP_COMMIT=${{ github.sha }}
 
   release:
     needs: [build-windows, build-docker]
