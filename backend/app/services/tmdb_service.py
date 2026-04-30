@@ -183,10 +183,12 @@ class TmdbService:
             if not show_existing and is_owned:
                 continue
             poster = part.get("poster_path")
+            release_date = part.get("release_date") or ""
             entries.append({
                 "tmdbId": part_id,
                 "name": part.get("title", "Unknown"),
-                "year": part.get("release_date", "")[:4] if part.get("release_date") else "N/A",
+                "year": release_date[:4] if release_date else "N/A",
+                "releaseDate": release_date,
                 "posterUrl": f"{self._image_base_url}{poster}" if poster else None,
                 "overview": part.get("overview", ""),
                 "collectionName": collection_name,

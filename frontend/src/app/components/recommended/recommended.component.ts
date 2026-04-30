@@ -32,6 +32,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   movies: Movie[] = [];
   movieFilter = '';
   showOwned = false;
+  hideFutureReleases = false;
   moviesPerPage = 50;
   currentPage = 1;
   searchFilter = '';
@@ -125,6 +126,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
       if (prefs) {
         this.moviesPerPage = prefs.moviesPerPage || 50;
         this.showOwned = !prefs.hideOwnedByDefault;
+        this.hideFutureReleases = prefs.hideFutureReleasesByDefault || false;
         this.posterPrefetch = prefs.posterPrefetch || false;
       }
       this.detectActiveServer(prefs, autoSelectLibrary);
@@ -366,6 +368,19 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     this.applyFilter();
   }
 
+  onHideFutureReleasesChange(): void {
+    this.applyFilter();
+  }
+
+  isFutureRelease(gap: CollectionGap): boolean {
+    const today = new Date().toISOString().slice(0, 10);
+    if (gap.releaseDate) {
+      return gap.releaseDate > today;
+    }
+    // No release date set on TMDB — treat as unannounced/future
+    return true;
+  }
+
   isIgnored(gap: CollectionGap): boolean {
     return this.ignoredIds.has(gap.tmdbId);
   }
@@ -481,7 +496,15 @@ export class RecommendedComponent implements OnInit, OnDestroy {
       filtered = filtered.filter(g => !this.ignoredIds.has(g.tmdbId));
     }
 
-    this.missingCount = this.allGaps.filter(g => !g.owned && !this.ignoredIds.has(g.tmdbId)).length;
+    if (this.hideFutureReleases) {
+      filtered = filtered.filter(g => g.owned || !this.isFutureRelease(g));
+    }
+
+    this.missingCount = this.allGaps.filter(g =>
+      !g.owned
+      && !this.ignoredIds.has(g.tmdbId)
+      && (!this.hideFutureReleases || !this.isFutureRelease(g))
+    ).length;
 
     const groups = new Map<string, CollectionGap[]>();
     for (const gap of filtered) {

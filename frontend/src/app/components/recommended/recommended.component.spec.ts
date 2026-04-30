@@ -59,6 +59,7 @@ describe('RecommendedComponent', () => {
       defaultLibrary: '',
       moviesPerPage: 50,
       hideOwnedByDefault: false,
+      hideFutureReleasesByDefault: false,
       language: 'en',
       port: 4277,
       autoOpenBrowser: true,
@@ -129,6 +130,7 @@ describe('RecommendedComponent', () => {
       defaultLibrary: 'Movies',
       moviesPerPage: 25,
       hideOwnedByDefault: true,
+      hideFutureReleasesByDefault: false,
       language: 'en',
       port: 4277,
       autoOpenBrowser: true,
@@ -241,6 +243,30 @@ describe('RecommendedComponent', () => {
     expect(component.filteredGroups.length).toBe(1);
     expect(component.filteredGroups[0].gaps.length).toBe(1);
     expect(component.filteredGroups[0].gaps[0].tmdbId).toBe(2);
+  });
+
+  it('applyFilter should hide future releases when hideFutureReleases is true', () => {
+    const future = '2099-12-31';
+    const past = '1999-01-01';
+    component.allGaps = [
+      { tmdbId: 1, name: 'Released', year: '1999', releaseDate: past, posterUrl: null, overview: '', collectionName: 'C', owned: false },
+      { tmdbId: 2, name: 'Future', year: '2099', releaseDate: future, posterUrl: null, overview: '', collectionName: 'C', owned: false },
+      { tmdbId: 3, name: 'Unannounced', year: 'N/A', releaseDate: '', posterUrl: null, overview: '', collectionName: 'C', owned: false },
+      { tmdbId: 4, name: 'Owned future', year: '2099', releaseDate: future, posterUrl: null, overview: '', collectionName: 'C', owned: true },
+    ];
+    component.ignoredIds = new Set();
+    component.showOwned = true;
+    component.showIgnored = true;
+    component.hideFutureReleases = true;
+
+    component.applyFilter();
+
+    const titles = component.filteredGroups.flatMap(g => g.gaps.map(x => x.name));
+    expect(titles).toContain('Released');
+    expect(titles).toContain('Owned future'); // owned items are kept even if future
+    expect(titles).not.toContain('Future');
+    expect(titles).not.toContain('Unannounced'); // missing releaseDate is treated as future
+    expect(component.missingCount).toBe(1); // only "Released" counts as missing
   });
 
   it('toggleIgnore should add/remove from ignored set', () => {

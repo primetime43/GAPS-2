@@ -7,6 +7,7 @@ export interface UserPreferences {
   defaultLibrary: string;
   moviesPerPage: number;
   hideOwnedByDefault: boolean;
+  hideFutureReleasesByDefault: boolean;
   language: string;
   port: number;
   autoOpenBrowser: boolean;

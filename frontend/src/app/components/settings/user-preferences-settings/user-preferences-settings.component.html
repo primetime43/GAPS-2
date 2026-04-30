@@ -31,6 +31,16 @@
       </label>
     </div>
 
+    <!-- Hide Future Releases by Default -->
+    <div class="pref-card mb-3">
+      <h5>Hide Future Releases by Default</h5>
+      <p class="text-muted small">Gap results will hide unreleased movies (release date in the future) unless toggled.</p>
+      <label class="toggle-label">
+        <input type="checkbox" [(ngModel)]="prefs.hideFutureReleasesByDefault">
+        <span class="ms-2">{{ prefs.hideFutureReleasesByDefault ? 'Enabled' : 'Disabled' }}</span>
+      </label>
+    </div>
+
     <!-- Language Filter -->
     <div class="pref-card mb-3">
       <h5>TMDB Language</h5>
