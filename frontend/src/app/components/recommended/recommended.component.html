@@ -195,6 +195,18 @@
               Show owned
             </label>
           </div>
+          <div class="form-check">
+            <input
+              class="form-check-input"
+              type="checkbox"
+              id="hideFutureReleases"
+              [(ngModel)]="hideFutureReleases"
+              (ngModelChange)="onHideFutureReleasesChange()"
+            >
+            <label class="form-check-label text-muted" for="hideFutureReleases" title="Hide unreleased movies (release date in the future or unannounced)">
+              Hide future releases
+            </label>
+          </div>
           <div class="form-check" *ngIf="ignoredIds.size > 0">
             <input
               class="form-check-input"

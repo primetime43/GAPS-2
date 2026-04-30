@@ -7,6 +7,7 @@ DEFAULTS = {
     'defaultLibrary': '',
     'moviesPerPage': 50,
     'hideOwnedByDefault': False,
+    'hideFutureReleasesByDefault': False,
     'language': 'en',
     'port': 4277,
     'autoOpenBrowser': True,

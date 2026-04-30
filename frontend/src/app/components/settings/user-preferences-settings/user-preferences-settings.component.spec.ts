@@ -13,6 +13,7 @@ describe('UserPreferencesSettingsComponent', () => {
     defaultLibrary: '',
     moviesPerPage: 50,
     hideOwnedByDefault: false,
+    hideFutureReleasesByDefault: false,
     language: 'en',
     port: 4277,
     autoOpenBrowser: true,
