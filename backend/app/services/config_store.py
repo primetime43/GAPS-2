@@ -11,6 +11,8 @@ from cryptography.fernet import Fernet, InvalidToken
 
 logger = logging.getLogger(__name__)
 
+_KEY_ENV_VAR = 'GAPS2_CONFIG_KEY'
+
 
 def _get_base_dir():
     """Return the backend root, works both normally and in a PyInstaller bundle."""
@@ -21,13 +23,20 @@ def _get_base_dir():
 
 _DATA_DIR = os.path.join(_get_base_dir(), 'data')
 _CONFIG_FILE = os.path.join(_DATA_DIR, 'config.enc')
+_KEY_FILE = os.path.join(_DATA_DIR, '.config.key')
 
 
-def _get_machine_key() -> bytes:
-    """Derive a Fernet key from stable machine-specific identifiers.
+def _ensure_dir():
+    os.makedirs(_DATA_DIR, exist_ok=True)
 
-    Combines the OS node name and MAC address so the encrypted config
-    cannot be decrypted on a different machine.
+
+def _legacy_machine_key() -> bytes:
+    """Pre-keyfile key derived from hostname + MAC.
+
+    Kept only as a one-time migration fallback so installs that pre-date the
+    keyfile can still decrypt their existing config.enc. Container deployments
+    broke under this scheme because hostname and MAC change on every recreate
+    (issue #36), so new installs use a random keyfile instead.
     """
     node = platform.node()
     mac = hex(uuid.getnode())
@@ -36,11 +45,53 @@ def _get_machine_key() -> bytes:
     return base64.urlsafe_b64encode(digest[:32])
 
 
-def _ensure_dir():
-    os.makedirs(_DATA_DIR, exist_ok=True)
+def _load_keyfile():
+    if not os.path.isfile(_KEY_FILE):
+        return None
+    try:
+        with open(_KEY_FILE, 'rb') as f:
+            return f.read().strip()
+    except OSError as e:
+        logger.warning("Failed to read keyfile %s: %s", _KEY_FILE, e)
+        return None
 
 
-_fernet = Fernet(_get_machine_key())
+def _write_keyfile(key: bytes) -> None:
+    _ensure_dir()
+    with open(_KEY_FILE, 'wb') as f:
+        f.write(key)
+    try:
+        os.chmod(_KEY_FILE, 0o600)
+    except OSError:
+        # Windows chmod is best-effort; the key file still lives in a user-owned dir.
+        pass
+
+
+def _resolve_key():
+    """Return (active_fernet_key, allow_legacy_migration).
+
+    Resolution order:
+      1. GAPS2_CONFIG_KEY env var — explicit override for advanced deployments.
+      2. Existing keyfile at <data>/.config.key.
+      3. Generate a new random key and persist it.
+    """
+    env_key = os.environ.get(_KEY_ENV_VAR)
+    if env_key:
+        return env_key.encode(), True
+
+    existing = _load_keyfile()
+    if existing:
+        return existing, False
+
+    new_key = Fernet.generate_key()
+    _write_keyfile(new_key)
+    logger.info("Generated new config encryption key at %s", _KEY_FILE)
+    return new_key, True
+
+
+_active_key, _allow_legacy_migration = _resolve_key()
+_fernet = Fernet(_active_key)
+_legacy_fernet = Fernet(_legacy_machine_key())
 
 
 def load() -> dict:
@@ -50,11 +101,38 @@ def load() -> dict:
     try:
         with open(_CONFIG_FILE, 'rb') as f:
             encrypted = f.read()
-        decrypted = _fernet.decrypt(encrypted)
-        return json.loads(decrypted)
-    except (InvalidToken, json.JSONDecodeError, OSError) as e:
-        logger.warning("Failed to load config: %s", e)
+    except OSError as e:
+        logger.warning("Failed to read config file: %s", e)
         return {}
+
+    try:
+        return json.loads(_fernet.decrypt(encrypted))
+    except InvalidToken:
+        pass
+    except json.JSONDecodeError as e:
+        logger.warning("Failed to parse decrypted config: %s", e)
+        return {}
+
+    if _allow_legacy_migration:
+        try:
+            data = json.loads(_legacy_fernet.decrypt(encrypted))
+        except (InvalidToken, json.JSONDecodeError):
+            logger.warning(
+                "Could not decrypt %s with current or legacy key. "
+                "Delete the file and reconfigure from the UI if this is unexpected.",
+                _CONFIG_FILE,
+            )
+            return {}
+        logger.info("Migrated config.enc from legacy machine-bound key to keyfile.")
+        save(data)
+        return data
+
+    logger.warning(
+        "Could not decrypt %s with the configured key. "
+        "Delete the file and reconfigure from the UI if this is unexpected.",
+        _CONFIG_FILE,
+    )
+    return {}
 
 
 def save(data: dict) -> None:
@@ -66,8 +144,6 @@ def save(data: dict) -> None:
         f.write(encrypted)
     # Restrict to owner-only read/write so other users on a shared host
     # (or other containers on a shared volume) can't read the encrypted blob.
-    # Defense-in-depth: the contents are already Fernet-encrypted with a
-    # machine-bound key, so this guards against opportunistic copy-offs.
     try:
         os.chmod(_CONFIG_FILE, 0o600)
     except OSError:
