@@ -35,6 +35,11 @@ class TmdbService:
         self._mc_cache_ts: dict[int, float] = {}
         self._coll_cache_ts: dict[int, float] = {}
         self._cache_file = os.path.join(config_store.data_dir(), _CACHE_FILE_NAME)
+        # _cache_lock protects in-memory dict reads/writes (held briefly).
+        # _cache_save_lock protects the file I/O on persist (held while writing
+        # the temp file). Separate so HTTP-driven dict updates don't block on
+        # the multi-MB JSON write to disk.
+        self._cache_lock = threading.Lock()
         self._cache_save_lock = threading.Lock()
         self._load_persistent_cache()
 
@@ -75,11 +80,12 @@ class TmdbService:
 
     def clear_cache(self) -> None:
         """Clear all TMDB response caches for a fresh scan."""
-        self._id_cache.clear()
-        self._movie_collection_cache.clear()
-        self._collection_cache.clear()
-        self._mc_cache_ts.clear()
-        self._coll_cache_ts.clear()
+        with self._cache_lock:
+            self._id_cache.clear()
+            self._movie_collection_cache.clear()
+            self._collection_cache.clear()
+            self._mc_cache_ts.clear()
+            self._coll_cache_ts.clear()
         try:
             os.remove(self._cache_file)
         except FileNotFoundError:
@@ -143,19 +149,30 @@ class TmdbService:
     def _save_persistent_cache(self) -> None:
         """Write the persistent caches to disk via atomic rename."""
         now = time.time()
+        # Snapshot under the cache lock so concurrent inserts can't corrupt
+        # the iteration. JSON serialization and file I/O happen outside the
+        # lock to keep contention with the HTTP-driven cache mutations short.
+        with self._cache_lock:
+            for key in self._movie_collection_cache:
+                self._mc_cache_ts.setdefault(key, now)
+            for key in self._collection_cache:
+                self._coll_cache_ts.setdefault(key, now)
+            mc_snapshot = list(self._movie_collection_cache.items())
+            coll_snapshot = list(self._collection_cache.items())
+            mc_ts = dict(self._mc_cache_ts)
+            coll_ts = dict(self._coll_cache_ts)
+
         payload: dict = {
             'version': 1,
-            'movie_collection': {},
-            'collections': {},
+            'movie_collection': {
+                str(key): {'value': value, 'at': mc_ts.get(key, now)}
+                for key, value in mc_snapshot
+            },
+            'collections': {
+                str(key): {'value': value, 'at': coll_ts.get(key, now)}
+                for key, value in coll_snapshot
+            },
         }
-        for key, value in self._movie_collection_cache.items():
-            ts = self._mc_cache_ts.get(key, now)
-            payload['movie_collection'][str(key)] = {'value': value, 'at': ts}
-            self._mc_cache_ts[key] = ts
-        for key, value in self._collection_cache.items():
-            ts = self._coll_cache_ts.get(key, now)
-            payload['collections'][str(key)] = {'value': value, 'at': ts}
-            self._coll_cache_ts[key] = ts
 
         with self._cache_save_lock:
             try:
@@ -194,8 +211,10 @@ class TmdbService:
         # 2. Try IMDB ID via /find endpoint (cached)
         if imdb_id:
             cache_key = f"imdb:{imdb_id}"
-            if cache_key in self._id_cache:
-                return self._id_cache[cache_key]
+            with self._cache_lock:
+                if cache_key in self._id_cache:
+                    return self._id_cache[cache_key]
+            resolved: int | None = None
             try:
                 resp = requests.get(
                     f"{self._base_url}/find/{imdb_id}",
@@ -206,17 +225,20 @@ class TmdbService:
                     results = resp.json().get("movie_results", [])
                     if results:
                         resolved = results[0]["id"]
-                        self._id_cache[cache_key] = resolved
-                        return resolved
             except Exception as e:
                 logger.warning("TMDB /find lookup failed for IMDB ID %s: %s", imdb_id, e)
-            self._id_cache[cache_key] = None
+            with self._cache_lock:
+                self._id_cache[cache_key] = resolved
+            if resolved is not None:
+                return resolved
 
         # 3. Try title + year search (cached)
         if title:
             cache_key = f"search:{title.lower()}|{year}"
-            if cache_key in self._id_cache:
-                return self._id_cache[cache_key]
+            with self._cache_lock:
+                if cache_key in self._id_cache:
+                    return self._id_cache[cache_key]
+            resolved = None
             try:
                 params = {"api_key": api_key, "query": title, "language": self._language}
                 if year:
@@ -236,42 +258,43 @@ class TmdbService:
                             if r.get("title", "").lower() == title.lower() and r_year == str(year):
                                 resolved = r["id"]
                                 break
-                        self._id_cache[cache_key] = resolved
-                        return resolved
             except Exception as e:
                 logger.warning("TMDB search failed for '%s' (%s): %s", title, year, e)
-            self._id_cache[cache_key] = None
+            with self._cache_lock:
+                self._id_cache[cache_key] = resolved
+            if resolved is not None:
+                return resolved
 
         return None
 
     def _get_collection_id(self, api_key: str, tmdb_id: int) -> int | None:
         """Get the collection ID for a movie, using cache."""
-        if tmdb_id in self._movie_collection_cache:
-            return self._movie_collection_cache[tmdb_id]
+        with self._cache_lock:
+            if tmdb_id in self._movie_collection_cache:
+                return self._movie_collection_cache[tmdb_id]
 
+        coll_id: int | None = None
         try:
             resp = requests.get(
                 f"{self._base_url}/movie/{tmdb_id}",
                 params={"api_key": api_key, "language": self._language},
                 timeout=10,
             )
-            if resp.status_code != 200:
-                self._movie_collection_cache[tmdb_id] = None
-                return None
-
-            collection = resp.json().get("belongs_to_collection")
-            coll_id = collection["id"] if collection else None
-            self._movie_collection_cache[tmdb_id] = coll_id
-            return coll_id
+            if resp.status_code == 200:
+                collection = resp.json().get("belongs_to_collection")
+                coll_id = collection["id"] if collection else None
         except Exception as e:
             logger.warning("Failed to get collection ID for TMDB %s: %s", tmdb_id, e)
-            self._movie_collection_cache[tmdb_id] = None
-            return None
+
+        with self._cache_lock:
+            self._movie_collection_cache[tmdb_id] = coll_id
+        return coll_id
 
     def _get_collection(self, api_key: str, collection_id: int) -> dict | None:
         """Fetch full collection data, using cache."""
-        if collection_id in self._collection_cache:
-            return self._collection_cache[collection_id]
+        with self._cache_lock:
+            if collection_id in self._collection_cache:
+                return self._collection_cache[collection_id]
 
         try:
             resp = requests.get(
@@ -281,13 +304,14 @@ class TmdbService:
             )
             if resp.status_code != 200:
                 return None
-
             data = resp.json()
-            self._collection_cache[collection_id] = data
-            return data
         except Exception as e:
             logger.warning("Failed to fetch collection %s: %s", collection_id, e)
             return None
+
+        with self._cache_lock:
+            self._collection_cache[collection_id] = data
+        return data
 
     def _build_gap_entries(
         self,
