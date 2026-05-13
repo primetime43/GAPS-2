@@ -178,24 +178,29 @@ export class RecommendedComponent implements OnInit, OnDestroy {
       return;
     }
 
+    // Re-entry: the component preserves its state across navigation, so the
+    // user's in-memory selection and gaps are the source of truth. Don't
+    // re-hydrate from the persisted scan — it may be stale relative to a
+    // library change the user made before navigating away (issue #36).
+    if (!autoSelectLibrary) {
+      this.loading = false;
+      return;
+    }
+
     this.recommendationService.getScanProgress().pipe(
       catchError(() => of(null))
     ).subscribe((progress) => {
       const validScan = !!(progress && progress.status === 'done' && progress.gaps?.length);
       const scanLibs = validScan ? (progress!.libraries || []) : [];
 
-      // On first load, the scan's libraries take precedence over the user's
-      // default — otherwise the dropdown and the gaps panel show different
-      // libraries (issue #36). On re-entry (autoSelectLibrary=false) we leave
-      // the existing selection alone.
-      if (autoSelectLibrary) {
-        if (scanLibs.length && this.libraries.some(l => scanLibs.includes(l.title))) {
-          this.selectedLibrary = scanLibs[0];
-          this.selectedLibraries = [...scanLibs];
-          this.onLibrarySelect();
-        } else {
-          this.applyDefaultLibrary(prefs);
-        }
+      // The scan's libraries take precedence over the user's default so the
+      // dropdown matches the gaps that are about to render.
+      if (scanLibs.length && this.libraries.some(l => scanLibs.includes(l.title))) {
+        this.selectedLibrary = scanLibs[0];
+        this.selectedLibraries = [...scanLibs];
+        this.onLibrarySelect();
+      } else {
+        this.applyDefaultLibrary(prefs);
       }
 
       if (validScan) {
