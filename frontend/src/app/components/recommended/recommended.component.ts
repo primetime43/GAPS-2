@@ -160,37 +160,60 @@ export class RecommendedComponent implements OnInit, OnDestroy {
         this.libraries = Array.isArray(res.libraries)
           ? res.libraries.filter((lib: MediaLibrary) => lib.type === 'movie')
           : [];
-
-        if (autoSelectLibrary && prefs?.defaultLibrary && this.libraries.some(l => l.title === prefs.defaultLibrary)) {
-          this.selectedLibrary = prefs.defaultLibrary;
-          this.selectedLibraries = [prefs.defaultLibrary];
-          this.onLibrarySelect();
-        }
+        this.finishInitialization(prefs, autoSelectLibrary);
       } else {
         this.hasServer = false;
         this.activeServerName = '';
         this.libraries = [];
+        this.loading = false;
       }
-      this.loading = false;
-      this.hydrateLastScan();
     });
   }
 
-  private hydrateLastScan(): void {
-    // Restore the gaps panel from the last persisted scan so users don't have
-    // to re-run the scan after a backend restart. Skipped while a scan is
-    // already in progress in this session, and after the user has drilled into
-    // a single-movie view.
-    if (this.scanProgress || this.selectedMovie) return;
+  private finishInitialization(prefs: any, autoSelectLibrary: boolean): void {
+    // Skip restore if the user is mid-scan or drilled into a single movie.
+    if (this.scanProgress || this.selectedMovie) {
+      if (autoSelectLibrary) this.applyDefaultLibrary(prefs);
+      this.loading = false;
+      return;
+    }
+
     this.recommendationService.getScanProgress().pipe(
       catchError(() => of(null))
     ).subscribe((progress) => {
-      if (!progress || progress.status !== 'done' || !progress.gaps?.length) return;
-      this.allGaps = progress.gaps;
-      this.totalOwned = progress.total_owned;
-      this.scanMode = true;
-      this.applyFilter();
+      const validScan = !!(progress && progress.status === 'done' && progress.gaps?.length);
+      const scanLibs = validScan ? (progress!.libraries || []) : [];
+
+      // On first load, the scan's libraries take precedence over the user's
+      // default — otherwise the dropdown and the gaps panel show different
+      // libraries (issue #36). On re-entry (autoSelectLibrary=false) we leave
+      // the existing selection alone.
+      if (autoSelectLibrary) {
+        if (scanLibs.length && this.libraries.some(l => scanLibs.includes(l.title))) {
+          this.selectedLibrary = scanLibs[0];
+          this.selectedLibraries = [...scanLibs];
+          this.onLibrarySelect();
+        } else {
+          this.applyDefaultLibrary(prefs);
+        }
+      }
+
+      if (validScan) {
+        this.allGaps = progress!.gaps;
+        this.totalOwned = progress!.total_owned;
+        this.scanMode = true;
+        this.applyFilter();
+      }
+      this.loading = false;
     });
+  }
+
+  private applyDefaultLibrary(prefs: any): void {
+    if (prefs?.defaultLibrary && this.libraries.some(l => l.title === prefs.defaultLibrary)) {
+      this.selectedLibrary = prefs.defaultLibrary;
+      this.selectedLibraries = [prefs.defaultLibrary];
+      this.onLibrarySelect();
+    }
   }
 
   onLibrarySelect(): void {

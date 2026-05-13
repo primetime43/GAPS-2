@@ -59,6 +59,7 @@ class TmdbService:
             'collections_found': 0,
             'gaps': [],
             'total_owned': 0,
+            'libraries': [],
             'completed_at': None,
             'error': None,
         }
@@ -67,6 +68,7 @@ class TmdbService:
             progress['status'] = 'done'
             progress['gaps'] = last.get('gaps', [])
             progress['total_owned'] = last.get('total_owned', 0)
+            progress['libraries'] = last.get('libraries', [])
             progress['completed_at'] = last.get('completed_at')
         return progress
 
@@ -352,8 +354,10 @@ class TmdbService:
         owned_movies: list[dict],
         owned_tmdb_ids: set[int],
         show_existing: bool = False,
+        library_names: list[str] | None = None,
     ) -> None:
         """Start a library scan in a background thread."""
+        libraries = list(library_names or [])
         with self._scan_progress_lock:
             if self._scan_progress['status'] == 'scanning':
                 return  # Already running
@@ -365,13 +369,14 @@ class TmdbService:
                 'collections_found': 0,
                 'gaps': [],
                 'total_owned': len(owned_tmdb_ids),
+                'libraries': libraries,
                 'completed_at': None,
                 'error': None,
             }
 
         thread = threading.Thread(
             target=self._run_scan,
-            args=(api_key, owned_movies, owned_tmdb_ids, show_existing),
+            args=(api_key, owned_movies, owned_tmdb_ids, show_existing, libraries),
             daemon=True,
         )
         thread.start()
@@ -382,6 +387,7 @@ class TmdbService:
         owned_movies: list[dict],
         owned_tmdb_ids: set[int],
         show_existing: bool,
+        libraries: list[str],
     ) -> None:
         """Background scan worker."""
         try:
@@ -397,6 +403,7 @@ class TmdbService:
                 config_store.put('last_scan', {
                     'gaps': final_gaps,
                     'total_owned': len(owned_tmdb_ids),
+                    'libraries': libraries,
                     'completed_at': completed_at,
                 })
             except OSError as e:

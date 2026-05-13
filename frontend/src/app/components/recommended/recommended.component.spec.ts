@@ -63,6 +63,7 @@ describe('RecommendedComponent', () => {
       collections_found: 0,
       gaps: [],
       total_owned: 0,
+      libraries: [],
       completed_at: null,
       error: null,
     }));
