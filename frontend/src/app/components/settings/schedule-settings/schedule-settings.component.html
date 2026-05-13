@@ -85,5 +85,45 @@
         </button>
       </div>
     </div>
+
+    <!-- Scan history -->
+    <div *ngIf="schedule?.run_history?.length" class="mt-4">
+      <hr>
+      <h5 class="mb-3">Scan history</h5>
+      <div class="table-responsive">
+        <table class="table table-dark table-sm" style="font-size: 13px;">
+          <thead>
+            <tr>
+              <th>When</th>
+              <th>Status</th>
+              <th>Library</th>
+              <th>Result</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let run of schedule.run_history">
+              <td>{{ run.timestamp | date:'medium' }}</td>
+              <td>
+                <span class="badge"
+                      [class.bg-success]="run.status === 'success'"
+                      [class.bg-warning]="run.status === 'skipped'"
+                      [class.bg-danger]="run.status === 'error'">
+                  {{ run.status }}
+                </span>
+              </td>
+              <td>{{ run.library || '&mdash;' }}</td>
+              <td>
+                <ng-container *ngIf="run.status === 'success'">
+                  {{ run.missing }} missing across {{ run.collections }} collection(s)
+                </ng-container>
+                <ng-container *ngIf="run.status !== 'success'">
+                  {{ run.message || '&mdash;' }}
+                </ng-container>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
   </div>
 </div>

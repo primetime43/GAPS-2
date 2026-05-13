@@ -7,7 +7,9 @@ from app.services import config_store
 
 logger = logging.getLogger(__name__)
 
-LAST_RUN_KEY = 'schedule_last_run'
+HISTORY_KEY = 'schedule_run_history'
+LEGACY_LAST_RUN_KEY = 'schedule_last_run'  # 2.4.0 single-record format; migrated on first new write
+MAX_HISTORY = 50
 
 # Preset schedule options with cron expressions
 SCHEDULE_PRESETS = {
@@ -138,17 +140,32 @@ class ScheduleService:
         collections: int = 0,
         message: str = '',
     ) -> None:
+        entry = {
+            'timestamp': datetime.now(timezone.utc).isoformat(),
+            'status': status,
+            'library': library,
+            'missing': missing,
+            'collections': collections,
+            'message': message,
+        }
         try:
-            config_store.put(LAST_RUN_KEY, {
-                'timestamp': datetime.now(timezone.utc).isoformat(),
-                'status': status,
-                'library': library,
-                'missing': missing,
-                'collections': collections,
-                'message': message,
-            })
+            history = ScheduleService._load_history()
+            history.insert(0, entry)
+            del history[MAX_HISTORY:]
+            config_store.put(HISTORY_KEY, history)
         except OSError as e:
             logger.warning("Failed to persist scheduled scan history: %s", e)
+
+    @staticmethod
+    def _load_history() -> list[dict]:
+        """Return the run history list, migrating the legacy single-record key if needed."""
+        history = config_store.get(HISTORY_KEY)
+        if isinstance(history, list):
+            return list(history)
+        legacy = config_store.get(LEGACY_LAST_RUN_KEY)
+        if isinstance(legacy, dict):
+            return [legacy]
+        return []
 
     def _add_job(self, preset: str) -> None:
         """Add or replace the scheduled job."""
@@ -185,12 +202,14 @@ class ScheduleService:
         """Get the current schedule config."""
         saved = config_store.get('schedule', {})
         job = self._scheduler.get_job(JOB_ID)
+        history = ScheduleService._load_history()
         return {
             'enabled': saved.get('enabled', False),
             'preset': saved.get('preset', ''),
             'library': saved.get('library', ''),
             'source': saved.get('source', 'plex'),
             'next_run': str(job.next_run_time) if job else None,
-            'last_run': config_store.get(LAST_RUN_KEY),
+            'last_run': history[0] if history else None,
+            'run_history': history,
             'presets': {k: v['label'] for k, v in SCHEDULE_PRESETS.items()},
         }
