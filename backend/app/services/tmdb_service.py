@@ -1,10 +1,19 @@
+import json
 import logging
+import os
 import threading
+import time
 from datetime import datetime, timezone
 import requests
 from app.services import config_store
 
 logger = logging.getLogger(__name__)
+
+_CACHE_FILE_NAME = 'tmdb_cache.json'
+# Collection memberships rarely change but new movies can be added to existing
+# collections (sequels, reissues), so re-fetch weekly to balance freshness vs.
+# TMDB rate limits.
+_CACHE_TTL_SECONDS = 7 * 24 * 60 * 60
 
 
 class TmdbService:
@@ -18,6 +27,16 @@ class TmdbService:
         self._id_cache: dict[str, int | None] = {}
         self._movie_collection_cache: dict[int, int | None] = {}
         self._collection_cache: dict[int, dict] = {}
+
+        # Persistent cache for the collection lookups (the expensive ones).
+        # _id_cache is intentionally not persisted — its search-key entries are
+        # cheap to regenerate and least stable. Per-entry timestamps live in
+        # parallel dicts so the in-memory cache shape stays unchanged.
+        self._mc_cache_ts: dict[int, float] = {}
+        self._coll_cache_ts: dict[int, float] = {}
+        self._cache_file = os.path.join(config_store.data_dir(), _CACHE_FILE_NAME)
+        self._cache_save_lock = threading.Lock()
+        self._load_persistent_cache()
 
         # Scan progress tracking (shared between request thread and scan thread).
         # Seeded from the last persisted scan so the "Last Scan" card and gaps
@@ -59,6 +78,93 @@ class TmdbService:
         self._id_cache.clear()
         self._movie_collection_cache.clear()
         self._collection_cache.clear()
+        self._mc_cache_ts.clear()
+        self._coll_cache_ts.clear()
+        try:
+            os.remove(self._cache_file)
+        except FileNotFoundError:
+            pass
+        except OSError as e:
+            logger.warning("Failed to remove TMDB cache file: %s", e)
+
+    def _load_persistent_cache(self) -> None:
+        """Populate in-memory caches from disk, dropping entries older than the TTL."""
+        if not os.path.isfile(self._cache_file):
+            return
+        try:
+            with open(self._cache_file, 'r') as f:
+                data = json.load(f)
+        except (OSError, json.JSONDecodeError) as e:
+            logger.warning("Failed to load TMDB cache from %s: %s", self._cache_file, e)
+            return
+        if not isinstance(data, dict):
+            return
+
+        now = time.time()
+        for raw_key, entry in (data.get('movie_collection') or {}).items():
+            if not isinstance(entry, dict):
+                continue
+            ts = entry.get('at')
+            if not isinstance(ts, (int, float)) or now - ts > _CACHE_TTL_SECONDS:
+                continue
+            try:
+                key = int(raw_key)
+            except (TypeError, ValueError):
+                continue
+            value = entry.get('value')
+            if value is not None and not isinstance(value, int):
+                continue
+            self._movie_collection_cache[key] = value
+            self._mc_cache_ts[key] = ts
+
+        for raw_key, entry in (data.get('collections') or {}).items():
+            if not isinstance(entry, dict):
+                continue
+            ts = entry.get('at')
+            if not isinstance(ts, (int, float)) or now - ts > _CACHE_TTL_SECONDS:
+                continue
+            try:
+                key = int(raw_key)
+            except (TypeError, ValueError):
+                continue
+            value = entry.get('value')
+            if not isinstance(value, dict):
+                continue
+            self._collection_cache[key] = value
+            self._coll_cache_ts[key] = ts
+
+        if self._movie_collection_cache or self._collection_cache:
+            logger.info(
+                "Loaded TMDB cache: %d collection memberships, %d collections",
+                len(self._movie_collection_cache),
+                len(self._collection_cache),
+            )
+
+    def _save_persistent_cache(self) -> None:
+        """Write the persistent caches to disk via atomic rename."""
+        now = time.time()
+        payload: dict = {
+            'version': 1,
+            'movie_collection': {},
+            'collections': {},
+        }
+        for key, value in self._movie_collection_cache.items():
+            ts = self._mc_cache_ts.get(key, now)
+            payload['movie_collection'][str(key)] = {'value': value, 'at': ts}
+            self._mc_cache_ts[key] = ts
+        for key, value in self._collection_cache.items():
+            ts = self._coll_cache_ts.get(key, now)
+            payload['collections'][str(key)] = {'value': value, 'at': ts}
+            self._coll_cache_ts[key] = ts
+
+        with self._cache_save_lock:
+            try:
+                tmp = self._cache_file + '.tmp'
+                with open(tmp, 'w') as f:
+                    json.dump(payload, f)
+                os.replace(tmp, self._cache_file)
+            except OSError as e:
+                logger.warning("Failed to persist TMDB cache: %s", e)
 
     def test_api_key(self, api_key: str) -> tuple[bool, int]:
         url = f"{self._base_url}/configuration?api_key={api_key}"
@@ -325,6 +431,7 @@ class TmdbService:
             gaps.extend(self._build_gap_entries(coll_data, owned_tmdb_ids, show_existing))
 
         gaps.sort(key=lambda g: (g["collectionName"], g["year"]))
+        self._save_persistent_cache()
         return gaps, None
 
     def find_gaps_for_movie(

@@ -30,6 +30,16 @@ def _ensure_dir():
     os.makedirs(_DATA_DIR, exist_ok=True)
 
 
+def data_dir() -> str:
+    """Return the data directory path, creating it if needed.
+
+    Exposed for other services that need to persist sidecar files (e.g. a
+    plain-JSON cache) into the same directory that holds config.enc.
+    """
+    _ensure_dir()
+    return _DATA_DIR
+
+
 def _legacy_machine_key() -> bytes:
     """Pre-keyfile key derived from hostname + MAC.
 
