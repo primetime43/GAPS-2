@@ -20,6 +20,20 @@
       Next scan: {{ schedule.next_run }}
     </div>
 
+    <div *ngIf="schedule?.last_run as last" class="text-muted mb-3" style="font-size: 13px;">
+      <div *ngIf="last.status === 'success'">
+        Last scheduled scan: {{ last.timestamp | date:'medium' }} — found
+        <strong>{{ last.missing }}</strong> missing across <strong>{{ last.collections }}</strong>
+        collection(s) in "{{ last.library }}".
+      </div>
+      <div *ngIf="last.status === 'skipped'">
+        Last scheduled scan: {{ last.timestamp | date:'medium' }} — skipped ({{ last.message }}).
+      </div>
+      <div *ngIf="last.status === 'error'">
+        Last scheduled scan: {{ last.timestamp | date:'medium' }} — failed ({{ last.message }}).
+      </div>
+    </div>
+
     <!-- Message -->
     <div *ngIf="message"
          class="alert"
