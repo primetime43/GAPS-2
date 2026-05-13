@@ -55,6 +55,18 @@
           <p *ngIf="scheduleEnabled">
             {{ schedulePreset }} &mdash; Next run: {{ nextRun || 'N/A' }}
           </p>
+          <p *ngIf="scheduleEnabled && scheduleLastRun" class="text-muted mb-0" style="font-size: 13px;">
+            <ng-container *ngIf="scheduleLastRun.status === 'success'">
+              Last run: {{ scheduleLastRun.timestamp | date:'short' }} &mdash; found
+              <strong>{{ scheduleLastRun.missing }}</strong> missing.
+            </ng-container>
+            <ng-container *ngIf="scheduleLastRun.status === 'skipped'">
+              Last run: {{ scheduleLastRun.timestamp | date:'short' }} &mdash; skipped.
+            </ng-container>
+            <ng-container *ngIf="scheduleLastRun.status === 'error'">
+              Last run: {{ scheduleLastRun.timestamp | date:'short' }} &mdash; failed.
+            </ng-container>
+          </p>
           <p *ngIf="!scheduleEnabled">
             No schedule set.
             <a [routerLink]="['/settings/schedule']" class="activeLink">Configure now</a>
