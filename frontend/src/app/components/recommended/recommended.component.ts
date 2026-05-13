@@ -82,9 +82,10 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   scanProgress: ScanProgress | null = null;
   freshScanActive = false;
   showFreshScanConfirm = false;
-  // Cached snapshot of the last completed scan so toggling library selection
-  // back to a previously-scanned library restores its gaps without re-running.
-  private lastCompletedScan: { libraries: string[]; gaps: CollectionGap[]; totalOwned: number } | null = null;
+  // Cache of completed scans keyed by sorted-library combination, so toggling
+  // library selection back to any previously-scanned set restores its gaps
+  // without re-running. In-memory only; backend persists just the most recent.
+  private completedScans = new Map<string, { gaps: CollectionGap[]; totalOwned: number }>();
   private pollSub: Subscription | null = null;
   private destroy$ = new Subject<void>();
 
@@ -211,11 +212,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
         this.totalOwned = progress!.total_owned;
         this.scanMode = true;
         this.applyFilter();
-        this.lastCompletedScan = {
-          libraries: scanLibs,
-          gaps: progress!.gaps,
-          totalOwned: progress!.total_owned,
-        };
+        this.cacheCompletedScan(scanLibs, progress!.gaps, progress!.total_owned);
       }
       this.loading = false;
     });
@@ -271,18 +268,27 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   }
 
   private tryRestoreScanForCurrentSelection(): void {
-    const cached = this.lastCompletedScan;
-    if (!cached?.gaps?.length || !cached.libraries.length) return;
-    // Order-independent set equality between the cached scan's libraries and
-    // the user's current selection. Partial matches don't qualify — a single
-    // library shouldn't surface the gaps from a combined multi-library scan.
-    const cur = [...this.selectedLibraries].sort().join('|');
-    const scan = [...cached.libraries].sort().join('|');
-    if (cur !== scan) return;
+    const key = this.scanKey(this.selectedLibraries);
+    if (!key) return;
+    const cached = this.completedScans.get(key);
+    if (!cached?.gaps?.length) return;
     this.allGaps = cached.gaps;
     this.totalOwned = cached.totalOwned;
     this.scanMode = true;
     this.applyFilter();
+  }
+
+  private cacheCompletedScan(libraries: string[], gaps: CollectionGap[], totalOwned: number): void {
+    const key = this.scanKey(libraries);
+    if (!key) return;
+    this.completedScans.set(key, { gaps, totalOwned });
+  }
+
+  private scanKey(libraries: string[]): string {
+    if (!libraries?.length) return '';
+    // Order-independent identifier for a library set. Partial overlaps don't
+    // qualify — a single-library selection won't restore a multi-library scan.
+    return [...libraries].sort().join('|');
   }
 
   toggleLibrarySelection(libTitle: string): void {
@@ -367,11 +373,8 @@ export class RecommendedComponent implements OnInit, OnDestroy {
             this.applyFilter();
             this.loadingGaps = false;
             this.scanProgress = null;
-            this.lastCompletedScan = {
-              libraries: progress.libraries?.length ? progress.libraries : [...this.selectedLibraries],
-              gaps: progress.gaps,
-              totalOwned: progress.total_owned,
-            };
+            const scanLibs = progress.libraries?.length ? progress.libraries : [...this.selectedLibraries];
+            this.cacheCompletedScan(scanLibs, progress.gaps, progress.total_owned);
           } else if (progress.status === 'error') {
             this.stopPolling();
             this.errorMessage = progress.error || 'Scan failed.';
