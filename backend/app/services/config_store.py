@@ -5,6 +5,7 @@ import logging
 import os
 import platform
 import sys
+import threading
 import uuid
 
 from cryptography.fernet import Fernet, InvalidToken
@@ -12,6 +13,11 @@ from cryptography.fernet import Fernet, InvalidToken
 logger = logging.getLogger(__name__)
 
 _KEY_ENV_VAR = 'GAPS2_CONFIG_KEY'
+
+# Serializes the read-modify-write in put/remove so concurrent writers
+# (request thread + scheduled-scan thread + scan-completion thread) can't
+# clobber each other's keys.
+_WRITE_LOCK = threading.Lock()
 
 
 def _get_base_dir():
@@ -146,19 +152,27 @@ def load() -> dict:
 
 
 def save(data: dict) -> None:
-    """Encrypt and save the full config dict to disk."""
+    """Encrypt and save the full config dict to disk via atomic rename.
+
+    The temp-file + os.replace dance means a concurrent reader either sees
+    the pre-save file or the post-save file, never a half-written blob.
+    """
     _ensure_dir()
     plaintext = json.dumps(data).encode()
     encrypted = _fernet.encrypt(plaintext)
-    with open(_CONFIG_FILE, 'wb') as f:
+    tmp = _CONFIG_FILE + '.tmp'
+    with open(tmp, 'wb') as f:
         f.write(encrypted)
     # Restrict to owner-only read/write so other users on a shared host
     # (or other containers on a shared volume) can't read the encrypted blob.
+    # Set on the temp file before the rename so the destination never exists
+    # with looser permissions.
     try:
-        os.chmod(_CONFIG_FILE, 0o600)
+        os.chmod(tmp, 0o600)
     except OSError:
         # Windows has a limited chmod; best-effort — encryption still protects contents.
         pass
+    os.replace(tmp, _CONFIG_FILE)
 
 
 def get(key: str, default=None):
@@ -166,12 +180,14 @@ def get(key: str, default=None):
 
 
 def put(key: str, value) -> None:
-    data = load()
-    data[key] = value
-    save(data)
+    with _WRITE_LOCK:
+        data = load()
+        data[key] = value
+        save(data)
 
 
 def remove(key: str) -> None:
-    data = load()
-    data.pop(key, None)
-    save(data)
+    with _WRITE_LOCK:
+        data = load()
+        data.pop(key, None)
+        save(data)
