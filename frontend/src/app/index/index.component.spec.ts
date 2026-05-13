@@ -43,7 +43,7 @@ describe('IndexComponent', () => {
     httpMock.expectOne(`${environment.apiUrl}/emby/active-server`)
       .flush(options?.emby ?? {});
     httpMock.expectOne(`${environment.apiUrl}/schedule`)
-      .flush(options?.schedule ?? { enabled: false, preset: '', next_run: null, presets: {} });
+      .flush(options?.schedule ?? { enabled: false, preset: '', next_run: null, last_run: null, presets: {} });
     httpMock.expectOne(`${environment.apiUrl}/recommendations/scan/progress`)
       .flush(options?.progress ?? { status: 'idle' });
   }
@@ -120,7 +120,7 @@ describe('IndexComponent', () => {
 
   it('should load schedule status', fakeAsync(() => {
     flushInitRequests({
-      schedule: { enabled: true, preset: 'daily', next_run: '2026-04-07T00:00:00Z', presets: {} },
+      schedule: { enabled: true, preset: 'daily', next_run: '2026-04-07T00:00:00Z', last_run: null, presets: {} },
     });
     tick();
 

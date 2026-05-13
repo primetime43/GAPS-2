@@ -3,12 +3,22 @@ import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../environments/environment';
 
+export interface ScheduleLastRun {
+  timestamp: string;
+  status: 'success' | 'skipped' | 'error';
+  library: string;
+  missing: number;
+  collections: number;
+  message: string;
+}
+
 export interface ScheduleConfig {
   enabled: boolean;
   preset: string;
   library: string;
   source: string;
   next_run: string | null;
+  last_run: ScheduleLastRun | null;
   presets: { [key: string]: string };
 }
 

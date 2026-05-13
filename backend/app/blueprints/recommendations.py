@@ -120,6 +120,7 @@ def scan_library_gaps():
         owned_movies=owned_movies,
         owned_tmdb_ids=owned_ids,
         show_existing=show_existing,
+        library_names=names,
     )
 
     return jsonify(status='started', total=len(owned_movies))

@@ -1,10 +1,13 @@
 import logging
+from datetime import datetime, timezone
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from app.services import config_store
 
 logger = logging.getLogger(__name__)
+
+LAST_RUN_KEY = 'schedule_last_run'
 
 # Preset schedule options with cron expressions
 SCHEDULE_PRESETS = {
@@ -44,6 +47,7 @@ class ScheduleService:
         """Execute a scan using the saved library config."""
         if not self._app:
             logger.error("Scheduled scan skipped: app context not initialized")
+            self._record_last_run(status='skipped', library='', message='app context not initialized')
             return
 
         with self._app.app_context():
@@ -53,6 +57,7 @@ class ScheduleService:
                 source = config.get('source', 'plex')
                 if not library_name:
                     logger.warning("Scheduled scan skipped: no library configured")
+                    self._record_last_run(status='skipped', library='', message='no library configured')
                     return
 
                 logger.info("Scheduled scan started for library '%s' (source=%s)", library_name, source)
@@ -63,6 +68,9 @@ class ScheduleService:
                 api_key = tmdb.api_key
                 if not api_key:
                     logger.warning("Scheduled scan skipped: no TMDB API key configured")
+                    self._record_last_run(
+                        status='skipped', library=library_name, message='no TMDB API key configured'
+                    )
                     return
 
                 # Load movies if not cached
@@ -80,6 +88,11 @@ class ScheduleService:
                         "Scheduled scan skipped: library '%s' has no movies (server unreachable or library empty)",
                         library_name,
                     )
+                    self._record_last_run(
+                        status='skipped',
+                        library=library_name,
+                        message='library has no movies (server unreachable or library empty)',
+                    )
                     return
 
                 gaps, error = tmdb.find_collection_gaps(
@@ -90,6 +103,7 @@ class ScheduleService:
                 )
                 if error:
                     logger.error("Scheduled scan failed finding gaps for '%s': %s", library_name, error)
+                    self._record_last_run(status='error', library=library_name, message=str(error))
                     return
 
                 # Send notifications
@@ -99,11 +113,42 @@ class ScheduleService:
                     "Scheduled scan complete for '%s': %d missing across %d collections",
                     library_name, len(missing), collections,
                 )
+                self._record_last_run(
+                    status='success',
+                    library=library_name,
+                    missing=len(missing),
+                    collections=collections,
+                )
                 self._app.notification_service.notify_scan_results(
                     len(missing), collections, library_name
                 )
-            except Exception:
+            except Exception as e:
                 logger.exception("Scheduled scan crashed unexpectedly")
+                self._record_last_run(
+                    status='error',
+                    library=config_store.get('schedule', {}).get('library', ''),
+                    message=str(e),
+                )
+
+    @staticmethod
+    def _record_last_run(
+        status: str,
+        library: str,
+        missing: int = 0,
+        collections: int = 0,
+        message: str = '',
+    ) -> None:
+        try:
+            config_store.put(LAST_RUN_KEY, {
+                'timestamp': datetime.now(timezone.utc).isoformat(),
+                'status': status,
+                'library': library,
+                'missing': missing,
+                'collections': collections,
+                'message': message,
+            })
+        except OSError as e:
+            logger.warning("Failed to persist scheduled scan history: %s", e)
 
     def _add_job(self, preset: str) -> None:
         """Add or replace the scheduled job."""
@@ -146,5 +191,6 @@ class ScheduleService:
             'library': saved.get('library', ''),
             'source': saved.get('source', 'plex'),
             'next_run': str(job.next_run_time) if job else None,
+            'last_run': config_store.get(LAST_RUN_KEY),
             'presets': {k: v['label'] for k, v in SCHEDULE_PRESETS.items()},
         }

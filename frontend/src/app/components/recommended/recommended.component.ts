@@ -82,6 +82,10 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   scanProgress: ScanProgress | null = null;
   freshScanActive = false;
   showFreshScanConfirm = false;
+  // Cache of completed scans keyed by sorted-library combination, so toggling
+  // library selection back to any previously-scanned set restores its gaps
+  // without re-running. In-memory only; backend persists just the most recent.
+  private completedScans = new Map<string, { gaps: CollectionGap[]; totalOwned: number }>();
   private pollSub: Subscription | null = null;
   private destroy$ = new Subject<void>();
 
@@ -160,19 +164,66 @@ export class RecommendedComponent implements OnInit, OnDestroy {
         this.libraries = Array.isArray(res.libraries)
           ? res.libraries.filter((lib: MediaLibrary) => lib.type === 'movie')
           : [];
-
-        if (autoSelectLibrary && prefs?.defaultLibrary && this.libraries.some(l => l.title === prefs.defaultLibrary)) {
-          this.selectedLibrary = prefs.defaultLibrary;
-          this.selectedLibraries = [prefs.defaultLibrary];
-          this.onLibrarySelect();
-        }
+        this.finishInitialization(prefs, autoSelectLibrary);
       } else {
         this.hasServer = false;
         this.activeServerName = '';
         this.libraries = [];
+        this.loading = false;
+      }
+    });
+  }
+
+  private finishInitialization(prefs: any, autoSelectLibrary: boolean): void {
+    // Skip restore if the user is mid-scan or drilled into a single movie.
+    if (this.scanProgress || this.selectedMovie) {
+      if (autoSelectLibrary) this.applyDefaultLibrary(prefs);
+      this.loading = false;
+      return;
+    }
+
+    // Re-entry: the component preserves its state across navigation, so the
+    // user's in-memory selection and gaps are the source of truth. Don't
+    // re-hydrate from the persisted scan — it may be stale relative to a
+    // library change the user made before navigating away (issue #36).
+    if (!autoSelectLibrary) {
+      this.loading = false;
+      return;
+    }
+
+    this.recommendationService.getScanProgress().pipe(
+      catchError(() => of(null))
+    ).subscribe((progress) => {
+      const validScan = !!(progress && progress.status === 'done' && progress.gaps?.length);
+      const scanLibs = validScan ? (progress!.libraries || []) : [];
+
+      // The scan's libraries take precedence over the user's default so the
+      // dropdown matches the gaps that are about to render.
+      if (scanLibs.length && this.libraries.some(l => scanLibs.includes(l.title))) {
+        this.selectedLibrary = scanLibs[0];
+        this.selectedLibraries = [...scanLibs];
+        this.onLibrarySelect();
+      } else {
+        this.applyDefaultLibrary(prefs);
+      }
+
+      if (validScan) {
+        this.allGaps = progress!.gaps;
+        this.totalOwned = progress!.total_owned;
+        this.scanMode = true;
+        this.applyFilter();
+        this.cacheCompletedScan(scanLibs, progress!.gaps, progress!.total_owned);
       }
       this.loading = false;
     });
+  }
+
+  private applyDefaultLibrary(prefs: any): void {
+    if (prefs?.defaultLibrary && this.libraries.some(l => l.title === prefs.defaultLibrary)) {
+      this.selectedLibrary = prefs.defaultLibrary;
+      this.selectedLibraries = [prefs.defaultLibrary];
+      this.onLibrarySelect();
+    }
   }
 
   onLibrarySelect(): void {
@@ -181,7 +232,6 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     if (!this.selectedLibraries.includes(this.selectedLibrary)) {
       this.selectedLibraries = [this.selectedLibrary];
     }
-    this.loadingMovies = true;
     this.movies = [];
     this.movieFilter = '';
     this.allGaps = [];
@@ -190,6 +240,15 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     this.scanMode = false;
     this.errorMessage = '';
 
+    // If the cached last scan matches this selection exactly, restore its
+    // gaps so users don't have to re-scan just to view results they already
+    // have. Otherwise stay in browse mode.
+    this.tryRestoreScanForCurrentSelection();
+
+    // Always load movies so "Scan for Gaps" can run without a re-fetch. When
+    // a scan was restored we hide the spinner since the user is now looking
+    // at the gaps panel, not the movie picker.
+    this.loadingMovies = !this.scanMode;
     this.libraryService.getMovies(this.selectedLibrary, this.activeSource).subscribe({
       next: (res: any) => {
         if (res.error) {
@@ -206,6 +265,30 @@ export class RecommendedComponent implements OnInit, OnDestroy {
         this.loadingMovies = false;
       }
     });
+  }
+
+  private tryRestoreScanForCurrentSelection(): void {
+    const key = this.scanKey(this.selectedLibraries);
+    if (!key) return;
+    const cached = this.completedScans.get(key);
+    if (!cached?.gaps?.length) return;
+    this.allGaps = cached.gaps;
+    this.totalOwned = cached.totalOwned;
+    this.scanMode = true;
+    this.applyFilter();
+  }
+
+  private cacheCompletedScan(libraries: string[], gaps: CollectionGap[], totalOwned: number): void {
+    const key = this.scanKey(libraries);
+    if (!key) return;
+    this.completedScans.set(key, { gaps, totalOwned });
+  }
+
+  private scanKey(libraries: string[]): string {
+    if (!libraries?.length) return '';
+    // Order-independent identifier for a library set. Partial overlaps don't
+    // qualify — a single-library selection won't restore a multi-library scan.
+    return [...libraries].sort().join('|');
   }
 
   toggleLibrarySelection(libTitle: string): void {
@@ -290,6 +373,8 @@ export class RecommendedComponent implements OnInit, OnDestroy {
             this.applyFilter();
             this.loadingGaps = false;
             this.scanProgress = null;
+            const scanLibs = progress.libraries?.length ? progress.libraries : [...this.selectedLibraries];
+            this.cacheCompletedScan(scanLibs, progress.gaps, progress.total_owned);
           } else if (progress.status === 'error') {
             this.stopPolling();
             this.errorMessage = progress.error || 'Scan failed.';

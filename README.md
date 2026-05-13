@@ -45,7 +45,7 @@ The app will be available at `http://localhost:4277`.
 docker pull primetime43/gaps-2:develop
 ```
 
-> **Heads up — config is machine-bound.** GAPS encrypts saved settings (API keys, tokens, server URLs) in `backend/data/config.enc` using a key derived from the host's MAC address and hostname. That means the file **cannot be moved between machines** and may become unreadable after a VM migration, a Docker network recreation that rotates the container's MAC, or migrating between NAS models. If that happens, delete `config.enc` and re-enter your settings from the UI. Nothing critical is stored there that can't be re-entered in a minute or two.
+> **Persist `/app/data`.** GAPS encrypts saved settings (API keys, tokens, server URLs) in `backend/data/config.enc`. The encryption key lives next to it as `.config.key`, so both files must be on a persistent volume — otherwise every container recreation generates a fresh key and the old config becomes unreadable. The `docker run` example above and the Compose file already mount `/app/data`; if you write your own command (e.g. an unRAID template), make sure the mount is there. To override the key explicitly — for moving between hosts or sharing a config across replicas — set the `GAPS2_CONFIG_KEY` environment variable to a Fernet key (output of `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`).
 
 ### Images of v2.1.0
 <details>

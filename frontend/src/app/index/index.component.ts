@@ -5,7 +5,7 @@ import { TmdbService } from '../services/tmdb/tmdb.service';
 import { PlexService } from '../services/plex.service';
 import { JellyfinService } from '../services/jellyfin.service';
 import { EmbyService } from '../services/emby.service';
-import { ScheduleService, ScheduleConfig } from '../services/schedule.service';
+import { ScheduleService, ScheduleConfig, ScheduleLastRun } from '../services/schedule.service';
 import { HttpClient } from '@angular/common/http';
 import { environment } from '../../environments/environment';
 
@@ -25,6 +25,7 @@ export class IndexComponent implements OnInit {
   scheduleEnabled = false;
   schedulePreset = '';
   nextRun: string | null = null;
+  scheduleLastRun: ScheduleLastRun | null = null;
 
   lastScanStatus = '';
   lastScanGaps = 0;
@@ -71,6 +72,7 @@ export class IndexComponent implements OnInit {
         this.scheduleEnabled = config.enabled;
         this.schedulePreset = config.preset;
         this.nextRun = config.next_run;
+        this.scheduleLastRun = config.last_run;
       },
       error: () => {}
     });
