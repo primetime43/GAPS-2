@@ -1,5 +1,6 @@
 import logging
 import threading
+from datetime import datetime, timezone
 import requests
 from app.services import config_store
 
@@ -18,9 +19,15 @@ class TmdbService:
         self._movie_collection_cache: dict[int, int | None] = {}
         self._collection_cache: dict[int, dict] = {}
 
-        # Scan progress tracking (shared between request thread and scan thread)
+        # Scan progress tracking (shared between request thread and scan thread).
+        # Seeded from the last persisted scan so the "Last Scan" card and gaps
+        # list survive a backend restart.
         self._scan_progress_lock = threading.Lock()
-        self._scan_progress: dict = {
+        self._scan_progress: dict = self._initial_scan_progress()
+
+    @staticmethod
+    def _initial_scan_progress() -> dict:
+        progress = {
             'status': 'idle',    # idle | scanning | done | error
             'processed': 0,
             'total': 0,
@@ -28,8 +35,16 @@ class TmdbService:
             'collections_found': 0,
             'gaps': [],
             'total_owned': 0,
+            'completed_at': None,
             'error': None,
         }
+        last = config_store.get('last_scan')
+        if last:
+            progress['status'] = 'done'
+            progress['gaps'] = last.get('gaps', [])
+            progress['total_owned'] = last.get('total_owned', 0)
+            progress['completed_at'] = last.get('completed_at')
+        return progress
 
     @property
     def api_key(self) -> str | None:
@@ -220,6 +235,7 @@ class TmdbService:
                 'collections_found': 0,
                 'gaps': [],
                 'total_owned': len(owned_tmdb_ids),
+                'completed_at': None,
                 'error': None,
             }
 
@@ -240,10 +256,21 @@ class TmdbService:
         """Background scan worker."""
         try:
             gaps, _ = self.find_collection_gaps(api_key, owned_movies, owned_tmdb_ids, show_existing)
+            completed_at = datetime.now(timezone.utc).isoformat()
+            final_gaps = gaps or []
             with self._scan_progress_lock:
-                self._scan_progress['gaps'] = gaps or []
+                self._scan_progress['gaps'] = final_gaps
                 self._scan_progress['total_owned'] = len(owned_tmdb_ids)
+                self._scan_progress['completed_at'] = completed_at
                 self._scan_progress['status'] = 'done'
+            try:
+                config_store.put('last_scan', {
+                    'gaps': final_gaps,
+                    'total_owned': len(owned_tmdb_ids),
+                    'completed_at': completed_at,
+                })
+            except OSError as e:
+                logger.warning("Failed to persist last_scan: %s", e)
         except Exception as e:
             with self._scan_progress_lock:
                 self._scan_progress['error'] = str(e)
