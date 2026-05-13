@@ -172,6 +172,24 @@ export class RecommendedComponent implements OnInit, OnDestroy {
         this.libraries = [];
       }
       this.loading = false;
+      this.hydrateLastScan();
+    });
+  }
+
+  private hydrateLastScan(): void {
+    // Restore the gaps panel from the last persisted scan so users don't have
+    // to re-run the scan after a backend restart. Skipped while a scan is
+    // already in progress in this session, and after the user has drilled into
+    // a single-movie view.
+    if (this.scanProgress || this.selectedMovie) return;
+    this.recommendationService.getScanProgress().pipe(
+      catchError(() => of(null))
+    ).subscribe((progress) => {
+      if (!progress || progress.status !== 'done' || !progress.gaps?.length) return;
+      this.allGaps = progress.gaps;
+      this.totalOwned = progress.total_owned;
+      this.scanMode = true;
+      this.applyFilter();
     });
   }
 

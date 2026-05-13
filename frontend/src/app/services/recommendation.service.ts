@@ -14,6 +14,7 @@ export interface ScanProgress {
   collections_found: number;
   gaps: CollectionGap[];
   total_owned: number;
+  completed_at: string | null;
   error: string | null;
 }
 

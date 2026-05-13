@@ -55,6 +55,17 @@ describe('RecommendedComponent', () => {
     jellyfinService.getActiveServer.and.returnValue(of({} as any));
     embyService.getActiveServer.and.returnValue(of({} as any));
     recommendationService.getIgnored.and.returnValue(of([]));
+    recommendationService.getScanProgress.and.returnValue(of({
+      status: 'idle',
+      processed: 0,
+      total: 0,
+      current_movie: '',
+      collections_found: 0,
+      gaps: [],
+      total_owned: 0,
+      completed_at: null,
+      error: null,
+    }));
     preferencesService.load.and.returnValue(of({
       defaultLibrary: '',
       moviesPerPage: 50,
