@@ -82,6 +82,9 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   scanProgress: ScanProgress | null = null;
   freshScanActive = false;
   showFreshScanConfirm = false;
+  // Cached snapshot of the last completed scan so toggling library selection
+  // back to a previously-scanned library restores its gaps without re-running.
+  private lastCompletedScan: { libraries: string[]; gaps: CollectionGap[]; totalOwned: number } | null = null;
   private pollSub: Subscription | null = null;
   private destroy$ = new Subject<void>();
 
@@ -208,6 +211,11 @@ export class RecommendedComponent implements OnInit, OnDestroy {
         this.totalOwned = progress!.total_owned;
         this.scanMode = true;
         this.applyFilter();
+        this.lastCompletedScan = {
+          libraries: scanLibs,
+          gaps: progress!.gaps,
+          totalOwned: progress!.total_owned,
+        };
       }
       this.loading = false;
     });
@@ -227,7 +235,6 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     if (!this.selectedLibraries.includes(this.selectedLibrary)) {
       this.selectedLibraries = [this.selectedLibrary];
     }
-    this.loadingMovies = true;
     this.movies = [];
     this.movieFilter = '';
     this.allGaps = [];
@@ -236,6 +243,15 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     this.scanMode = false;
     this.errorMessage = '';
 
+    // If the cached last scan matches this selection exactly, restore its
+    // gaps so users don't have to re-scan just to view results they already
+    // have. Otherwise stay in browse mode.
+    this.tryRestoreScanForCurrentSelection();
+
+    // Always load movies so "Scan for Gaps" can run without a re-fetch. When
+    // a scan was restored we hide the spinner since the user is now looking
+    // at the gaps panel, not the movie picker.
+    this.loadingMovies = !this.scanMode;
     this.libraryService.getMovies(this.selectedLibrary, this.activeSource).subscribe({
       next: (res: any) => {
         if (res.error) {
@@ -252,6 +268,21 @@ export class RecommendedComponent implements OnInit, OnDestroy {
         this.loadingMovies = false;
       }
     });
+  }
+
+  private tryRestoreScanForCurrentSelection(): void {
+    const cached = this.lastCompletedScan;
+    if (!cached?.gaps?.length || !cached.libraries.length) return;
+    // Order-independent set equality between the cached scan's libraries and
+    // the user's current selection. Partial matches don't qualify — a single
+    // library shouldn't surface the gaps from a combined multi-library scan.
+    const cur = [...this.selectedLibraries].sort().join('|');
+    const scan = [...cached.libraries].sort().join('|');
+    if (cur !== scan) return;
+    this.allGaps = cached.gaps;
+    this.totalOwned = cached.totalOwned;
+    this.scanMode = true;
+    this.applyFilter();
   }
 
   toggleLibrarySelection(libTitle: string): void {
@@ -336,6 +367,11 @@ export class RecommendedComponent implements OnInit, OnDestroy {
             this.applyFilter();
             this.loadingGaps = false;
             this.scanProgress = null;
+            this.lastCompletedScan = {
+              libraries: progress.libraries?.length ? progress.libraries : [...this.selectedLibraries],
+              gaps: progress.gaps,
+              totalOwned: progress.total_owned,
+            };
           } else if (progress.status === 'error') {
             this.stopPolling();
             this.errorMessage = progress.error || 'Scan failed.';
