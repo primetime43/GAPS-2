@@ -22,6 +22,7 @@ import { TmdbSettingsComponent } from './components/settings/tmdb-settings/tmdb-
 import { SettingsComponent } from './components/settings/settings.component';
 import { ScheduleSettingsComponent } from './components/settings/schedule-settings/schedule-settings.component';
 import { NotificationSettingsComponent } from './components/settings/notification-settings/notification-settings.component';
+import { RadarrSettingsComponent } from './components/settings/radarr-settings/radarr-settings.component';
 import { ConfirmModalComponent } from './components/confirm-modal/confirm-modal.component';
 import { LogsComponent } from './components/logs/logs.component';
 
@@ -39,6 +40,7 @@ import { LogsComponent } from './components/logs/logs.component';
         TmdbSettingsComponent,
         ScheduleSettingsComponent,
         NotificationSettingsComponent,
+        RadarrSettingsComponent,
         SettingsComponent,
         LogsComponent
     ],

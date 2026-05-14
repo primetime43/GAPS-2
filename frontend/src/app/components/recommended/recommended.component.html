@@ -319,6 +319,15 @@
               </a>
               <div *ngIf="!gap.tmdbId" class="rec-title">{{ gap.name }}</div>
               <div class="rec-year">{{ gap.year }}</div>
+              <button
+                *ngIf="radarrEnabled && !gap.owned && !isIgnored(gap) && gap.tmdbId"
+                class="btn btn-sm radarr-btn mt-2"
+                [ngClass]="radarrButtonClass(gap.tmdbId)"
+                [disabled]="radarrStatus.get(gap.tmdbId) === 'sending' || radarrStatus.get(gap.tmdbId) === 'sent'"
+                [title]="radarrErrors.get(gap.tmdbId) || 'Add this movie to Radarr'"
+                (click)="sendToRadarr(gap, $event)">
+                {{ radarrButtonLabel(gap.tmdbId) }}
+              </button>
             </div>
           </div>
         </div>

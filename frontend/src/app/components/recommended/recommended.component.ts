@@ -13,6 +13,7 @@ import { CollectionGap } from '../../models/recommendation.model';
 import { ActiveServerResponse, MediaLibrary } from '../../models/media-server.model';
 import { PreferencesService } from '../../services/preferences.service';
 import { ExportService, ExportFormat } from '../../services/export.service';
+import { RadarrService } from '../../services/radarr.service';
 
 interface CollectionGroup {
   name: string;
@@ -82,6 +83,13 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   scanProgress: ScanProgress | null = null;
   freshScanActive = false;
   showFreshScanConfirm = false;
+
+  // Radarr
+  radarrEnabled = false;
+  // tmdbId -> 'sending' | 'sent' | 'error' so the button can swap label/state without
+  // affecting other movies. 'sent' covers both "newly added" and "already exists".
+  radarrStatus = new Map<number, 'sending' | 'sent' | 'error'>();
+  radarrErrors = new Map<number, string>();
   // Cache of completed scans keyed by sorted-library combination, so toggling
   // library selection back to any previously-scanned set restores its gaps
   // without re-running. In-memory only; backend persists just the most recent.
@@ -97,10 +105,12 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     private recommendationService: RecommendationService,
     private preferencesService: PreferencesService,
     private exportService: ExportService,
+    private radarrService: RadarrService,
     private router: Router,
   ) {}
 
   ngOnInit(): void {
+    this.refreshRadarrStatus();
     this.loadContext(true);
 
     // Re-load context on every return to /recommended so prefs / server changes
@@ -615,6 +625,52 @@ export class RecommendedComponent implements OnInit, OnDestroy {
           )
         }))
         .filter(group => group.gaps.length > 0);
+    }
+  }
+
+  refreshRadarrStatus(): void {
+    this.radarrService.getConfig().pipe(catchError(() => of(null))).subscribe(cfg => {
+      this.radarrEnabled = !!(cfg && cfg.enabled);
+    });
+  }
+
+  sendToRadarr(gap: CollectionGap, event: Event): void {
+    event.stopPropagation();
+    event.preventDefault();
+    if (!gap.tmdbId || !this.radarrEnabled) {
+      return;
+    }
+    if (this.radarrStatus.get(gap.tmdbId) === 'sending') {
+      return;
+    }
+    this.radarrStatus.set(gap.tmdbId, 'sending');
+    this.radarrErrors.delete(gap.tmdbId);
+    const yearNum = parseInt(gap.year, 10) || 0;
+    this.radarrService.addMovie(gap.tmdbId, gap.name, yearNum).subscribe({
+      next: () => this.radarrStatus.set(gap.tmdbId!, 'sent'),
+      error: (err) => {
+        this.radarrStatus.set(gap.tmdbId!, 'error');
+        this.radarrErrors.set(gap.tmdbId!, err.error?.error || 'Failed to add to Radarr');
+      },
+    });
+  }
+
+  radarrButtonLabel(tmdbId: number | undefined): string {
+    if (!tmdbId) return 'Send to Radarr';
+    switch (this.radarrStatus.get(tmdbId)) {
+      case 'sending': return 'Sending...';
+      case 'sent': return 'In Radarr';
+      case 'error': return 'Retry';
+      default: return 'Send to Radarr';
+    }
+  }
+
+  radarrButtonClass(tmdbId: number | undefined): string {
+    if (!tmdbId) return 'btn-outline-primary';
+    switch (this.radarrStatus.get(tmdbId)) {
+      case 'sent': return 'btn-success';
+      case 'error': return 'btn-outline-danger';
+      default: return 'btn-outline-primary';
     }
   }
 }

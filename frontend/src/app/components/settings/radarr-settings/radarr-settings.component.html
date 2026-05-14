@@ -1,0 +1,107 @@
+<div class="top-margin regular-text">
+  <p>Connect to your Radarr instance so you can send missing collection movies straight there.</p>
+
+  <!-- Status -->
+  <div class="status-indicator mb-3">
+    <span *ngIf="config.enabled" class="status-ok">&#10003; Radarr configured</span>
+    <span *ngIf="!config.enabled" class="status-missing">&#10007; Radarr not configured</span>
+  </div>
+
+  <!-- Message -->
+  <div *ngIf="message"
+       class="alert"
+       [class.alert-success]="messageType === 'success'"
+       [class.alert-danger]="messageType === 'error'">
+    {{ message }}
+  </div>
+
+  <div class="form-group mb-3">
+    <label class="form-label">Radarr URL</label>
+    <input
+      class="form-control dark-input"
+      type="text"
+      placeholder="http://localhost:7878"
+      [(ngModel)]="config.url"
+    >
+    <div class="text-muted" style="font-size: 12px;">
+      Include scheme and port. Paths like <code>/api</code> or <code>/api/v3</code> are stripped automatically.
+    </div>
+  </div>
+
+  <div class="form-group mb-3">
+    <label class="form-label">API Key</label>
+    <div class="input-group">
+      <input
+        class="form-control dark-input"
+        [type]="showKey ? 'text' : 'password'"
+        placeholder="Radarr API key (Settings &rarr; General)"
+        [(ngModel)]="config.api_key"
+      >
+      <button class="btn btn-outline-secondary" type="button" (click)="showKey = !showKey">
+        {{ showKey ? 'Hide' : 'Show' }}
+      </button>
+    </div>
+  </div>
+
+  <div class="d-flex gap-2 mb-3">
+    <button class="btn btn-info" type="button" (click)="testConnection()" [disabled]="testing || saving">
+      {{ testing ? 'Testing...' : 'Test Connection' }}
+    </button>
+    <button class="btn btn-primary" type="button" (click)="saveConfig()" [disabled]="testing || saving">
+      {{ saving ? 'Saving...' : 'Save' }}
+    </button>
+    <button
+      *ngIf="config.enabled"
+      class="btn btn-outline-danger ms-auto"
+      type="button"
+      (click)="clearConfig()"
+      [disabled]="testing || saving">
+      Clear
+    </button>
+  </div>
+
+  <hr *ngIf="config.enabled">
+
+  <div *ngIf="config.enabled">
+    <h5 class="mb-3">Defaults for added movies</h5>
+
+    <div *ngIf="loadingMeta" class="text-muted mb-3">Loading profiles and root folders...</div>
+
+    <div class="form-group mb-3">
+      <label class="form-label">Quality profile</label>
+      <select class="form-select dark-select" [(ngModel)]="config.quality_profile_id">
+        <option [ngValue]="0" disabled hidden>Select a profile...</option>
+        <option *ngFor="let p of profiles" [ngValue]="p.id">{{ p.name }}</option>
+      </select>
+    </div>
+
+    <div class="form-group mb-3">
+      <label class="form-label">Root folder</label>
+      <select class="form-select dark-select" [(ngModel)]="config.root_folder_path">
+        <option value="" disabled hidden>Select a root folder...</option>
+        <option *ngFor="let f of rootFolders" [value]="f.path">{{ f.path }}</option>
+      </select>
+    </div>
+
+    <div class="form-group mb-3">
+      <label class="form-label">Minimum availability</label>
+      <select class="form-select dark-select" [(ngModel)]="config.minimum_availability">
+        <option *ngFor="let opt of availabilityOptions" [value]="opt.value">{{ opt.label }}</option>
+      </select>
+    </div>
+
+    <div class="form-check mb-2">
+      <input class="form-check-input" type="checkbox" id="radarrMonitored" [(ngModel)]="config.monitored">
+      <label class="form-check-label text-muted" for="radarrMonitored">Monitor added movies</label>
+    </div>
+
+    <div class="form-check mb-3">
+      <input class="form-check-input" type="checkbox" id="radarrSearchOnAdd" [(ngModel)]="config.search_on_add">
+      <label class="form-check-label text-muted" for="radarrSearchOnAdd">Search on add</label>
+    </div>
+
+    <button class="btn btn-primary" type="button" (click)="saveConfig()" [disabled]="testing || saving">
+      {{ saving ? 'Saving...' : 'Save Defaults' }}
+    </button>
+  </div>
+</div>
