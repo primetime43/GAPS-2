@@ -3,6 +3,7 @@ import logging
 import os
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 
 import requests
@@ -10,6 +11,12 @@ import requests
 from app.services import config_store
 
 logger = logging.getLogger(__name__)
+
+# Parallel TheTVDB lookups during a scan. Each owned series and each franchise
+# member needs its own /series/{id}/extended call; fetching them concurrently
+# turns a multi-minute serial crawl into seconds. Kept modest to stay friendly
+# to TheTVDB's rate limits.
+_SCAN_WORKERS = 8
 
 CONFIG_KEY = 'tvdb'
 DEFAULT_TIMEOUT = 15
@@ -332,45 +339,91 @@ class TvdbService:
         show_existing: bool = False,
         generation: int | None = None,
     ) -> list[dict]:
-        """For each owned series, find official franchise members not in the library."""
+        """For each owned series, find official franchise members not in the library.
+
+        TheTVDB lookups are issued concurrently so a large library scans in
+        seconds rather than minutes. Progress spans three phases (owned-show
+        lookups, franchise-member lists, member metadata) so the bar keeps
+        moving instead of stalling at 100% during the back half.
+        """
         def superseded() -> bool:
             return generation is not None and self._scan_generation != generation
 
+        series_ids = [s['tvdbId'] for s in owned_shows if isinstance(s.get('tvdbId'), int)]
+        id_to_name = {s['tvdbId']: s.get('name', '') for s in owned_shows
+                      if isinstance(s.get('tvdbId'), int)}
+        processed = 0
         seen_lists: set[int] = set()
         relevant_lists: list[dict] = []  # list-base dicts, deduped
-        gaps: list[dict] = []
-        total = len(owned_shows)
 
-        for i, show in enumerate(owned_shows):
-            if superseded():
-                return gaps
-            with self._scan_progress_lock:
-                self._scan_progress['processed'] = i + 1
-                self._scan_progress['current_show'] = show.get('name', '')
-
-            series_id = show.get('tvdbId')
-            if not isinstance(series_id, int):
-                continue
-
-            meta = self._get_series_extended(series_id)
-            if not meta:
-                continue
-
-            for lst in meta.get('lists', []):
-                # Only official, multi-series franchise lists — skip user lists.
-                if not lst.get('isOfficial'):
+        # Phase 1: fetch each owned show's extended record (which carries its
+        # franchise lists) in parallel.
+        with ThreadPoolExecutor(max_workers=_SCAN_WORKERS) as ex:
+            futures = {ex.submit(self._get_series_extended, sid): sid for sid in series_ids}
+            for fut in as_completed(futures):
+                if superseded():
+                    return []
+                processed += 1
+                meta = fut.result()
+                with self._scan_progress_lock:
+                    self._scan_progress['processed'] = processed
+                    self._scan_progress['current_show'] = id_to_name.get(futures[fut], '')
+                if not meta:
                     continue
-                list_id = lst.get('id')
-                if list_id in seen_lists:
-                    continue
-                seen_lists.add(list_id)
-                relevant_lists.append(lst)
+                for lst in meta.get('lists', []):
+                    if not lst.get('isOfficial'):
+                        continue
+                    list_id = lst.get('id')
+                    if list_id in seen_lists:
+                        continue
+                    seen_lists.add(list_id)
+                    relevant_lists.append(lst)
                 with self._scan_progress_lock:
                     self._scan_progress['franchises_found'] = len(relevant_lists)
 
-        for lst in relevant_lists:
-            if superseded():
-                return gaps
+        if superseded():
+            return []
+
+        # Phase 2: fetch each relevant franchise's member list in parallel.
+        with self._scan_progress_lock:
+            self._scan_progress['total'] = len(series_ids) + len(relevant_lists)
+        members_by_list: list[tuple[dict, dict]] = []
+        with ThreadPoolExecutor(max_workers=_SCAN_WORKERS) as ex:
+            futures = {ex.submit(self._get_list_members, lst['id']): lst for lst in relevant_lists}
+            for fut in as_completed(futures):
+                if superseded():
+                    return []
+                processed += 1
+                members = fut.result()
+                with self._scan_progress_lock:
+                    self._scan_progress['processed'] = processed
+                if members and len(members.get('series', [])) >= 2:
+                    members_by_list.append((futures[fut], members))
+
+        # Determine which member series still need metadata (cached ones are free).
+        needed: set[int] = set()
+        for _lst, members in members_by_list:
+            for sid in members.get('series', []):
+                if sid in owned_series_ids and not show_existing:
+                    continue
+                needed.add(sid)
+
+        # Phase 3: prefetch member metadata in parallel.
+        with self._scan_progress_lock:
+            self._scan_progress['total'] = len(series_ids) + len(relevant_lists) + len(needed)
+        with ThreadPoolExecutor(max_workers=_SCAN_WORKERS) as ex:
+            futures = {ex.submit(self._get_series_extended, sid): sid for sid in needed}
+            for fut in as_completed(futures):
+                if superseded():
+                    return []
+                processed += 1
+                fut.result()
+                with self._scan_progress_lock:
+                    self._scan_progress['processed'] = processed
+
+        # Build gaps from the now-warm cache (no further network calls).
+        gaps: list[dict] = []
+        for lst, _members in members_by_list:
             gaps.extend(self._collect_list_gaps(lst, owned_series_ids, show_existing))
 
         self._save_cache()
