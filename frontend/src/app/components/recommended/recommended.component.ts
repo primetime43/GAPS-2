@@ -135,8 +135,6 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit(): void {
-    this.refreshRadarrStatus();
-    this.refreshSonarrStatus();
     this.loadContext(true);
 
     this.router.events.pipe(
@@ -155,6 +153,14 @@ export class RecommendedComponent implements OnInit, OnDestroy {
 
   setMediaType(type: MediaType): void {
     if (this.mediaType === type) return;
+    // Cancel any in-flight scan for the current media type so it doesn't keep
+    // running on the backend after we switch away from it.
+    if (this.loadingGaps && this.scanMode) {
+      const cancel$ = this.mediaType === 'tv'
+        ? this.tvdb.cancelScan()
+        : this.recommendationService.cancelScan();
+      cancel$.subscribe({ next: () => {}, error: () => {} });
+    }
     this.mediaType = type;
     this.stopPolling();
     this.selectedLibrary = '';
@@ -184,6 +190,8 @@ export class RecommendedComponent implements OnInit, OnDestroy {
 
   private loadContext(autoSelectLibrary: boolean): void {
     this.loadIgnored();
+    this.refreshRadarrStatus();
+    this.refreshSonarrStatus();
     this.tvdb.getConfig().pipe(catchError(() => of(null))).subscribe(cfg => {
       this.tvdbEnabled = !!(cfg && cfg.enabled);
     });
