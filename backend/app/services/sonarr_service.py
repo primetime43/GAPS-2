@@ -19,7 +19,11 @@ def _normalize_url(url: str) -> str:
 
 
 class SonarrService:
-    """Thin wrapper around the Sonarr v3 API (TV analogue of RadarrService)."""
+    """Thin wrapper around the Sonarr v4 API (TV analogue of RadarrService).
+
+    Sonarr v4 still serves its API under the /api/v3 path but dropped language
+    profiles, so there is no languageProfileId handling here.
+    """
 
     def get_config(self) -> dict:
         saved = config_store.get(CONFIG_KEY, {}) or {}
@@ -28,7 +32,6 @@ class SonarrService:
             'url': saved.get('url', ''),
             'api_key': saved.get('api_key', ''),
             'quality_profile_id': saved.get('quality_profile_id', 0),
-            'language_profile_id': saved.get('language_profile_id', 0),
             'root_folder_path': saved.get('root_folder_path', ''),
             'monitored': saved.get('monitored', True),
             'season_folder': saved.get('season_folder', True),
@@ -40,7 +43,6 @@ class SonarrService:
             'url': _normalize_url(data.get('url', '')),
             'api_key': (data.get('api_key') or '').strip(),
             'quality_profile_id': int(data.get('quality_profile_id') or 0),
-            'language_profile_id': int(data.get('language_profile_id') or 0),
             'root_folder_path': (data.get('root_folder_path') or '').strip(),
             'monitored': bool(data.get('monitored', True)),
             'season_folder': bool(data.get('season_folder', True)),
@@ -64,6 +66,7 @@ class SonarrService:
         if not url or not api_key:
             return False, 'URL and API key are required'
         try:
+            # Sonarr v4 still exposes its API under /api/v3.
             resp = self._request('GET', f'{url}/api/v3/system/status', api_key)
             if resp.status_code == 200:
                 data = resp.json()
@@ -91,20 +94,6 @@ class SonarrService:
         resp = self._request('GET', f'{url}/api/v3/qualityprofile', api_key)
         resp.raise_for_status()
         return [{'id': p['id'], 'name': p['name']} for p in resp.json()]
-
-    def get_language_profiles(self) -> list[dict]:
-        """Sonarr v3 only. Returns [] on Sonarr v4 (endpoint removed)."""
-        creds = self._get_url_key()
-        if not creds:
-            return []
-        url, api_key = creds
-        try:
-            resp = self._request('GET', f'{url}/api/v3/languageprofile', api_key)
-            if resp.status_code != 200:
-                return []
-            return [{'id': p['id'], 'name': p['name']} for p in resp.json()]
-        except requests.exceptions.RequestException:
-            return []
 
     def get_root_folders(self) -> list[dict]:
         creds = self._get_url_key()
@@ -184,9 +173,6 @@ class SonarrService:
                 'monitor': 'all' if cfg['monitored'] else 'none',
             },
         }
-        # languageProfileId is required by Sonarr v3 and ignored by v4.
-        if cfg['language_profile_id']:
-            payload['languageProfileId'] = cfg['language_profile_id']
 
         try:
             resp = self._request('POST', f'{url}/api/v3/series', api_key, json=payload)

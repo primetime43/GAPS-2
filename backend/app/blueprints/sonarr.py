@@ -55,14 +55,6 @@ def get_profiles():
         return jsonify(error=str(e)), 502
 
 
-@sonarr_bp.route('/language-profiles', methods=['GET'])
-def get_language_profiles():
-    try:
-        return jsonify(current_app.sonarr_service.get_language_profiles())
-    except requests.exceptions.RequestException as e:
-        return jsonify(error=str(e)), 502
-
-
 @sonarr_bp.route('/root-folders', methods=['GET'])
 def get_root_folders():
     try:

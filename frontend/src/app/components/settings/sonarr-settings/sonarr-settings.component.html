@@ -75,17 +75,6 @@
       </select>
     </div>
 
-    <div class="form-group mb-3" *ngIf="languageProfiles.length > 0">
-      <label class="form-label">Language profile</label>
-      <select class="form-select dark-select" [(ngModel)]="config.language_profile_id">
-        <option [ngValue]="0" disabled hidden>Select a language profile...</option>
-        <option *ngFor="let p of languageProfiles" [ngValue]="p.id">{{ p.name }}</option>
-      </select>
-      <div class="text-muted" style="font-size: 12px;">
-        Required by Sonarr v3. Sonarr v4 manages languages per quality profile, so this is hidden there.
-      </div>
-    </div>
-
     <div class="form-group mb-2">
       <label class="form-label">Root folder</label>
       <select class="form-select dark-select" [(ngModel)]="config.root_folder_path">

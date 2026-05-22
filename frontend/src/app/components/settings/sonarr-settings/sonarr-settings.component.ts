@@ -1,6 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import {
-  SonarrService, SonarrConfig, SonarrQualityProfile, SonarrLanguageProfile, SonarrRootFolder,
+  SonarrService, SonarrConfig, SonarrQualityProfile, SonarrRootFolder,
 } from '../../../services/sonarr.service';
 
 @Component({
@@ -15,14 +15,12 @@ export class SonarrSettingsComponent implements OnInit {
     url: '',
     api_key: '',
     quality_profile_id: 0,
-    language_profile_id: 0,
     root_folder_path: '',
     monitored: true,
     season_folder: true,
     search_on_add: true,
   };
   profiles: SonarrQualityProfile[] = [];
-  languageProfiles: SonarrLanguageProfile[] = [];
   rootFolders: SonarrRootFolder[] = [];
   testing = false;
   saving = false;
@@ -54,10 +52,6 @@ export class SonarrSettingsComponent implements OnInit {
         this.loadingMeta = false;
         this.showMessage(err.error?.error || 'Could not load quality profiles', 'error');
       },
-    });
-    this.sonarr.getLanguageProfiles().subscribe({
-      next: (profiles) => (this.languageProfiles = profiles),
-      error: () => {},
     });
     this.sonarr.getRootFolders().subscribe({
       next: (folders) => (this.rootFolders = folders),
@@ -113,14 +107,12 @@ export class SonarrSettingsComponent implements OnInit {
           url: '',
           api_key: '',
           quality_profile_id: 0,
-          language_profile_id: 0,
           root_folder_path: '',
           monitored: true,
           season_folder: true,
           search_on_add: true,
         };
         this.profiles = [];
-        this.languageProfiles = [];
         this.rootFolders = [];
         this.showMessage('Sonarr settings cleared.', 'success');
       },

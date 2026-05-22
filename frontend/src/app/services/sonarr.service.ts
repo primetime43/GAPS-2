@@ -9,7 +9,6 @@ export interface SonarrConfig {
   url: string;
   api_key: string;
   quality_profile_id: number;
-  language_profile_id: number;
   root_folder_path: string;
   monitored: boolean;
   season_folder: boolean;
@@ -17,11 +16,6 @@ export interface SonarrConfig {
 }
 
 export interface SonarrQualityProfile {
-  id: number;
-  name: string;
-}
-
-export interface SonarrLanguageProfile {
   id: number;
   name: string;
 }
@@ -54,10 +48,6 @@ export class SonarrService {
 
   getProfiles(): Observable<SonarrQualityProfile[]> {
     return this.http.get<SonarrQualityProfile[]>(`${environment.apiUrl}/sonarr/profiles`);
-  }
-
-  getLanguageProfiles(): Observable<SonarrLanguageProfile[]> {
-    return this.http.get<SonarrLanguageProfile[]>(`${environment.apiUrl}/sonarr/language-profiles`);
   }
 
   getRootFolders(): Observable<SonarrRootFolder[]> {
