@@ -14,36 +14,7 @@
   }
 }
 
-.dark-select {
-  background-color: #333;
-  color: #fff;
-  border-color: #555;
-
-  &:focus {
-    background-color: #333;
-    color: #fff;
-    border-color: #00bc8c;
-    box-shadow: none;
-  }
-
-  option {
-    background-color: #333;
-    color: #fff;
-  }
-}
-
-.dark-input {
-  background-color: #333;
-  color: #fff;
-  border-color: #555;
-
-  &:focus {
-    background-color: #333;
-    color: #fff;
-    border-color: #00bc8c;
-    box-shadow: none;
-  }
-}
+/* .dark-input and .dark-select are shared globally in src/styles.scss */
 
 .toggle-label {
   display: flex;

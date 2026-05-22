@@ -1,21 +1,6 @@
-.dark-select {
-  background-color: #2d2d2d;
-  border: 1px solid #444;
-  color: #fff;
+/* .dark-select is shared globally in src/styles.scss */
 
-  &:focus {
-    background-color: #333;
-    border-color: #00bc8c;
-    color: #fff;
-    box-shadow: none;
-  }
-
-  option {
-    background-color: #2d2d2d;
-    color: #fff;
-  }
-}
-
+/* Schedule keeps its own status colours: grey "missing" means "not scheduled". */
 .status-ok {
   color: #00bc8c;
   font-weight: 500;
