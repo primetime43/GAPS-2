@@ -3,16 +3,18 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 import { FormsModule } from '@angular/forms';
 import { Component, Input, Output, EventEmitter } from '@angular/core';
-import { of, throwError } from 'rxjs';
+import { of } from 'rxjs';
 import { RecommendedComponent } from './recommended.component';
 import { PlexService } from '../../services/plex.service';
 import { JellyfinService } from '../../services/jellyfin.service';
 import { EmbyService } from '../../services/emby.service';
 import { LibraryService } from '../../services/library.service';
 import { RecommendationService } from '../../services/recommendation.service';
+import { TvdbService } from '../../services/tvdb.service';
 import { PreferencesService } from '../../services/preferences.service';
 import { ExportService } from '../../services/export.service';
-import { CollectionGap } from '../../models/recommendation.model';
+import { RadarrService } from '../../services/radarr.service';
+import { Gap } from '../../models/recommendation.model';
 
 @Component({ selector: 'app-confirm-modal', template: '', standalone: false })
 class MockConfirmModalComponent {
@@ -26,6 +28,13 @@ class MockConfirmModalComponent {
   @Output() cancelled = new EventEmitter<void>();
 }
 
+function gap(p: Partial<Gap>): Gap {
+  return {
+    id: 0, name: '', year: '', posterUrl: null, overview: '',
+    groupName: '', owned: false, externalUrl: '', radarrEligible: false, ...p,
+  };
+}
+
 describe('RecommendedComponent', () => {
   let component: RecommendedComponent;
   let fixture: ComponentFixture<RecommendedComponent>;
@@ -35,49 +44,43 @@ describe('RecommendedComponent', () => {
   let embyService: jasmine.SpyObj<EmbyService>;
   let libraryService: jasmine.SpyObj<LibraryService>;
   let recommendationService: jasmine.SpyObj<RecommendationService>;
+  let tvdbService: jasmine.SpyObj<TvdbService>;
   let preferencesService: jasmine.SpyObj<PreferencesService>;
   let exportService: jasmine.SpyObj<ExportService>;
+  let radarrService: jasmine.SpyObj<RadarrService>;
 
   beforeEach(async () => {
     plexService = jasmine.createSpyObj('PlexService', ['getActiveServer']);
     jellyfinService = jasmine.createSpyObj('JellyfinService', ['getActiveServer']);
     embyService = jasmine.createSpyObj('EmbyService', ['getActiveServer']);
-    libraryService = jasmine.createSpyObj('LibraryService', ['getMovies']);
+    libraryService = jasmine.createSpyObj('LibraryService', ['getMovies', 'getShows']);
     recommendationService = jasmine.createSpyObj('RecommendationService', [
-      'getGapsForMovie', 'startScan', 'getScanProgress', 'getIgnored',
+      'getGapsForMovie', 'startScan', 'getScanProgress', 'cancelScan', 'getIgnored',
+      'addIgnored', 'removeIgnored', 'addIgnoredBulk', 'removeIgnoredBulk',
+    ]);
+    tvdbService = jasmine.createSpyObj('TvdbService', [
+      'getConfig', 'getGapsForShow', 'startScan', 'getScanProgress', 'cancelScan', 'getIgnored',
       'addIgnored', 'removeIgnored', 'addIgnoredBulk', 'removeIgnoredBulk',
     ]);
     preferencesService = jasmine.createSpyObj('PreferencesService', ['load', 'save']);
     exportService = jasmine.createSpyObj('ExportService', ['exportGaps']);
+    radarrService = jasmine.createSpyObj('RadarrService', ['getConfig', 'getLibraryTmdbIds', 'addMovie']);
 
-    // Default mock returns
     plexService.getActiveServer.and.returnValue(of({} as any));
     jellyfinService.getActiveServer.and.returnValue(of({} as any));
     embyService.getActiveServer.and.returnValue(of({} as any));
     recommendationService.getIgnored.and.returnValue(of([]));
     recommendationService.getScanProgress.and.returnValue(of({
-      status: 'idle',
-      processed: 0,
-      total: 0,
-      current_movie: '',
-      collections_found: 0,
-      gaps: [],
-      total_owned: 0,
-      libraries: [],
-      completed_at: null,
-      error: null,
+      status: 'idle', processed: 0, total: 0, current_movie: '', collections_found: 0,
+      gaps: [], total_owned: 0, libraries: [], completed_at: null, error: null,
     }));
+    tvdbService.getConfig.and.returnValue(of({ enabled: false, api_key: '', pin: '', language: 'eng' }));
+    tvdbService.getIgnored.and.returnValue(of([]));
+    radarrService.getConfig.and.returnValue(of(null as any));
     preferencesService.load.and.returnValue(of({
-      defaultLibrary: '',
-      moviesPerPage: 50,
-      hideOwnedByDefault: false,
-      hideFutureReleasesByDefault: false,
-      language: 'en',
-      port: 4277,
-      autoOpenBrowser: true,
-      posterPrefetch: false,
-      imageCacheEnabled: false,
-      mediaServerTimeout: 30,
+      defaultLibrary: '', moviesPerPage: 50, hideOwnedByDefault: false,
+      hideFutureReleasesByDefault: false, language: 'en', port: 4277, autoOpenBrowser: true,
+      posterPrefetch: false, imageCacheEnabled: false, mediaServerTimeout: 30,
     }));
 
     await TestBed.configureTestingModule({
@@ -89,8 +92,10 @@ describe('RecommendedComponent', () => {
         { provide: EmbyService, useValue: embyService },
         { provide: LibraryService, useValue: libraryService },
         { provide: RecommendationService, useValue: recommendationService },
+        { provide: TvdbService, useValue: tvdbService },
         { provide: PreferencesService, useValue: preferencesService },
         { provide: ExportService, useValue: exportService },
+        { provide: RadarrService, useValue: radarrService },
       ],
     }).compileComponents();
 
@@ -104,32 +109,39 @@ describe('RecommendedComponent', () => {
 
   it('should detect Plex as active source and load movie libraries', fakeAsync(() => {
     plexService.getActiveServer.and.returnValue(of({
-      server: 'My Plex',
-      token: 'tok',
-      libraries: [
-        { title: 'Movies', type: 'movie' },
-        { title: 'TV', type: 'show' },
-      ],
+      server: 'My Plex', token: 'tok',
+      libraries: [{ title: 'Movies', type: 'movie' }, { title: 'TV', type: 'show' }],
     }));
-
     fixture.detectChanges();
     tick();
 
     expect(component.hasServer).toBeTrue();
     expect(component.activeSource).toBe('plex');
     expect(component.activeServerName).toBe('My Plex');
+    // Default media type is movie → only movie libraries shown.
     expect(component.libraries.length).toBe(1);
     expect(component.libraries[0].title).toBe('Movies');
     expect(component.loading).toBeFalse();
   }));
 
+  it('should show TV libraries after switching media type', fakeAsync(() => {
+    plexService.getActiveServer.and.returnValue(of({
+      server: 'My Plex', token: 'tok',
+      libraries: [{ title: 'Movies', type: 'movie' }, { title: 'TV', type: 'show' }],
+    }));
+    fixture.detectChanges();
+    tick();
+
+    component.setMediaType('tv');
+    expect(component.mediaType).toBe('tv');
+    expect(component.libraries.length).toBe(1);
+    expect(component.libraries[0].title).toBe('TV');
+  }));
+
   it('should detect Emby when Plex is not connected', fakeAsync(() => {
     embyService.getActiveServer.and.returnValue(of({
-      server: 'My Emby',
-      token: '',
-      libraries: [{ title: 'Films', type: 'movie' }],
+      server: 'My Emby', token: '', libraries: [{ title: 'Films', type: 'movie' }],
     }));
-
     fixture.detectChanges();
     tick();
 
@@ -139,36 +151,25 @@ describe('RecommendedComponent', () => {
 
   it('should auto-select default library from preferences', fakeAsync(() => {
     preferencesService.load.and.returnValue(of({
-      defaultLibrary: 'Movies',
-      moviesPerPage: 25,
-      hideOwnedByDefault: true,
-      hideFutureReleasesByDefault: false,
-      language: 'en',
-      port: 4277,
-      autoOpenBrowser: true,
-      posterPrefetch: false,
-      imageCacheEnabled: false,
-      mediaServerTimeout: 30,
+      defaultLibrary: 'Movies', moviesPerPage: 25, hideOwnedByDefault: true,
+      hideFutureReleasesByDefault: false, language: 'en', port: 4277, autoOpenBrowser: true,
+      posterPrefetch: false, imageCacheEnabled: false, mediaServerTimeout: 30,
     }));
     plexService.getActiveServer.and.returnValue(of({
-      server: 'Plex',
-      token: 'tok',
-      libraries: [{ title: 'Movies', type: 'movie' }],
+      server: 'Plex', token: 'tok', libraries: [{ title: 'Movies', type: 'movie' }],
     }));
     libraryService.getMovies.and.returnValue(of({ movies: [] }));
-
     fixture.detectChanges();
     tick();
 
     expect(component.selectedLibrary).toBe('Movies');
-    expect(component.moviesPerPage).toBe(25);
-    expect(component.showOwned).toBeFalse(); // hideOwnedByDefault = true
+    expect(component.itemsPerPage).toBe(25);
+    expect(component.showOwned).toBeFalse();
   }));
 
-  it('should load movies when a library is selected', fakeAsync(() => {
+  it('should load items when a library is selected', fakeAsync(() => {
     plexService.getActiveServer.and.returnValue(of({
-      server: 'Plex', token: 'tok',
-      libraries: [{ title: 'Movies', type: 'movie' }],
+      server: 'Plex', token: 'tok', libraries: [{ title: 'Movies', type: 'movie' }],
     }));
     fixture.detectChanges();
     tick();
@@ -184,87 +185,77 @@ describe('RecommendedComponent', () => {
     component.onLibrarySelect();
     tick();
 
-    expect(component.movies.length).toBe(2);
-    expect(component.loadingMovies).toBeFalse();
+    expect(component.items.length).toBe(2);
+    expect(component.loadingItems).toBeFalse();
   }));
 
-  it('filteredMovies should filter by movieFilter text', fakeAsync(() => {
-    component.movies = [
-      { name: 'Alien', year: 1979, overview: '', posterUrl: '' },
-      { name: 'The Matrix', year: 1999, overview: '', posterUrl: '' },
+  it('filteredItems should filter by itemFilter text', () => {
+    component.items = [
+      { name: 'Alien', year: 1979, posterUrl: '' },
+      { name: 'The Matrix', year: 1999, posterUrl: '' },
     ];
+    component.itemFilter = 'alien';
+    expect(component.filteredItems.length).toBe(1);
+    expect(component.filteredItems[0].name).toBe('Alien');
 
-    component.movieFilter = 'alien';
-    expect(component.filteredMovies.length).toBe(1);
-    expect(component.filteredMovies[0].name).toBe('Alien');
+    component.itemFilter = '';
+    expect(component.filteredItems.length).toBe(2);
+  });
 
-    component.movieFilter = '';
-    expect(component.filteredMovies.length).toBe(2);
-  }));
-
-  it('pagedMovies should respect moviesPerPage and currentPage', () => {
-    component.movies = Array.from({ length: 75 }, (_, i) => ({
-      name: `Movie ${i}`, year: 2000, overview: '', posterUrl: '',
-    }));
-    component.moviesPerPage = 50;
+  it('pagedItems should respect itemsPerPage and currentPage', () => {
+    component.items = Array.from({ length: 75 }, (_, i) => ({ name: `Movie ${i}`, year: 2000, posterUrl: '' }));
+    component.itemsPerPage = 50;
     component.currentPage = 1;
-
-    expect(component.pagedMovies.length).toBe(50);
+    expect(component.pagedItems.length).toBe(50);
     expect(component.totalPages).toBe(2);
 
     component.currentPage = 2;
-    expect(component.pagedMovies.length).toBe(25);
+    expect(component.pagedItems.length).toBe(25);
   });
 
-  it('applyFilter should group gaps by collection and filter owned/ignored', () => {
-    const gaps: CollectionGap[] = [
-      { tmdbId: 1, name: 'Alien', year: '1979', posterUrl: null, overview: '', collectionName: 'Alien Collection', owned: true },
-      { tmdbId: 2, name: 'Aliens', year: '1986', posterUrl: null, overview: '', collectionName: 'Alien Collection', owned: false },
-      { tmdbId: 3, name: 'Matrix', year: '1999', posterUrl: null, overview: '', collectionName: 'Matrix Collection', owned: false },
+  it('applyFilter should group gaps by group and filter owned/ignored', () => {
+    component.allGaps = [
+      gap({ id: 1, name: 'Alien', groupName: 'Alien Collection', owned: true }),
+      gap({ id: 2, name: 'Aliens', groupName: 'Alien Collection', owned: false }),
+      gap({ id: 3, name: 'Matrix', groupName: 'Matrix Collection', owned: false }),
     ];
-    component.allGaps = gaps;
     component.showOwned = false;
     component.showIgnored = false;
     component.ignoredIds = new Set();
 
     component.applyFilter();
-
-    // Without owned, should have 2 gaps in 2 groups
     expect(component.collectionGroups.length).toBe(2);
     expect(component.missingCount).toBe(2);
 
-    // With owned
     component.showOwned = true;
     component.applyFilter();
-    expect(component.collectionGroups.length).toBe(2);
     const alienGroup = component.collectionGroups.find(g => g.name === 'Alien Collection');
     expect(alienGroup?.gaps.length).toBe(2);
   });
 
-  it('applyFilter should hide ignored movies when showIgnored is false', () => {
+  it('applyFilter should hide ignored items when showIgnored is false', () => {
     component.allGaps = [
-      { tmdbId: 1, name: 'Movie A', year: '2020', posterUrl: null, overview: '', collectionName: 'Coll', owned: false },
-      { tmdbId: 2, name: 'Movie B', year: '2021', posterUrl: null, overview: '', collectionName: 'Coll', owned: false },
+      gap({ id: 1, name: 'Movie A', groupName: 'Coll', owned: false }),
+      gap({ id: 2, name: 'Movie B', groupName: 'Coll', owned: false }),
     ];
     component.ignoredIds = new Set([1]);
     component.showOwned = true;
     component.showIgnored = false;
 
     component.applyFilter();
-
     expect(component.filteredGroups.length).toBe(1);
     expect(component.filteredGroups[0].gaps.length).toBe(1);
-    expect(component.filteredGroups[0].gaps[0].tmdbId).toBe(2);
+    expect(component.filteredGroups[0].gaps[0].id).toBe(2);
   });
 
   it('applyFilter should hide future releases when hideFutureReleases is true', () => {
     const future = '2099-12-31';
     const past = '1999-01-01';
     component.allGaps = [
-      { tmdbId: 1, name: 'Released', year: '1999', releaseDate: past, posterUrl: null, overview: '', collectionName: 'C', owned: false },
-      { tmdbId: 2, name: 'Future', year: '2099', releaseDate: future, posterUrl: null, overview: '', collectionName: 'C', owned: false },
-      { tmdbId: 3, name: 'Unannounced', year: 'N/A', releaseDate: '', posterUrl: null, overview: '', collectionName: 'C', owned: false },
-      { tmdbId: 4, name: 'Owned future', year: '2099', releaseDate: future, posterUrl: null, overview: '', collectionName: 'C', owned: true },
+      gap({ id: 1, name: 'Released', year: '1999', releaseDate: past, groupName: 'C', owned: false }),
+      gap({ id: 2, name: 'Future', year: '2099', releaseDate: future, groupName: 'C', owned: false }),
+      gap({ id: 3, name: 'Unannounced', year: 'N/A', releaseDate: '', groupName: 'C', owned: false }),
+      gap({ id: 4, name: 'Owned future', year: '2099', releaseDate: future, groupName: 'C', owned: true }),
     ];
     component.ignoredIds = new Set();
     component.showOwned = true;
@@ -272,27 +263,26 @@ describe('RecommendedComponent', () => {
     component.hideFutureReleases = true;
 
     component.applyFilter();
-
     const titles = component.filteredGroups.flatMap(g => g.gaps.map(x => x.name));
     expect(titles).toContain('Released');
-    expect(titles).toContain('Owned future'); // owned items are kept even if future
+    expect(titles).toContain('Owned future');
     expect(titles).not.toContain('Future');
-    expect(titles).not.toContain('Unannounced'); // missing releaseDate is treated as future
-    expect(component.missingCount).toBe(1); // only "Released" counts as missing
+    expect(titles).not.toContain('Unannounced');
+    expect(component.missingCount).toBe(1);
   });
 
   it('toggleIgnore should add/remove from ignored set', () => {
-    const gap: CollectionGap = { tmdbId: 42, name: 'Test', year: '2020', posterUrl: null, overview: '', collectionName: 'C', owned: false };
-    component.allGaps = [gap];
+    const g = gap({ id: 42, name: 'Test', groupName: 'C', owned: false });
+    component.allGaps = [g];
     component.ignoredIds = new Set();
     recommendationService.addIgnored.and.returnValue(of({}));
     recommendationService.removeIgnored.and.returnValue(of({}));
 
     const event = new Event('click');
-    component.toggleIgnore(gap, event);
+    component.toggleIgnore(g, event);
     expect(component.ignoredIds.has(42)).toBeTrue();
 
-    component.toggleIgnore(gap, event);
+    component.toggleIgnore(g, event);
     expect(component.ignoredIds.has(42)).toBeFalse();
   });
 
@@ -306,14 +296,14 @@ describe('RecommendedComponent', () => {
   });
 
   it('clearResults should reset all result state', () => {
-    component.selectedMovie = { name: 'Test', year: 2020, overview: '', posterUrl: '' };
+    component.selectedItem = { name: 'Test', year: 2020, posterUrl: '' };
     component.scanMode = true;
-    component.allGaps = [{ tmdbId: 1, name: 'X', year: '2020', posterUrl: null, overview: '', collectionName: 'C', owned: false }];
+    component.allGaps = [gap({ id: 1, name: 'X', groupName: 'C', owned: false })];
     component.errorMessage = 'some error';
 
     component.clearResults();
 
-    expect(component.selectedMovie).toBeNull();
+    expect(component.selectedItem).toBeNull();
     expect(component.scanMode).toBeFalse();
     expect(component.allGaps).toEqual([]);
     expect(component.collectionGroups).toEqual([]);
@@ -331,10 +321,10 @@ describe('RecommendedComponent', () => {
     expect(component.showFreshScanConfirm).toBeFalse();
   });
 
-  it('searchFilter should filter collection groups by name or movie name', () => {
+  it('searchFilter should filter groups by name or title', () => {
     component.allGaps = [
-      { tmdbId: 1, name: 'Alien', year: '1979', posterUrl: null, overview: '', collectionName: 'Alien Collection', owned: false },
-      { tmdbId: 2, name: 'The Matrix', year: '1999', posterUrl: null, overview: '', collectionName: 'Matrix Collection', owned: false },
+      gap({ id: 1, name: 'Alien', groupName: 'Alien Collection', owned: false }),
+      gap({ id: 2, name: 'The Matrix', groupName: 'Matrix Collection', owned: false }),
     ];
     component.showOwned = true;
     component.showIgnored = true;
@@ -350,19 +340,16 @@ describe('RecommendedComponent', () => {
   it('exportResults should call exportService with filtered gaps', () => {
     component.filteredGroups = [{
       name: 'Coll',
-      gaps: [{ tmdbId: 1, name: 'Movie', year: '2020', posterUrl: null, overview: '', collectionName: 'Coll', owned: false }],
+      gaps: [gap({ id: 1, name: 'Movie', groupName: 'Coll', owned: false })],
     }];
 
     component.exportResults('csv');
-    expect(exportService.exportGaps).toHaveBeenCalledWith(
-      component.filteredGroups[0].gaps,
-      'csv'
-    );
+    expect(exportService.exportGaps).toHaveBeenCalledWith(component.filteredGroups[0].gaps, 'csv');
   });
 
   it('should stop polling on destroy', () => {
-    (component as any).pollTimer = setInterval(() => {}, 1000);
+    (component as any).pollSub = of(0).subscribe();
     component.ngOnDestroy();
-    expect((component as any).pollTimer).toBeNull();
+    expect((component as any).pollSub).toBeNull();
   });
 });

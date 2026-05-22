@@ -162,3 +162,45 @@ def scan_progress():
 def cancel_scan():
     cancelled = current_app.tvdb_service.cancel_scan()
     return jsonify(cancelled=cancelled)
+
+
+@tvdb_bp.route('/ignored', methods=['GET'])
+def get_ignored():
+    """Return the list of ignored TheTVDB series IDs."""
+    return jsonify(ignored=config_store.get('ignored_shows', []))
+
+
+@tvdb_bp.route('/ignored', methods=['POST'])
+def add_ignored():
+    """Add one or more shows to the ignored list."""
+    data = request.get_json() or {}
+    tvdb_id = data.get('tvdbId')
+    tvdb_ids = data.get('tvdbIds', [])
+    if not tvdb_id and not tvdb_ids:
+        return jsonify(error='tvdbId or tvdbIds is required'), 400
+    ignored = config_store.get('ignored_shows', [])
+    ids_to_add = tvdb_ids if tvdb_ids else [tvdb_id]
+    changed = False
+    for tid in ids_to_add:
+        if tid not in ignored:
+            ignored.append(tid)
+            changed = True
+    if changed:
+        config_store.put('ignored_shows', ignored)
+    return jsonify(result='ok')
+
+
+@tvdb_bp.route('/ignored', methods=['DELETE'])
+def remove_ignored():
+    """Remove one or more shows from the ignored list."""
+    data = request.get_json() or {}
+    tvdb_id = data.get('tvdbId')
+    tvdb_ids = data.get('tvdbIds', [])
+    if not tvdb_id and not tvdb_ids:
+        return jsonify(error='tvdbId or tvdbIds is required'), 400
+    ignored = config_store.get('ignored_shows', [])
+    ids_to_remove = set(tvdb_ids if tvdb_ids else [tvdb_id])
+    new_ignored = [i for i in ignored if i not in ids_to_remove]
+    if len(new_ignored) != len(ignored):
+        config_store.put('ignored_shows', new_ignored)
+    return jsonify(result='ok')

@@ -12,7 +12,6 @@ import { RouteReuseStrategy } from '@angular/router';
 import { ReusableRouteStrategy } from './reusable-route.strategy';
 import { HeaderComponent } from './components/header/header.component';
 import { RecommendedComponent } from './components/recommended/recommended.component';
-import { TvRecommendedComponent } from './components/tv-recommended/tv-recommended.component';
 import { AboutComponent } from './components/about/about.component';
 import { IndexComponent } from './index/index.component';
 import { PlexSettingsComponent } from './components/settings/plex-settings/plex-settings.component';
@@ -33,7 +32,6 @@ import { LogsComponent } from './components/logs/logs.component';
         HeaderComponent,
         ConfirmModalComponent,
         RecommendedComponent,
-        TvRecommendedComponent,
         AboutComponent,
         IndexComponent,
         PlexSettingsComponent,

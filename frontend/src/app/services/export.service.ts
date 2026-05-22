@@ -1,14 +1,14 @@
 import { Injectable } from '@angular/core';
 import * as XLSX from 'xlsx';
-import { CollectionGap } from '../models/recommendation.model';
+import { Gap } from '../models/recommendation.model';
 
 export type ExportFormat = 'csv' | 'xlsx';
 
 interface ExportRow {
-  'Collection': string;
+  'Group': string;
   'Title': string;
   'Year': string;
-  'TMDB ID': number;
+  'ID': number;
   'Owned': string;
 }
 
@@ -17,12 +17,12 @@ interface ExportRow {
 })
 export class ExportService {
 
-  exportGaps(gaps: CollectionGap[], format: ExportFormat): void {
+  exportGaps(gaps: Gap[], format: ExportFormat): void {
     const rows: ExportRow[] = gaps.map(g => ({
-      'Collection': g.collectionName,
+      'Group': g.groupName,
       'Title': g.name,
-      'Year': g.year,
-      'TMDB ID': g.tmdbId,
+      'Year': String(g.year),
+      'ID': g.id,
       'Owned': g.owned ? 'Yes' : 'No',
     }));
 

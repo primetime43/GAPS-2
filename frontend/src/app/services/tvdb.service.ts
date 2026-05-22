@@ -96,4 +96,26 @@ export class TvdbService {
   cancelScan(): Observable<{ cancelled: boolean }> {
     return this.http.post<{ cancelled: boolean }>(`${environment.apiUrl}/tvdb/scan/cancel`, {});
   }
+
+  getIgnored(): Observable<number[]> {
+    return this.http
+      .get<{ ignored: number[] }>(`${environment.apiUrl}/tvdb/ignored`)
+      .pipe(map((res) => res.ignored));
+  }
+
+  addIgnored(tvdbId: number): Observable<any> {
+    return this.http.post(`${environment.apiUrl}/tvdb/ignored`, { tvdbId });
+  }
+
+  addIgnoredBulk(tvdbIds: number[]): Observable<any> {
+    return this.http.post(`${environment.apiUrl}/tvdb/ignored`, { tvdbIds });
+  }
+
+  removeIgnored(tvdbId: number): Observable<any> {
+    return this.http.delete(`${environment.apiUrl}/tvdb/ignored`, { body: { tvdbId } });
+  }
+
+  removeIgnoredBulk(tvdbIds: number[]): Observable<any> {
+    return this.http.delete(`${environment.apiUrl}/tvdb/ignored`, { body: { tvdbIds } });
+  }
 }
