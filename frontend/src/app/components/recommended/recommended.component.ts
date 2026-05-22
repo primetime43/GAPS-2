@@ -631,7 +631,23 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   refreshRadarrStatus(): void {
     this.radarrService.getConfig().pipe(catchError(() => of(null))).subscribe(cfg => {
       this.radarrEnabled = !!(cfg && cfg.enabled);
+      if (this.radarrEnabled) {
+        this.loadRadarrLibrary();
+      }
     });
+  }
+
+  /** Flag movies already in the Radarr library so they show as "In Radarr". */
+  loadRadarrLibrary(): void {
+    this.radarrService.getLibraryTmdbIds()
+      .pipe(catchError(() => of({ tmdb_ids: [] })))
+      .subscribe(res => {
+        for (const id of res.tmdb_ids || []) {
+          if (this.radarrStatus.get(id) !== 'sending') {
+            this.radarrStatus.set(id, 'sent');
+          }
+        }
+      });
   }
 
   sendToRadarr(gap: CollectionGap, event: Event): void {

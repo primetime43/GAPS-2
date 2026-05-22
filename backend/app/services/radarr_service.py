@@ -106,6 +106,21 @@ class RadarrService:
             for f in resp.json()
         ]
 
+    def get_library_tmdb_ids(self) -> list[int]:
+        """Return the TMDB ids of every movie already in the Radarr library."""
+        creds = self._get_url_key()
+        if not creds:
+            return []
+        url, api_key = creds
+        resp = self._request('GET', f'{url}/api/v3/movie', api_key)
+        resp.raise_for_status()
+        ids = []
+        for m in resp.json():
+            tmdb_id = m.get('tmdbId')
+            if isinstance(tmdb_id, int) and tmdb_id > 0:
+                ids.append(tmdb_id)
+        return ids
+
     def add_movie(self, tmdb_id: int, title: str = '', year: int = 0) -> tuple[bool, str]:
         """Add a movie to Radarr by TMDB id.
 

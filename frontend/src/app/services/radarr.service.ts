@@ -54,6 +54,10 @@ export class RadarrService {
     return this.http.get<RadarrRootFolder[]>(`${environment.apiUrl}/radarr/root-folders`);
   }
 
+  getLibraryTmdbIds(): Observable<{ tmdb_ids: number[] }> {
+    return this.http.get<{ tmdb_ids: number[] }>(`${environment.apiUrl}/radarr/movies`);
+  }
+
   addMovie(tmdbId: number, title: string, year: number): Observable<ApiMessage> {
     return this.http.post<ApiMessage>(`${environment.apiUrl}/radarr/add`, {
       tmdb_id: tmdbId,

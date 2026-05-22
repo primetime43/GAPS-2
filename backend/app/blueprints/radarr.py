@@ -66,6 +66,15 @@ def get_root_folders():
         return jsonify(error=str(e)), 502
 
 
+@radarr_bp.route('/movies', methods=['GET'])
+def get_movies():
+    """Return TMDB ids already in the Radarr library, so the UI can flag them."""
+    try:
+        return jsonify(tmdb_ids=current_app.radarr_service.get_library_tmdb_ids())
+    except requests.exceptions.RequestException as e:
+        return jsonify(error=str(e)), 502
+
+
 @radarr_bp.route('/add', methods=['POST'])
 def add_movie():
     data = request.get_json() or {}
