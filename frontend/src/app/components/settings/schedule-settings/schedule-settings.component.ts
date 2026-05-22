@@ -7,6 +7,8 @@ import { JellyfinService } from '../../../services/jellyfin.service';
 import { EmbyService } from '../../../services/emby.service';
 import { MediaLibrary, ActiveServerResponse } from '../../../models/media-server.model';
 
+type MediaType = 'movie' | 'tv';
+
 @Component({
   selector: 'app-schedule-settings',
   templateUrl: './schedule-settings.component.html',
@@ -16,16 +18,29 @@ import { MediaLibrary, ActiveServerResponse } from '../../../models/media-server
 export class ScheduleSettingsComponent implements OnInit {
   schedule: ScheduleConfig | null = null;
   libraries: MediaLibrary[] = [];
-  selectedPreset = '';
-  selectedLibrary = '';
   activeSource: 'plex' | 'jellyfin' | 'emby' = 'plex';
   activeServerName = '';
-  saving = false;
-  message = '';
-  messageType: 'success' | 'error' | '' = '';
   loading = true;
 
+  // Per-media-type form selections.
+  moviePreset = '';
+  movieLibrary = '';
+  tvPreset = '';
+  tvLibrary = '';
+
+  saving: { movie: boolean; tv: boolean } = { movie: false, tv: false };
+  message = '';
+  messageType: 'success' | 'error' | '' = '';
+
   presetKeys: string[] = [];
+
+  get movieLibraries(): MediaLibrary[] {
+    return this.libraries.filter(l => l.type === 'movie');
+  }
+
+  get tvLibraries(): MediaLibrary[] {
+    return this.libraries.filter(l => l.type === 'show' || l.type === 'tvshows');
+  }
 
   constructor(
     private scheduleService: ScheduleService,
@@ -35,7 +50,6 @@ export class ScheduleSettingsComponent implements OnInit {
   ) {}
 
   ngOnInit(): void {
-    // Detect active media server
     forkJoin({
       plex: this.plexService.getActiveServer().pipe(catchError(() => of(null))),
       jellyfin: this.jellyfinService.getActiveServer().pipe(catchError(() => of(null))),
@@ -56,19 +70,15 @@ export class ScheduleSettingsComponent implements OnInit {
 
       if (res && res.libraries) {
         this.activeServerName = res.server;
-        this.libraries = res.libraries.filter((lib: MediaLibrary) => lib.type === 'movie');
+        this.libraries = res.libraries.filter(
+          (lib: MediaLibrary) => lib.type === 'movie' || lib.type === 'show' || lib.type === 'tvshows'
+        );
       }
     });
 
     this.scheduleService.getSchedule().subscribe({
       next: (config) => {
-        this.schedule = config;
-        this.selectedPreset = config.preset || '';
-        this.selectedLibrary = config.library || '';
-        if (config.source) {
-          this.activeSource = config.source as any;
-        }
-        this.presetKeys = Object.keys(config.presets);
+        this.applyConfig(config);
         this.loading = false;
       },
       error: () => {
@@ -77,39 +87,52 @@ export class ScheduleSettingsComponent implements OnInit {
     });
   }
 
-  saveSchedule(): void {
-    if (!this.selectedPreset || !this.selectedLibrary) {
-      this.showMessage('Please select a frequency and library.', 'error');
+  private applyConfig(config: ScheduleConfig): void {
+    this.schedule = config;
+    this.moviePreset = config.movie?.preset || '';
+    this.movieLibrary = config.movie?.library || '';
+    this.tvPreset = config.tv?.preset || '';
+    this.tvLibrary = config.tv?.library || '';
+    if (config.source) {
+      this.activeSource = config.source as any;
+    }
+    this.presetKeys = Object.keys(config.presets);
+  }
+
+  save(type: MediaType): void {
+    const preset = type === 'tv' ? this.tvPreset : this.moviePreset;
+    const library = type === 'tv' ? this.tvLibrary : this.movieLibrary;
+    if (!preset || !library) {
+      this.showMessage(`Select a frequency and library for the ${type === 'tv' ? 'TV' : 'movie'} schedule.`, 'error');
       return;
     }
-
-    this.saving = true;
+    this.saving[type] = true;
     this.clearMessage();
-    this.scheduleService.setSchedule(this.selectedPreset, this.selectedLibrary, this.activeSource).subscribe({
+    this.scheduleService.setSchedule(type, preset, library, this.activeSource).subscribe({
       next: (config) => {
-        this.schedule = config;
-        this.showMessage('Schedule saved.', 'success');
-        this.saving = false;
+        this.applyConfig(config);
+        this.showMessage(`${type === 'tv' ? 'TV' : 'Movie'} schedule saved.`, 'success');
+        this.saving[type] = false;
       },
       error: () => {
         this.showMessage('Failed to save schedule.', 'error');
-        this.saving = false;
+        this.saving[type] = false;
       }
     });
   }
 
-  disableSchedule(): void {
-    this.saving = true;
+  disable(type: MediaType): void {
+    this.saving[type] = true;
     this.clearMessage();
-    this.scheduleService.disableSchedule().subscribe({
+    this.scheduleService.disableSchedule(type).subscribe({
       next: (config) => {
-        this.schedule = config;
-        this.showMessage('Schedule disabled.', 'success');
-        this.saving = false;
+        this.applyConfig(config);
+        this.showMessage(`${type === 'tv' ? 'TV' : 'Movie'} schedule disabled.`, 'success');
+        this.saving[type] = false;
       },
       error: () => {
         this.showMessage('Failed to disable schedule.', 'error');
-        this.saving = false;
+        this.saving[type] = false;
       }
     });
   }

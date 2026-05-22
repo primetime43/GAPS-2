@@ -145,6 +145,14 @@ hr.thin {
   }
 }
 
+/* Card used for grouped settings/preferences blocks */
+.pref-card {
+  background-color: #2d2d2d;
+  border: 1px solid #444;
+  border-radius: 8px;
+  padding: 16px 20px;
+}
+
 /* Connection/status indicators (✓ configured / ✗ not configured) */
 .status-indicator {
   font-size: 14px;
