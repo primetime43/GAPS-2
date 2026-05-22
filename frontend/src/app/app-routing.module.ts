@@ -14,6 +14,7 @@ import { JellyfinSettingsComponent } from './components/settings/jellyfin-settin
 import { UserPreferencesSettingsComponent } from './components/settings/user-preferences-settings/user-preferences-settings.component';
 import { ScheduleSettingsComponent } from './components/settings/schedule-settings/schedule-settings.component';
 import { NotificationSettingsComponent } from './components/settings/notification-settings/notification-settings.component';
+import { RadarrSettingsComponent } from './components/settings/radarr-settings/radarr-settings.component';
 import { SettingsComponent } from './components/settings/settings.component';
 
 const routes: Routes = [
@@ -29,6 +30,7 @@ const routes: Routes = [
     { path: 'emby', component: EmbySettingsComponent },
     { path: 'schedule', component: ScheduleSettingsComponent },
     { path: 'notifications', component: NotificationSettingsComponent },
+    { path: 'radarr', component: RadarrSettingsComponent },
     { path: 'user-preferences', component: UserPreferencesSettingsComponent },
   ]},
   { path: '**', redirectTo: '/' }

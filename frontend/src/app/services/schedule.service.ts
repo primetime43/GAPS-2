@@ -19,6 +19,7 @@ export interface ScheduleConfig {
   source: string;
   next_run: string | null;
   last_run: ScheduleLastRun | null;
+  run_history: ScheduleLastRun[];
   presets: { [key: string]: string };
 }
 

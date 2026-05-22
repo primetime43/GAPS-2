@@ -36,12 +36,14 @@ def create_app(config_name=None):
     from app.services.emby_service import EmbyService
     from app.services.schedule_service import ScheduleService
     from app.services.notification_service import NotificationService
+    from app.services.radarr_service import RadarrService
 
     app.plex_service = PlexService()
     app.jellyfin_service = JellyfinService()
     app.emby_service = EmbyService()
     app.tmdb_service = TmdbService(app.config['TMDB_BASE_URL'], app.config['TMDB_IMAGE_BASE_URL'])
     app.notification_service = NotificationService()
+    app.radarr_service = RadarrService()
     app.schedule_service = ScheduleService()
     app.schedule_service.init_app(app)
 
@@ -57,6 +59,7 @@ def create_app(config_name=None):
     from app.blueprints.emby import emby_bp
     from app.blueprints.logs import logs_bp
     from app.blueprints.about import about_bp
+    from app.blueprints.radarr import radarr_bp
 
     app.register_blueprint(plex_bp, url_prefix='/api/plex')
     app.register_blueprint(jellyfin_bp, url_prefix='/api/jellyfin')
@@ -69,6 +72,7 @@ def create_app(config_name=None):
     app.register_blueprint(preferences_bp, url_prefix='/api/preferences')
     app.register_blueprint(logs_bp, url_prefix='/api/logs')
     app.register_blueprint(about_bp, url_prefix='/api/about')
+    app.register_blueprint(radarr_bp, url_prefix='/api/radarr')
 
     # In production, serve Angular dist
     bundle_dir = _get_bundle_dir()
