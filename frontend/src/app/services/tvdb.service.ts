@@ -25,6 +25,7 @@ export interface TvdbGap {
 
 export interface TvdbScanProgress {
   status: 'idle' | 'scanning' | 'done' | 'error' | 'cancelled';
+  phase: 'shows' | 'franchises' | 'titles';
   processed: number;
   total: number;
   current_show: string;

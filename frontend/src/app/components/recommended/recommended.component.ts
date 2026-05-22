@@ -32,10 +32,11 @@ interface GapGroup {
 }
 
 interface UnifiedProgress {
-  processed: number;
-  total: number;
-  currentLabel: string;
+  label: string;        // main status line ("Checking your shows... 120 / 658")
+  percent: number;      // 0–100 for the current phase
+  currentLabel: string; // sub-line ("Checking: <title>")
   groupsFound: number;
+  groupsLabel: string;  // "collections found" | "franchises found"
 }
 
 @Component({
@@ -489,11 +490,32 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   }
 
   private normalizeProgress(p: any): UnifiedProgress {
+    const processed = p.processed || 0;
+    const total = p.total || 0;
+    const percent = total ? (processed / total * 100) : 0;
+
+    if (this.mediaType === 'tv') {
+      const phase = p.phase || 'shows';
+      const phaseLabel = phase === 'franchises'
+        ? 'Loading franchises'
+        : phase === 'titles'
+          ? 'Fetching missing titles'
+          : 'Checking your shows';
+      return {
+        label: `${phaseLabel}... ${processed} / ${total}`,
+        percent,
+        currentLabel: phase === 'shows' ? (p.current_show || '') : '',
+        groupsFound: p.franchises_found || 0,
+        groupsLabel: 'franchises found',
+      };
+    }
+
     return {
-      processed: p.processed || 0,
-      total: p.total || 0,
-      currentLabel: this.mediaType === 'tv' ? (p.current_show || '') : (p.current_movie || ''),
-      groupsFound: this.mediaType === 'tv' ? (p.franchises_found || 0) : (p.collections_found || 0),
+      label: `Scanning movies... ${processed} / ${total}`,
+      percent,
+      currentLabel: p.current_movie || '',
+      groupsFound: p.collections_found || 0,
+      groupsLabel: 'collections found',
     };
   }
 

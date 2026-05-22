@@ -352,12 +352,20 @@ class TvdbService:
         series_ids = [s['tvdbId'] for s in owned_shows if isinstance(s.get('tvdbId'), int)]
         id_to_name = {s['tvdbId']: s.get('name', '') for s in owned_shows
                       if isinstance(s.get('tvdbId'), int)}
-        processed = 0
         seen_lists: set[int] = set()
         relevant_lists: list[dict] = []  # list-base dicts, deduped
 
+        def set_phase(phase: str, total: int) -> None:
+            with self._scan_progress_lock:
+                self._scan_progress['phase'] = phase
+                self._scan_progress['total'] = total
+                self._scan_progress['processed'] = 0
+
         # Phase 1: fetch each owned show's extended record (which carries its
-        # franchise lists) in parallel.
+        # franchise lists) in parallel. Each phase has its own count, so the
+        # denominator stays meaningful instead of growing as work is discovered.
+        set_phase('shows', len(series_ids))
+        processed = 0
         with ThreadPoolExecutor(max_workers=_SCAN_WORKERS) as ex:
             futures = {ex.submit(self._get_series_extended, sid): sid for sid in series_ids}
             for fut in as_completed(futures):
@@ -385,8 +393,8 @@ class TvdbService:
             return []
 
         # Phase 2: fetch each relevant franchise's member list in parallel.
-        with self._scan_progress_lock:
-            self._scan_progress['total'] = len(series_ids) + len(relevant_lists)
+        set_phase('franchises', len(relevant_lists))
+        processed = 0
         members_by_list: list[tuple[dict, dict]] = []
         with ThreadPoolExecutor(max_workers=_SCAN_WORKERS) as ex:
             futures = {ex.submit(self._get_list_members, lst['id']): lst for lst in relevant_lists}
@@ -409,8 +417,8 @@ class TvdbService:
                 needed.add(sid)
 
         # Phase 3: prefetch member metadata in parallel.
-        with self._scan_progress_lock:
-            self._scan_progress['total'] = len(series_ids) + len(relevant_lists) + len(needed)
+        set_phase('titles', len(needed))
+        processed = 0
         with ThreadPoolExecutor(max_workers=_SCAN_WORKERS) as ex:
             futures = {ex.submit(self._get_series_extended, sid): sid for sid in needed}
             for fut in as_completed(futures):
@@ -496,6 +504,7 @@ class TvdbService:
     def _initial_scan_progress() -> dict:
         progress = {
             'status': 'idle',    # idle | scanning | done | error
+            'phase': 'shows',    # shows | franchises | titles
             'processed': 0,
             'total': 0,
             'current_show': '',
@@ -535,6 +544,7 @@ class TvdbService:
             generation = self._scan_generation
             self._scan_progress = {
                 'status': 'scanning',
+                'phase': 'shows',
                 'processed': 0,
                 'total': len(owned_shows),
                 'current_show': '',

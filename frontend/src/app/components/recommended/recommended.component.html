@@ -165,14 +165,11 @@
       <div *ngIf="scanMode" class="scan-progress-container">
         <div *ngIf="scanProgress" class="mb-3">
           <div class="d-flex justify-content-between text-muted mb-1">
-            <span>Scanning {{ mediaType === 'tv' ? 'shows' : 'movies' }}... {{ scanProgress.processed }} / {{ scanProgress.total }}</span>
-            <span>{{ scanProgress.groupsFound }} {{ mediaType === 'tv' ? 'franchises' : 'collections' }} found</span>
+            <span>{{ scanProgress.label }}</span>
+            <span>{{ scanProgress.groupsFound }} {{ scanProgress.groupsLabel }}</span>
           </div>
           <div class="progress-bar-track">
-            <div
-              class="progress-bar-fill"
-              [style.width.%]="scanProgress.total ? (scanProgress.processed / scanProgress.total * 100) : 0"
-            ></div>
+            <div class="progress-bar-fill" [style.width.%]="scanProgress.percent"></div>
           </div>
           <p class="text-muted mt-2 current-movie" *ngIf="scanProgress.currentLabel">
             Checking: {{ scanProgress.currentLabel }}
