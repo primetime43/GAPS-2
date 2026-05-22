@@ -339,6 +339,15 @@
                 (click)="sendToRadarr(gap, $event)">
                 {{ radarrButtonLabel(gap.id) }}
               </button>
+              <button
+                *ngIf="sonarrEnabled && gap.sonarrEligible && !gap.owned && !isIgnored(gap)"
+                class="btn btn-sm radarr-btn mt-2"
+                [ngClass]="sonarrButtonClass(gap.id)"
+                [disabled]="sonarrStatus.get(gap.id) === 'sending' || sonarrStatus.get(gap.id) === 'sent'"
+                [title]="sonarrErrors.get(gap.id) || 'Add this show to Sonarr'"
+                (click)="sendToSonarr(gap, $event)">
+                {{ sonarrButtonLabel(gap.id) }}
+              </button>
             </div>
           </div>
         </div>

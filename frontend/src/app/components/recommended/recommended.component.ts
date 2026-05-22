@@ -14,6 +14,7 @@ import { ActiveServerResponse, MediaLibrary } from '../../models/media-server.mo
 import { PreferencesService } from '../../services/preferences.service';
 import { ExportService, ExportFormat } from '../../services/export.service';
 import { RadarrService } from '../../services/radarr.service';
+import { SonarrService } from '../../services/sonarr.service';
 
 type MediaType = 'movie' | 'tv';
 
@@ -107,10 +108,13 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   freshScanActive = false;
   showFreshScanConfirm = false;
 
-  // Radarr (movies only)
+  // Radarr (movies) / Sonarr (TV)
   radarrEnabled = false;
   radarrStatus = new Map<number, 'sending' | 'sent' | 'error'>();
   radarrErrors = new Map<number, string>();
+  sonarrEnabled = false;
+  sonarrStatus = new Map<number, 'sending' | 'sent' | 'error'>();
+  sonarrErrors = new Map<number, string>();
 
   private completedScans = new Map<string, { gaps: Gap[]; totalOwned: number }>();
   private pollSub: Subscription | null = null;
@@ -126,11 +130,13 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     private preferencesService: PreferencesService,
     private exportService: ExportService,
     private radarrService: RadarrService,
+    private sonarrService: SonarrService,
     private router: Router,
   ) {}
 
   ngOnInit(): void {
     this.refreshRadarrStatus();
+    this.refreshSonarrStatus();
     this.loadContext(true);
 
     this.router.events.pipe(
@@ -609,6 +615,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
         owned: !!g.owned,
         externalUrl: g.slug ? `https://thetvdb.com/series/${g.slug}` : 'https://thetvdb.com',
         radarrEligible: false,
+        sonarrEligible: !!g.tvdbId,
       }));
     }
     return raw.map(g => ({
@@ -622,6 +629,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
       owned: !!g.owned,
       externalUrl: g.tmdbId ? `https://www.themoviedb.org/movie/${g.tmdbId}` : '',
       radarrEligible: !!g.tmdbId,
+      sonarrEligible: false,
     }));
   }
 
@@ -833,6 +841,60 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   radarrButtonClass(id: number | undefined): string {
     if (!id) return 'btn-outline-primary';
     switch (this.radarrStatus.get(id)) {
+      case 'sent': return 'btn-success';
+      case 'error': return 'btn-outline-danger';
+      default: return 'btn-outline-primary';
+    }
+  }
+
+  // -- Sonarr (TV only) --
+
+  refreshSonarrStatus(): void {
+    this.sonarrService.getConfig().pipe(catchError(() => of(null))).subscribe(cfg => {
+      this.sonarrEnabled = !!(cfg && cfg.enabled);
+      if (this.sonarrEnabled) this.loadSonarrLibrary();
+    });
+  }
+
+  loadSonarrLibrary(): void {
+    this.sonarrService.getLibraryTvdbIds()
+      .pipe(catchError(() => of({ tvdb_ids: [] })))
+      .subscribe(res => {
+        for (const id of res.tvdb_ids || []) {
+          if (this.sonarrStatus.get(id) !== 'sending') this.sonarrStatus.set(id, 'sent');
+        }
+      });
+  }
+
+  sendToSonarr(gap: Gap, event: Event): void {
+    event.stopPropagation();
+    event.preventDefault();
+    if (!gap.id || !this.sonarrEnabled || !gap.sonarrEligible) return;
+    if (this.sonarrStatus.get(gap.id) === 'sending') return;
+    this.sonarrStatus.set(gap.id, 'sending');
+    this.sonarrErrors.delete(gap.id);
+    this.sonarrService.addSeries(gap.id, gap.name).subscribe({
+      next: () => this.sonarrStatus.set(gap.id, 'sent'),
+      error: (err) => {
+        this.sonarrStatus.set(gap.id, 'error');
+        this.sonarrErrors.set(gap.id, err.error?.error || 'Failed to add to Sonarr');
+      },
+    });
+  }
+
+  sonarrButtonLabel(id: number | undefined): string {
+    if (!id) return 'Send to Sonarr';
+    switch (this.sonarrStatus.get(id)) {
+      case 'sending': return 'Sending...';
+      case 'sent': return 'In Sonarr';
+      case 'error': return 'Retry';
+      default: return 'Send to Sonarr';
+    }
+  }
+
+  sonarrButtonClass(id: number | undefined): string {
+    if (!id) return 'btn-outline-primary';
+    switch (this.sonarrStatus.get(id)) {
       case 'sent': return 'btn-success';
       case 'error': return 'btn-outline-danger';
       default: return 'btn-outline-primary';

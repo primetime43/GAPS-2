@@ -38,6 +38,7 @@ def create_app(config_name=None):
     from app.services.schedule_service import ScheduleService
     from app.services.notification_service import NotificationService
     from app.services.radarr_service import RadarrService
+    from app.services.sonarr_service import SonarrService
 
     app.plex_service = PlexService()
     app.jellyfin_service = JellyfinService()
@@ -46,6 +47,7 @@ def create_app(config_name=None):
     app.tvdb_service = TvdbService(app.config['TVDB_BASE_URL'])
     app.notification_service = NotificationService()
     app.radarr_service = RadarrService()
+    app.sonarr_service = SonarrService()
     app.schedule_service = ScheduleService()
     app.schedule_service.init_app(app)
 
@@ -62,6 +64,7 @@ def create_app(config_name=None):
     from app.blueprints.logs import logs_bp
     from app.blueprints.about import about_bp
     from app.blueprints.radarr import radarr_bp
+    from app.blueprints.sonarr import sonarr_bp
     from app.blueprints.tvdb import tvdb_bp
 
     app.register_blueprint(plex_bp, url_prefix='/api/plex')
@@ -76,6 +79,7 @@ def create_app(config_name=None):
     app.register_blueprint(logs_bp, url_prefix='/api/logs')
     app.register_blueprint(about_bp, url_prefix='/api/about')
     app.register_blueprint(radarr_bp, url_prefix='/api/radarr')
+    app.register_blueprint(sonarr_bp, url_prefix='/api/sonarr')
     app.register_blueprint(tvdb_bp, url_prefix='/api/tvdb')
 
     # In production, serve Angular dist

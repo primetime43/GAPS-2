@@ -14,6 +14,7 @@ import { TvdbService } from '../../services/tvdb.service';
 import { PreferencesService } from '../../services/preferences.service';
 import { ExportService } from '../../services/export.service';
 import { RadarrService } from '../../services/radarr.service';
+import { SonarrService } from '../../services/sonarr.service';
 import { Gap } from '../../models/recommendation.model';
 
 @Component({ selector: 'app-confirm-modal', template: '', standalone: false })
@@ -31,7 +32,7 @@ class MockConfirmModalComponent {
 function gap(p: Partial<Gap>): Gap {
   return {
     id: 0, name: '', year: '', posterUrl: null, overview: '',
-    groupName: '', owned: false, externalUrl: '', radarrEligible: false, ...p,
+    groupName: '', owned: false, externalUrl: '', radarrEligible: false, sonarrEligible: false, ...p,
   };
 }
 
@@ -48,6 +49,7 @@ describe('RecommendedComponent', () => {
   let preferencesService: jasmine.SpyObj<PreferencesService>;
   let exportService: jasmine.SpyObj<ExportService>;
   let radarrService: jasmine.SpyObj<RadarrService>;
+  let sonarrService: jasmine.SpyObj<SonarrService>;
 
   beforeEach(async () => {
     plexService = jasmine.createSpyObj('PlexService', ['getActiveServer']);
@@ -65,6 +67,7 @@ describe('RecommendedComponent', () => {
     preferencesService = jasmine.createSpyObj('PreferencesService', ['load', 'save']);
     exportService = jasmine.createSpyObj('ExportService', ['exportGaps']);
     radarrService = jasmine.createSpyObj('RadarrService', ['getConfig', 'getLibraryTmdbIds', 'addMovie']);
+    sonarrService = jasmine.createSpyObj('SonarrService', ['getConfig', 'getLibraryTvdbIds', 'addSeries']);
 
     plexService.getActiveServer.and.returnValue(of({} as any));
     jellyfinService.getActiveServer.and.returnValue(of({} as any));
@@ -77,6 +80,7 @@ describe('RecommendedComponent', () => {
     tvdbService.getConfig.and.returnValue(of({ enabled: false, api_key: '', pin: '', language: 'eng' }));
     tvdbService.getIgnored.and.returnValue(of([]));
     radarrService.getConfig.and.returnValue(of(null as any));
+    sonarrService.getConfig.and.returnValue(of(null as any));
     preferencesService.load.and.returnValue(of({
       defaultLibrary: '', moviesPerPage: 50, hideOwnedByDefault: false,
       hideFutureReleasesByDefault: false, language: 'en', port: 4277, autoOpenBrowser: true,
@@ -96,6 +100,7 @@ describe('RecommendedComponent', () => {
         { provide: PreferencesService, useValue: preferencesService },
         { provide: ExportService, useValue: exportService },
         { provide: RadarrService, useValue: radarrService },
+        { provide: SonarrService, useValue: sonarrService },
       ],
     }).compileComponents();
 

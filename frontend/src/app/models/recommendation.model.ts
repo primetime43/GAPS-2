@@ -23,5 +23,6 @@ export interface Gap {
   groupName: string;     // collection name (movies) or franchise name (TV)
   owned: boolean;
   externalUrl: string;   // TMDB or TheTVDB page for the title
-  radarrEligible: boolean; // only movies can be sent to Radarr
+  radarrEligible: boolean; // movies → Radarr
+  sonarrEligible: boolean; // shows → Sonarr
 }
