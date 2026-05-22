@@ -57,8 +57,11 @@ class TvdbService:
         # same way it polls the movie scan.
         self._scan_progress_lock = threading.Lock()
         self._scan_progress: dict = self._initial_scan_progress()
-        # Set to request the running scan stop at its next checkpoint.
-        self._cancel_event = threading.Event()
+        # Monotonic scan token (guarded by _scan_progress_lock). Starting a new
+        # scan or cancelling bumps it; the running worker stops the moment it
+        # sees the token change. This avoids the stop-then-restart race where a
+        # shared cancel flag could let the old scan keep running.
+        self._scan_generation = 0
 
     # -- Config --
 
@@ -327,14 +330,19 @@ class TvdbService:
         owned_shows: list[dict],
         owned_series_ids: set[int],
         show_existing: bool = False,
+        generation: int | None = None,
     ) -> list[dict]:
         """For each owned series, find official franchise members not in the library."""
+        def superseded() -> bool:
+            return generation is not None and self._scan_generation != generation
+
         seen_lists: set[int] = set()
         relevant_lists: list[dict] = []  # list-base dicts, deduped
+        gaps: list[dict] = []
         total = len(owned_shows)
 
         for i, show in enumerate(owned_shows):
-            if self._cancel_event.is_set():
+            if superseded():
                 return gaps
             with self._scan_progress_lock:
                 self._scan_progress['processed'] = i + 1
@@ -360,9 +368,8 @@ class TvdbService:
                 with self._scan_progress_lock:
                     self._scan_progress['franchises_found'] = len(relevant_lists)
 
-        gaps: list[dict] = []
         for lst in relevant_lists:
-            if self._cancel_event.is_set():
+            if superseded():
                 return gaps
             gaps.extend(self._collect_list_gaps(lst, owned_series_ids, show_existing))
 
@@ -468,10 +475,11 @@ class TvdbService:
         library_names: list[str] | None = None,
     ) -> None:
         libraries = list(library_names or [])
-        self._cancel_event.clear()
         with self._scan_progress_lock:
-            if self._scan_progress['status'] == 'scanning':
-                return  # Already running
+            # Bump the token first so any still-winding-down previous scan stops
+            # and its results are ignored; this scan owns the new token.
+            self._scan_generation += 1
+            generation = self._scan_generation
             self._scan_progress = {
                 'status': 'scanning',
                 'processed': 0,
@@ -487,17 +495,30 @@ class TvdbService:
 
         thread = threading.Thread(
             target=self._run_scan,
-            args=(list(owned_shows), set(owned_series_ids), show_existing, libraries),
+            args=(list(owned_shows), set(owned_series_ids), show_existing, libraries, generation),
             daemon=True,
         )
         thread.start()
 
     def cancel_scan(self) -> bool:
-        """Request the running scan stop. Returns True if a scan was running."""
+        """Stop the running scan. Returns True if a scan was running."""
         with self._scan_progress_lock:
             if self._scan_progress['status'] != 'scanning':
                 return False
-        self._cancel_event.set()
+            # Bumping the token makes the worker stop and discard its results.
+            self._scan_generation += 1
+            self._scan_progress = {
+                'status': 'cancelled',
+                'processed': 0,
+                'total': 0,
+                'current_show': '',
+                'franchises_found': 0,
+                'gaps': [],
+                'total_owned': 0,
+                'libraries': [],
+                'completed_at': None,
+                'error': None,
+            }
         return True
 
     def _run_scan(
@@ -506,26 +527,15 @@ class TvdbService:
         owned_series_ids: set[int],
         show_existing: bool,
         libraries: list[str],
+        generation: int,
     ) -> None:
         try:
-            gaps = self.find_franchise_gaps(owned_shows, owned_series_ids, show_existing)
-            if self._cancel_event.is_set():
-                with self._scan_progress_lock:
-                    self._scan_progress = {
-                        'status': 'cancelled',
-                        'processed': 0,
-                        'total': 0,
-                        'current_show': '',
-                        'franchises_found': 0,
-                        'gaps': [],
-                        'total_owned': 0,
-                        'libraries': [],
-                        'completed_at': None,
-                        'error': None,
-                    }
-                return
+            gaps = self.find_franchise_gaps(owned_shows, owned_series_ids, show_existing, generation)
             completed_at = datetime.now(timezone.utc).isoformat()
             with self._scan_progress_lock:
+                # A newer scan or a cancel superseded us — leave their state alone.
+                if self._scan_generation != generation:
+                    return
                 self._scan_progress['gaps'] = gaps
                 self._scan_progress['completed_at'] = completed_at
                 self._scan_progress['status'] = 'done'
@@ -541,5 +551,6 @@ class TvdbService:
         except Exception as e:
             logger.exception("TVDB scan failed")
             with self._scan_progress_lock:
-                self._scan_progress['error'] = str(e)
-                self._scan_progress['status'] = 'error'
+                if self._scan_generation == generation:
+                    self._scan_progress['error'] = str(e)
+                    self._scan_progress['status'] = 'error'
