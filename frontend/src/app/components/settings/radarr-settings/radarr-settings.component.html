@@ -75,12 +75,24 @@
       </select>
     </div>
 
-    <div class="form-group mb-3">
+    <div class="form-group mb-2">
       <label class="form-label">Root folder</label>
       <select class="form-select dark-select" [(ngModel)]="config.root_folder_path">
         <option value="" disabled hidden>Select a root folder...</option>
         <option *ngFor="let f of rootFolders" [value]="f.path">{{ f.path }}</option>
       </select>
+    </div>
+
+    <div class="form-check mb-3">
+      <input class="form-check-input" type="checkbox" id="radarrAutoRoute" [(ngModel)]="config.auto_route_by_decade">
+      <label class="form-check-label text-muted" for="radarrAutoRoute">
+        Auto-route by decade
+      </label>
+      <div class="text-muted" style="font-size: 12px;">
+        Send each movie to the root folder whose path matches its release decade
+        (e.g. a 2021 film &rarr; <code>/movies/2020s</code>). When no folder matches,
+        the root folder selected above is used.
+      </div>
     </div>
 
     <div class="form-group mb-3">

@@ -13,6 +13,7 @@ export interface RadarrConfig {
   minimum_availability: string;
   monitored: boolean;
   search_on_add: boolean;
+  auto_route_by_decade: boolean;
 }
 
 export interface RadarrQualityProfile {

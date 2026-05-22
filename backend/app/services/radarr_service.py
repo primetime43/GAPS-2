@@ -32,6 +32,7 @@ class RadarrService:
             'minimum_availability': saved.get('minimum_availability', 'released'),
             'monitored': saved.get('monitored', True),
             'search_on_add': saved.get('search_on_add', True),
+            'auto_route_by_decade': saved.get('auto_route_by_decade', False),
         }
 
     def save_config(self, data: dict) -> dict:
@@ -43,6 +44,7 @@ class RadarrService:
             'minimum_availability': (data.get('minimum_availability') or 'released').strip(),
             'monitored': bool(data.get('monitored', True)),
             'search_on_add': bool(data.get('search_on_add', True)),
+            'auto_route_by_decade': bool(data.get('auto_route_by_decade', False)),
         }
         config_store.put(CONFIG_KEY, cleaned)
         return self.get_config()
@@ -121,6 +123,27 @@ class RadarrService:
                 ids.append(tmdb_id)
         return ids
 
+    def _resolve_root_folder(self, year: int, url: str, api_key: str, default_path: str) -> str:
+        """Pick a root folder whose path matches the movie's decade (e.g. 2021 -> /movies/2020s).
+
+        Falls back to default_path when no folder matches or the lookup fails.
+        """
+        if not isinstance(year, int) or year <= 0:
+            return default_path
+        decade = (year // 10) * 10
+        try:
+            resp = self._request('GET', f'{url}/api/v3/rootfolder', api_key)
+            resp.raise_for_status()
+            paths = [f['path'] for f in resp.json() if f.get('path')]
+        except (requests.exceptions.RequestException, ValueError, KeyError):
+            return default_path
+        # Prefer a "2020s" style match, then a bare "2020" match.
+        for needle in (f'{decade}s', str(decade)):
+            for path in paths:
+                if needle in path:
+                    return path
+        return default_path
+
     def add_movie(self, tmdb_id: int, title: str = '', year: int = 0) -> tuple[bool, str]:
         """Add a movie to Radarr by TMDB id.
 
@@ -153,14 +176,21 @@ class RadarrService:
         except requests.exceptions.RequestException as e:
             return False, f'Radarr lookup error: {e}'
 
+        movie_year = movie.get('year') or year
+        root_folder_path = cfg['root_folder_path']
+        if cfg['auto_route_by_decade']:
+            root_folder_path = self._resolve_root_folder(
+                movie_year, url, api_key, cfg['root_folder_path']
+            )
+
         payload = {
             'tmdbId': tmdb_id,
             'title': movie.get('title') or title,
-            'year': movie.get('year') or year,
+            'year': movie_year,
             'titleSlug': movie.get('titleSlug'),
             'images': movie.get('images', []),
             'qualityProfileId': cfg['quality_profile_id'],
-            'rootFolderPath': cfg['root_folder_path'],
+            'rootFolderPath': root_folder_path,
             'minimumAvailability': cfg['minimum_availability'],
             'monitored': cfg['monitored'],
             'addOptions': {
@@ -175,7 +205,7 @@ class RadarrService:
             return False, f'Radarr request failed: {e}'
 
         if resp.status_code in (200, 201):
-            return True, f'Added "{payload["title"]}" to Radarr'
+            return True, f'Added "{payload["title"]}" to Radarr ({root_folder_path})'
 
         # Radarr returns 400 with a list of error dicts when the movie already exists.
         if resp.status_code == 400:

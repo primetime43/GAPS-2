@@ -17,6 +17,7 @@ export class RadarrSettingsComponent implements OnInit {
     minimum_availability: 'released',
     monitored: true,
     search_on_add: true,
+    auto_route_by_decade: false,
   };
   profiles: RadarrQualityProfile[] = [];
   rootFolders: RadarrRootFolder[] = [];
@@ -120,6 +121,7 @@ export class RadarrSettingsComponent implements OnInit {
           minimum_availability: 'released',
           monitored: true,
           search_on_add: true,
+          auto_route_by_decade: false,
         };
         this.profiles = [];
         this.rootFolders = [];
