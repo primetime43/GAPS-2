@@ -275,8 +275,10 @@ class TvdbService:
         Returns {name, year, image, slug, lists:[list base dicts]}.
         """
         with self._cache_lock:
-            if series_id in self._series_cache:
-                return self._series_cache[series_id]
+            cached = self._series_cache.get(series_id)
+            # Re-fetch entries cached before 'firstAired' was tracked (migration).
+            if cached is not None and 'firstAired' in cached:
+                return cached
 
         resp = self._request(f'/series/{series_id}/extended', params={'short': 'true'})
         if resp is None or resp.status_code != 200:
@@ -286,6 +288,7 @@ class TvdbService:
         meta = {
             'name': data.get('name', 'Unknown'),
             'year': data.get('year') or (first_aired[:4] if first_aired else None),
+            'firstAired': first_aired,
             'image': data.get('image'),
             'slug': data.get('slug'),
             'overview': data.get('overview', ''),
@@ -464,6 +467,7 @@ class TvdbService:
                 'tvdbId': sid,
                 'name': meta.get('name', 'Unknown'),
                 'year': meta.get('year') or 'N/A',
+                'releaseDate': meta.get('firstAired') or '',
                 'posterUrl': meta.get('image'),
                 'overview': meta.get('overview', ''),
                 'slug': meta.get('slug'),

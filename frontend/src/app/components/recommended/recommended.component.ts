@@ -609,6 +609,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
         id: g.tvdbId,
         name: g.name,
         year: g.year,
+        releaseDate: g.releaseDate,
         posterUrl: g.posterUrl ?? null,
         overview: g.overview || '',
         groupName: g.franchiseName || 'Unknown franchise',
@@ -641,10 +642,10 @@ export class RecommendedComponent implements OnInit, OnDestroy {
 
   isFutureRelease(gap: Gap): boolean {
     const today = new Date().toISOString().slice(0, 10);
-    if (this.mediaType === 'movie') {
-      if (gap.releaseDate) return gap.releaseDate > today;
-      return true; // no date → unannounced/future
-    }
+    // Prefer an exact date (movie release date or TV first-aired date).
+    if (gap.releaseDate) return gap.releaseDate > today;
+    if (this.mediaType === 'movie') return true; // no date → unannounced/future
+    // TV with no first-aired date: fall back to the year.
     const year = parseInt(String(gap.year), 10);
     return year ? year > new Date().getFullYear() : false;
   }

@@ -16,6 +16,7 @@ export interface TvdbGap {
   tvdbId: number;
   name: string;
   year: string | number;
+  releaseDate?: string;
   posterUrl: string | null;
   overview: string;
   slug: string | null;
