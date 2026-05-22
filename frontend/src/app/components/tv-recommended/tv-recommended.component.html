@@ -1,0 +1,239 @@
+<app-confirm-modal
+  [visible]="showFreshScanConfirm"
+  title="Fresh Scan"
+  message="This clears all cached TheTVDB data and re-fetches everything from scratch. It will take longer than a normal scan."
+  confirmText="Start Fresh Scan"
+  type="info"
+  (confirmed)="onFreshScanConfirm()"
+  (cancelled)="onFreshScanCancel()"
+></app-confirm-modal>
+
+<div>
+  <!-- Loading -->
+  <div *ngIf="loading" class="text-center mt-4">
+    <div class="spinner"></div>
+    <p class="text-muted mt-2">Loading...</p>
+  </div>
+
+  <!-- No server -->
+  <div *ngIf="!loading && !hasServer" class="text-center mt-4">
+    <h4 class="text-muted">No Active Server</h4>
+    <p class="text-muted">
+      Configure a media server first.
+      <a [routerLink]="['/settings']" class="activeLink">Go to Settings</a>
+    </p>
+  </div>
+
+  <!-- Main content -->
+  <div *ngIf="!loading && hasServer">
+    <h3 class="regular-text">Find Missing TV Shows</h3>
+    <p class="text-muted">
+      Find shows missing from your franchises using TheTVDB's official franchise lists.
+    </p>
+
+    <!-- TheTVDB not configured -->
+    <div *ngIf="!tvdbEnabled" class="alert alert-warning">
+      TheTVDB is not configured.
+      <a [routerLink]="['/settings/tvdb']" class="alert-link">Add your free API key in Settings</a>
+      to enable TV franchise scanning.
+    </div>
+
+    <!-- No TV libraries -->
+    <div *ngIf="tvdbEnabled && libraries.length === 0" class="alert alert-info">
+      No TV libraries found on <strong>{{ activeServerName }}</strong>.
+    </div>
+
+    <!-- Library selector + controls -->
+    <div *ngIf="tvdbEnabled && libraries.length > 0" class="row mb-3">
+      <div class="col-md-5">
+        <label class="text-muted mb-1">Select a Library</label>
+        <select class="form-select dark-select" [(ngModel)]="selectedLibrary" (ngModelChange)="onLibrarySelect()">
+          <option value="" disabled hidden>Choose a library...</option>
+          <option *ngFor="let lib of libraries" [value]="lib.title">{{ lib.title }}</option>
+        </select>
+        <!-- Multi-library selection for scanning -->
+        <div *ngIf="libraries.length > 1 && selectedLibrary" class="mt-2">
+          <label class="text-muted mb-1" style="font-size: 13px;">Include in scan:</label>
+          <div class="d-flex flex-wrap gap-2">
+            <div *ngFor="let lib of libraries" class="form-check form-check-inline">
+              <input
+                class="form-check-input"
+                type="checkbox"
+                [id]="'tvlib-' + lib.title"
+                [checked]="isLibrarySelected(lib.title)"
+                (change)="toggleLibrarySelection(lib.title)"
+              >
+              <label class="form-check-label text-muted" [for]="'tvlib-' + lib.title" style="font-size: 13px;">
+                {{ lib.title }}
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-4 d-flex align-items-end gap-3">
+        <button
+          class="btn btn-primary"
+          [disabled]="!selectedLibrary || scanning"
+          (click)="scan(false)">
+          Scan for Gaps
+        </button>
+        <button
+          class="btn btn-outline-secondary"
+          [disabled]="!selectedLibrary || scanning"
+          (click)="scan(true)"
+          title="Clear cached TheTVDB data and re-fetch from scratch">
+          Fresh Scan
+        </button>
+      </div>
+    </div>
+
+    <!-- Error -->
+    <div *ngIf="errorMessage" class="alert alert-danger mt-3">
+      {{ errorMessage }}
+    </div>
+
+    <!-- Loading shows -->
+    <div *ngIf="loadingShows" class="text-center mt-4">
+      <div class="spinner"></div>
+      <p class="text-muted mt-2">Loading library shows...</p>
+    </div>
+
+    <!-- Show picker (library loaded, no scan running / no results yet) -->
+    <div *ngIf="!loadingShows && !loadingGaps && !selectedShow && shows.length > 0 && !scanning && allGaps.length === 0">
+      <p class="text-muted">
+        Click <strong>Scan for Gaps</strong> to check all {{ shows.length }} shows,
+        or click a show below to check just its franchise.
+      </p>
+      <input
+        class="form-control dark-input mb-3"
+        type="text"
+        placeholder="Filter shows by name..."
+        [(ngModel)]="showFilter"
+        (ngModelChange)="currentPage = 1"
+      >
+      <div class="movie-grid">
+        <div *ngFor="let show of pagedShows" class="movie-card clickable" (click)="selectShow(show)">
+          <img
+            *ngIf="show.posterUrl"
+            [src]="show.posterUrl"
+            [alt]="show.name"
+            class="movie-poster"
+            loading="lazy"
+          >
+          <div *ngIf="!show.posterUrl" class="movie-poster-placeholder">No Image</div>
+          <div class="movie-info">
+            <div class="movie-title">{{ show.name }}</div>
+            <div class="movie-year">{{ show.year }}</div>
+          </div>
+        </div>
+      </div>
+      <!-- Pagination -->
+      <div *ngIf="totalPages > 1" class="pagination-controls mt-3 d-flex align-items-center justify-content-center gap-3">
+        <button class="btn btn-sm btn-outline-light" [disabled]="currentPage === 1" (click)="onPageChange(-1)">
+          &larr; Prev
+        </button>
+        <span class="text-muted">Page {{ currentPage }} of {{ totalPages }}</span>
+        <button class="btn btn-sm btn-outline-light" [disabled]="currentPage === totalPages" (click)="onPageChange(1)">
+          Next &rarr;
+        </button>
+      </div>
+    </div>
+
+    <!-- Scan progress -->
+    <div *ngIf="scanning" class="scan-progress-container mt-4">
+      <div *ngIf="scanProgress" class="mb-3">
+        <div class="d-flex justify-content-between text-muted mb-1">
+          <span>Checking shows… {{ scanProgress.processed }} / {{ scanProgress.total }}</span>
+          <span>{{ scanProgress.franchises_found }} franchises found</span>
+        </div>
+        <div class="progress-bar-track">
+          <div class="progress-bar-fill" [style.width.%]="progressPercent"></div>
+        </div>
+        <p class="text-muted mt-2 text-truncate" *ngIf="scanProgress.current_show">
+          Checking: {{ scanProgress.current_show }}
+        </p>
+      </div>
+      <div *ngIf="!scanProgress" class="text-center">
+        <div class="spinner"></div>
+        <p class="text-muted mt-2">Starting scan…</p>
+      </div>
+      <div *ngIf="freshScanActive" class="text-center" style="color: #e2a03f; font-size: 13px;">
+        Cache cleared — all data is being fetched fresh from TheTVDB.
+      </div>
+      <div class="text-center mt-3">
+        <button class="btn btn-outline-danger btn-sm" (click)="stopScan()">Stop Scan</button>
+      </div>
+    </div>
+
+    <!-- Single-show lookup in progress -->
+    <div *ngIf="loadingGaps" class="text-center mt-4">
+      <div class="spinner"></div>
+      <p class="text-muted mt-2">Finding franchise gaps...</p>
+    </div>
+
+    <!-- Results -->
+    <div *ngIf="!scanning && !loadingGaps && allGaps.length > 0">
+      <div class="d-flex align-items-center mb-3">
+        <button class="btn btn-sm btn-outline-light me-3" (click)="clearResults()">&larr; Back</button>
+        <h5 class="regular-text mb-0" *ngIf="!selectedShow">
+          Found {{ missingCount }} missing shows across {{ filteredGroups.length }} franchises
+        </h5>
+        <h5 class="regular-text mb-0" *ngIf="selectedShow">
+          Franchise for: {{ selectedShow.name }} ({{ selectedShow.year }})
+        </h5>
+        <div class="form-check ms-auto" *ngIf="missingCount > 0">
+          <input
+            class="form-check-input"
+            type="checkbox"
+            id="tvShowOwned"
+            [(ngModel)]="showOwned"
+            (ngModelChange)="onShowOwnedChange()"
+          >
+          <label class="form-check-label text-muted" for="tvShowOwned">Show owned</label>
+        </div>
+      </div>
+
+      <input
+        class="form-control dark-input mb-3"
+        type="text"
+        placeholder="Filter results by show or franchise name..."
+        [(ngModel)]="searchFilter"
+        (ngModelChange)="applyFilter()"
+      >
+
+      <div *ngFor="let group of filteredGroups" class="collection-group mb-4">
+        <h6 class="collection-name mb-2">{{ group.name }}</h6>
+        <div class="rec-grid">
+          <div *ngFor="let gap of group.gaps" class="rec-card" [class.owned]="gap.owned">
+            <div class="owned-badge" *ngIf="gap.owned">Owned</div>
+            <a [href]="tvdbUrl(gap)" target="_blank" rel="noopener noreferrer">
+              <img
+                *ngIf="gap.posterUrl"
+                [src]="gap.posterUrl"
+                [alt]="gap.name"
+                class="rec-poster"
+                loading="lazy"
+              >
+              <div *ngIf="!gap.posterUrl" class="rec-poster-placeholder">No Image</div>
+            </a>
+            <div class="rec-info">
+              <a [href]="tvdbUrl(gap)" target="_blank" rel="noopener noreferrer" class="rec-title-link">
+                {{ gap.name }}
+              </a>
+              <div class="rec-year">{{ gap.year }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- No gaps -->
+    <div *ngIf="!scanning && !loadingGaps && allGaps.length === 0 && (totalOwned > 0 || selectedShow) && !errorMessage" class="mt-3">
+      <button class="btn btn-sm btn-outline-light mb-2" (click)="clearResults()">&larr; Back</button>
+      <p class="text-muted">
+        <span *ngIf="selectedShow">This show isn't in a TheTVDB franchise, or your franchise is complete!</span>
+        <span *ngIf="!selectedShow">No missing shows found — your franchises are complete!</span>
+      </p>
+    </div>
+  </div>
+</div>

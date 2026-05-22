@@ -15,6 +15,7 @@ import { UserPreferencesSettingsComponent } from './components/settings/user-pre
 import { ScheduleSettingsComponent } from './components/settings/schedule-settings/schedule-settings.component';
 import { NotificationSettingsComponent } from './components/settings/notification-settings/notification-settings.component';
 import { RadarrSettingsComponent } from './components/settings/radarr-settings/radarr-settings.component';
+import { TvdbSettingsComponent } from './components/settings/tvdb-settings/tvdb-settings.component';
 import { SettingsComponent } from './components/settings/settings.component';
 
 const routes: Routes = [
@@ -31,6 +32,7 @@ const routes: Routes = [
     { path: 'schedule', component: ScheduleSettingsComponent },
     { path: 'notifications', component: NotificationSettingsComponent },
     { path: 'radarr', component: RadarrSettingsComponent },
+    { path: 'tvdb', component: TvdbSettingsComponent },
     { path: 'user-preferences', component: UserPreferencesSettingsComponent },
   ]},
   { path: '**', redirectTo: '/' }

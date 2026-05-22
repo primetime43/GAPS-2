@@ -48,6 +48,8 @@ class TmdbService:
         # list survive a backend restart.
         self._scan_progress_lock = threading.Lock()
         self._scan_progress: dict = self._initial_scan_progress()
+        # Set to request the running scan stop at its next checkpoint.
+        self._cancel_event = threading.Event()
 
     @staticmethod
     def _initial_scan_progress() -> dict:
@@ -358,6 +360,7 @@ class TmdbService:
     ) -> None:
         """Start a library scan in a background thread."""
         libraries = list(library_names or [])
+        self._cancel_event.clear()
         with self._scan_progress_lock:
             if self._scan_progress['status'] == 'scanning':
                 return  # Already running
@@ -381,6 +384,14 @@ class TmdbService:
         )
         thread.start()
 
+    def cancel_scan(self) -> bool:
+        """Request the running scan stop. Returns True if a scan was running."""
+        with self._scan_progress_lock:
+            if self._scan_progress['status'] != 'scanning':
+                return False
+        self._cancel_event.set()
+        return True
+
     def _run_scan(
         self,
         api_key: str,
@@ -392,6 +403,21 @@ class TmdbService:
         """Background scan worker."""
         try:
             gaps, _ = self.find_collection_gaps(api_key, owned_movies, owned_tmdb_ids, show_existing)
+            if self._cancel_event.is_set():
+                with self._scan_progress_lock:
+                    self._scan_progress = {
+                        'status': 'cancelled',
+                        'processed': 0,
+                        'total': 0,
+                        'current_movie': '',
+                        'collections_found': 0,
+                        'gaps': [],
+                        'total_owned': 0,
+                        'libraries': [],
+                        'completed_at': None,
+                        'error': None,
+                    }
+                return
             completed_at = datetime.now(timezone.utc).isoformat()
             final_gaps = gaps or []
             with self._scan_progress_lock:
@@ -431,6 +457,8 @@ class TmdbService:
         total = len(owned_movies)
 
         for i, movie in enumerate(owned_movies):
+            if self._cancel_event.is_set():
+                break
             # Update progress
             with self._scan_progress_lock:
                 self._scan_progress['processed'] = i + 1

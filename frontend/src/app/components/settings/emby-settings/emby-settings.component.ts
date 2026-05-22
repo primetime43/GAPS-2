@@ -129,8 +129,14 @@ export class EmbySettingsComponent implements OnInit {
     return this.activeLibraries.filter(l => l.type === 'movie');
   }
 
+  get activeTvLibraries(): MediaLibrary[] {
+    return this.activeLibraries.filter(l => l.type === 'show' || l.type === 'tvshows');
+  }
+
   get activeOtherLibraries(): MediaLibrary[] {
-    return this.activeLibraries.filter(l => l.type !== 'movie');
+    return this.activeLibraries.filter(
+      l => l.type !== 'movie' && l.type !== 'show' && l.type !== 'tvshows',
+    );
   }
 
   private loadActiveServer(): void {

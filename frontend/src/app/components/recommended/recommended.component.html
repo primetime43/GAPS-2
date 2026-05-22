@@ -9,6 +9,19 @@
 ></app-confirm-modal>
 
 <div class="container top-margin">
+  <!-- Movies / TV Shows toggle -->
+  <div class="btn-group media-type-toggle mb-3" role="group">
+    <button type="button" class="btn"
+            [class.btn-primary]="mediaType === 'movie'"
+            [class.btn-outline-secondary]="mediaType !== 'movie'"
+            (click)="mediaType = 'movie'">Movies</button>
+    <button type="button" class="btn"
+            [class.btn-primary]="mediaType === 'tv'"
+            [class.btn-outline-secondary]="mediaType !== 'tv'"
+            (click)="mediaType = 'tv'">TV Shows</button>
+  </div>
+
+  <ng-container *ngIf="mediaType === 'movie'">
   <!-- Loading -->
   <div *ngIf="loading" class="text-center mt-4">
     <div class="spinner"></div>
@@ -157,6 +170,9 @@
         </div>
         <div *ngIf="freshScanActive" class="fresh-scan-notice mt-2">
           Cache cleared — all data is being fetched fresh from TMDB.
+        </div>
+        <div class="text-center mt-3">
+          <button class="btn btn-outline-danger btn-sm" (click)="stopScan()">Stop Scan</button>
         </div>
       </div>
     </div>
@@ -345,4 +361,8 @@
       </p>
     </div>
   </div>
+  </ng-container>
+
+  <!-- TV franchise gaps (delegated to the embedded component) -->
+  <app-tv-recommended *ngIf="mediaType === 'tv'"></app-tv-recommended>
 </div>

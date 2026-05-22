@@ -32,6 +32,7 @@ def create_app(config_name=None):
     # Initialize services and store on app
     from app.services.plex_service import PlexService
     from app.services.tmdb_service import TmdbService
+    from app.services.tvdb_service import TvdbService
     from app.services.jellyfin_service import JellyfinService
     from app.services.emby_service import EmbyService
     from app.services.schedule_service import ScheduleService
@@ -42,6 +43,7 @@ def create_app(config_name=None):
     app.jellyfin_service = JellyfinService()
     app.emby_service = EmbyService()
     app.tmdb_service = TmdbService(app.config['TMDB_BASE_URL'], app.config['TMDB_IMAGE_BASE_URL'])
+    app.tvdb_service = TvdbService(app.config['TVDB_BASE_URL'])
     app.notification_service = NotificationService()
     app.radarr_service = RadarrService()
     app.schedule_service = ScheduleService()
@@ -60,6 +62,7 @@ def create_app(config_name=None):
     from app.blueprints.logs import logs_bp
     from app.blueprints.about import about_bp
     from app.blueprints.radarr import radarr_bp
+    from app.blueprints.tvdb import tvdb_bp
 
     app.register_blueprint(plex_bp, url_prefix='/api/plex')
     app.register_blueprint(jellyfin_bp, url_prefix='/api/jellyfin')
@@ -73,6 +76,7 @@ def create_app(config_name=None):
     app.register_blueprint(logs_bp, url_prefix='/api/logs')
     app.register_blueprint(about_bp, url_prefix='/api/about')
     app.register_blueprint(radarr_bp, url_prefix='/api/radarr')
+    app.register_blueprint(tvdb_bp, url_prefix='/api/tvdb')
 
     # In production, serve Angular dist
     bundle_dir = _get_bundle_dir()

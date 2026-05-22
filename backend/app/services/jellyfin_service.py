@@ -16,6 +16,8 @@ class JellyfinService:
         self._active_server: dict | None = None
         self._movies_cache: dict[str, dict] = {}
         self._movies_cache_lock = threading.Lock()
+        self._shows_cache: dict[str, dict] = {}
+        self._shows_cache_lock = threading.Lock()
 
         # Restore persisted state
         saved = config_store.get('jellyfin', {})
@@ -118,6 +120,7 @@ class JellyfinService:
         if not ok:
             return False, 'Could not reach server', None
         self.clear_movies_cache()
+        self.clear_shows_cache()
         libs, err = self.fetch_libraries()
         if err:
             return False, err, None
@@ -157,6 +160,7 @@ class JellyfinService:
         self._api_key = None
         self._user_id = None
         self.clear_movies_cache()
+        self.clear_shows_cache()
         config_store.remove('jellyfin')
 
     # -- Movies --
@@ -261,3 +265,110 @@ class JellyfinService:
     def movies_cache(self) -> dict:
         with self._movies_cache_lock:
             return dict(self._movies_cache)
+
+    # -- TV Shows --
+
+    def clear_shows_cache(self) -> None:
+        with self._shows_cache_lock:
+            self._shows_cache = {}
+
+    def get_shows(self, library_name: str) -> tuple[list[dict] | None, str | None]:
+        """Fetch TV shows (with TheTVDB IDs) from a library, cached per library."""
+        with self._shows_cache_lock:
+            cached = self._shows_cache.get(library_name)
+        if cached is not None:
+            return cached['shows'], None
+
+        if not self._server_url or not self._api_key:
+            return None, 'Not connected'
+
+        libs, err = self.fetch_libraries()
+        if err:
+            return None, err
+
+        library_id = None
+        for lib in (libs or []):
+            if lib['title'] == library_name:
+                library_id = lib.get('id')
+                break
+
+        if not library_id:
+            return None, f'Library "{library_name}" not found'
+
+        try:
+            params = {
+                'IncludeItemTypes': 'Series',
+                'Fields': 'ProviderIds,Overview',
+                'Recursive': 'true',
+                'Limit': '10000',
+            }
+            if library_id:
+                params['ParentId'] = library_id
+
+            if self._user_id:
+                url = f"{self._base()}/Users/{self._user_id}/Items"
+            else:
+                url = f"{self._base()}/Items"
+
+            prefs = config_store.get('preferences', {})
+            timeout = prefs.get('mediaServerTimeout', 30)
+            resp = requests.get(url, headers=self._headers(), params=params, timeout=timeout)
+            if resp.status_code != 200:
+                return None, f'Failed to fetch shows (HTTP {resp.status_code})'
+
+            items = resp.json().get('Items', [])
+
+            show_data = []
+            tvdb_ids = []
+
+            for item in items:
+                provider_ids = item.get('ProviderIds', {})
+                imdb_id = provider_ids.get('Imdb')
+                tmdb_id = None
+                tvdb_id = None
+
+                tmdb_str = provider_ids.get('Tmdb')
+                if tmdb_str:
+                    try:
+                        tmdb_id = int(tmdb_str)
+                    except ValueError:
+                        pass
+
+                tvdb_str = provider_ids.get('Tvdb')
+                if tvdb_str:
+                    try:
+                        tvdb_id = int(tvdb_str)
+                    except ValueError:
+                        pass
+
+                poster_url = None
+                if item.get('ImageTags', {}).get('Primary'):
+                    poster_url = f"/api/libraries/image-proxy?source=jellyfin&itemId={item['Id']}"
+
+                show_data.append({
+                    'name': item.get('Name', ''),
+                    'year': item.get('ProductionYear'),
+                    'overview': item.get('Overview', ''),
+                    'posterUrl': poster_url,
+                    'imdbId': imdb_id,
+                    'tmdbId': tmdb_id,
+                    'tvdbId': tvdb_id,
+                })
+                if tvdb_id:
+                    tvdb_ids.append(tvdb_id)
+
+            with self._shows_cache_lock:
+                self._shows_cache[library_name] = {
+                    'shows': show_data,
+                    'tvdbIds': tvdb_ids,
+                }
+
+            return show_data, None
+
+        except Exception as e:
+            return None, str(e)
+
+    @property
+    def shows_cache(self) -> dict:
+        with self._shows_cache_lock:
+            return dict(self._shows_cache)

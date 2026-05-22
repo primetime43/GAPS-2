@@ -66,6 +66,9 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   scanMode = false;
   crossCheckLibraries: string[] = [];
 
+  // Movies vs TV shows. TV mode delegates to the embedded <app-tv-recommended>.
+  mediaType: 'movie' | 'tv' = 'movie';
+
   // Media server source
   activeSource: 'plex' | 'jellyfin' | 'emby' = 'plex';
   activeServerName = '';
@@ -390,12 +393,25 @@ export class RecommendedComponent implements OnInit, OnDestroy {
             this.errorMessage = progress.error || 'Scan failed.';
             this.loadingGaps = false;
             this.scanProgress = null;
+          } else if (progress.status === 'cancelled' || progress.status === 'idle') {
+            this.stopPolling();
+            this.loadingGaps = false;
+            this.scanProgress = null;
+            this.scanMode = false;
           }
         },
         error: () => {
           // Ignore transient polling errors
         }
       });
+  }
+
+  stopScan(): void {
+    this.recommendationService.cancelScan().subscribe({ next: () => {}, error: () => {} });
+    this.stopPolling();
+    this.loadingGaps = false;
+    this.scanProgress = null;
+    this.scanMode = false;
   }
 
   private stopPolling(): void {

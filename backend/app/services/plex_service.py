@@ -19,6 +19,8 @@ class PlexService:
         self._active_server: dict | None = None
         self._movies_cache: dict[str, dict] = {}
         self._movies_cache_lock = threading.Lock()
+        self._shows_cache: dict[str, dict] = {}
+        self._shows_cache_lock = threading.Lock()
 
         # Restore persisted state
         saved = config_store.get('plex', {})
@@ -181,6 +183,7 @@ class PlexService:
         self._server_conn = None
         self._server_conn_name = None
         self.clear_movies_cache()
+        self.clear_shows_cache()
         server = self._get_server(server_name)
         if server is None:
             return False, 'Could not reach server', None
@@ -244,6 +247,7 @@ class PlexService:
         self._server_conn = None
         self._server_conn_name = None
         self.clear_movies_cache()
+        self.clear_shows_cache()
         config_store.remove('plex')
 
     # -- Movies --
@@ -322,3 +326,84 @@ class PlexService:
     def movies_cache(self) -> dict:
         with self._movies_cache_lock:
             return dict(self._movies_cache)
+
+    # -- TV Shows --
+
+    def clear_shows_cache(self) -> None:
+        with self._shows_cache_lock:
+            self._shows_cache = {}
+
+    def get_shows(self, library_name: str) -> tuple[list[dict] | None, str | None]:
+        """Fetch TV shows (with TheTVDB IDs) from a library, cached per library."""
+        with self._shows_cache_lock:
+            cached = self._shows_cache.get(library_name)
+        if cached is not None:
+            return cached['shows'], None
+
+        if not self._active_server:
+            return None, 'No active server'
+
+        server_name = self._active_server['server']
+        server = self._get_server(server_name)
+        if server is None:
+            return None, 'Server not found'
+
+        try:
+            library = server.library.section(library_name)
+            shows = library.search(libtype='show', includeGuids=True)
+
+            show_data = []
+            tvdb_ids = []
+
+            for show in shows:
+                imdb_id = None
+                tmdb_id = None
+                tvdb_id = None
+
+                if hasattr(show, 'guids') and show.guids:
+                    for guid in show.guids:
+                        gid = guid.id
+                        if gid.startswith('imdb://'):
+                            imdb_id = gid[7:]
+                        elif gid.startswith('tmdb://'):
+                            try:
+                                tmdb_id = int(gid[7:])
+                            except ValueError:
+                                pass
+                        elif gid.startswith('tvdb://'):
+                            try:
+                                tvdb_id = int(gid[7:])
+                            except ValueError:
+                                pass
+
+                poster_url = None
+                if show.thumb:
+                    poster_url = f"/api/libraries/image-proxy?source=plex&thumb={quote(show.thumb, safe='')}"
+
+                show_data.append({
+                    'name': show.title,
+                    'year': show.year,
+                    'overview': getattr(show, 'summary', ''),
+                    'posterUrl': poster_url,
+                    'imdbId': imdb_id,
+                    'tmdbId': tmdb_id,
+                    'tvdbId': tvdb_id,
+                })
+                if tvdb_id:
+                    tvdb_ids.append(tvdb_id)
+
+            with self._shows_cache_lock:
+                self._shows_cache[library_name] = {
+                    'shows': show_data,
+                    'tvdbIds': tvdb_ids,
+                }
+
+            return show_data, None
+
+        except Exception as e:
+            return None, str(e)
+
+    @property
+    def shows_cache(self) -> dict:
+        with self._shows_cache_lock:
+            return dict(self._shows_cache)

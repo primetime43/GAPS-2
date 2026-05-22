@@ -12,6 +12,7 @@ import { RouteReuseStrategy } from '@angular/router';
 import { ReusableRouteStrategy } from './reusable-route.strategy';
 import { HeaderComponent } from './components/header/header.component';
 import { RecommendedComponent } from './components/recommended/recommended.component';
+import { TvRecommendedComponent } from './components/tv-recommended/tv-recommended.component';
 import { AboutComponent } from './components/about/about.component';
 import { IndexComponent } from './index/index.component';
 import { PlexSettingsComponent } from './components/settings/plex-settings/plex-settings.component';
@@ -23,6 +24,7 @@ import { SettingsComponent } from './components/settings/settings.component';
 import { ScheduleSettingsComponent } from './components/settings/schedule-settings/schedule-settings.component';
 import { NotificationSettingsComponent } from './components/settings/notification-settings/notification-settings.component';
 import { RadarrSettingsComponent } from './components/settings/radarr-settings/radarr-settings.component';
+import { TvdbSettingsComponent } from './components/settings/tvdb-settings/tvdb-settings.component';
 import { ConfirmModalComponent } from './components/confirm-modal/confirm-modal.component';
 import { LogsComponent } from './components/logs/logs.component';
 
@@ -31,6 +33,7 @@ import { LogsComponent } from './components/logs/logs.component';
         HeaderComponent,
         ConfirmModalComponent,
         RecommendedComponent,
+        TvRecommendedComponent,
         AboutComponent,
         IndexComponent,
         PlexSettingsComponent,
@@ -41,6 +44,7 @@ import { LogsComponent } from './components/logs/logs.component';
         ScheduleSettingsComponent,
         NotificationSettingsComponent,
         RadarrSettingsComponent,
+        TvdbSettingsComponent,
         SettingsComponent,
         LogsComponent
     ],

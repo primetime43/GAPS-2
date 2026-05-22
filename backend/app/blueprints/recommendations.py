@@ -133,6 +133,13 @@ def scan_progress():
     return jsonify(progress)
 
 
+@recommendations_bp.route('/scan/cancel', methods=['POST'])
+def cancel_scan():
+    """Request the running scan stop."""
+    cancelled = current_app.tmdb_service.cancel_scan()
+    return jsonify(cancelled=cancelled)
+
+
 @recommendations_bp.route('/ignored', methods=['GET'])
 def get_ignored():
     """Return the list of ignored TMDB IDs."""
