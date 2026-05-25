@@ -64,6 +64,21 @@ def get_movies():
     return jsonify(movies=movies)
 
 
+@libraries_bp.route('/shows', methods=['GET'])
+def get_shows():
+    library_name = request.args.get('library_name')
+    source = request.args.get('source', 'plex')
+
+    if not library_name:
+        return jsonify(error='library_name parameter is required'), 400
+
+    service = _get_service(source)
+    shows, error = service.get_shows(library_name)
+    if error:
+        return jsonify(error=error), 500
+    return jsonify(shows=shows)
+
+
 @libraries_bp.route('/image-proxy', methods=['GET'])
 def image_proxy():
     """Proxy poster images from media servers to avoid exposing API keys in browser."""

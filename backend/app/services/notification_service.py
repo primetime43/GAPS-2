@@ -46,14 +46,18 @@ class NotificationService:
         """Send a test notification."""
         return self.notify(service, 'GAPS Test', 'This is a test notification from GAPS 2.')
 
-    def notify_scan_results(self, gaps_count: int, collections_count: int, library: str) -> None:
+    def notify_scan_results(
+        self, gaps_count: int, collections_count: int, library: str, media_type: str = 'movie'
+    ) -> None:
         """Send scan results to all enabled services."""
+        item = 'shows' if media_type == 'tv' else 'movies'
+        group = 'franchises' if media_type == 'tv' else 'collections'
         if gaps_count == 0:
             title = 'GAPS Scan Complete'
-            message = f'No missing movies found in "{library}". Your collection is complete!'
+            message = f'No missing {item} found in "{library}". Your {group[:-1]} library is complete!'
         else:
-            title = f'GAPS Found {gaps_count} Missing Movies'
-            message = f'Found {gaps_count} missing movies across {collections_count} collections in "{library}".'
+            title = f'GAPS Found {gaps_count} Missing {item.capitalize()}'
+            message = f'Found {gaps_count} missing {item} across {collections_count} {group} in "{library}".'
 
         config = self.get_config()
         for service in ('discord', 'telegram', 'email'):

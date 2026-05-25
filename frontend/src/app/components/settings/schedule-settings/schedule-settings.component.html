@@ -1,39 +1,11 @@
 <div class="top-margin regular-text">
-  <p>Automatically scan your library for missing collection movies on a schedule.</p>
+  <p>Automatically scan for missing collection movies and franchise TV shows on independent schedules.</p>
 
   <div *ngIf="loading" class="text-center mt-4">
     <div class="spinner"></div>
   </div>
 
   <div *ngIf="!loading">
-    <!-- Status -->
-    <div class="status-indicator mb-3">
-      <span *ngIf="schedule?.enabled" class="status-ok">
-        &#10003; Scheduled: {{ schedule?.presets?.[schedule?.preset ?? ''] }}
-      </span>
-      <span *ngIf="!schedule?.enabled" class="status-missing">
-        &#10007; No schedule configured
-      </span>
-    </div>
-
-    <div *ngIf="schedule?.enabled && schedule?.next_run" class="text-muted mb-3">
-      Next scan: {{ schedule.next_run }}
-    </div>
-
-    <div *ngIf="schedule?.last_run as last" class="text-muted mb-3" style="font-size: 13px;">
-      <div *ngIf="last.status === 'success'">
-        Last scheduled scan: {{ last.timestamp | date:'medium' }} — found
-        <strong>{{ last.missing }}</strong> missing across <strong>{{ last.collections }}</strong>
-        collection(s) in "{{ last.library }}".
-      </div>
-      <div *ngIf="last.status === 'skipped'">
-        Last scheduled scan: {{ last.timestamp | date:'medium' }} — skipped ({{ last.message }}).
-      </div>
-      <div *ngIf="last.status === 'error'">
-        Last scheduled scan: {{ last.timestamp | date:'medium' }} — failed ({{ last.message }}).
-      </div>
-    </div>
-
     <!-- Message -->
     <div *ngIf="message"
          class="alert"
@@ -44,45 +16,93 @@
 
     <!-- No libraries warning -->
     <div *ngIf="libraries.length === 0" class="text-muted">
-      No movie libraries found. Configure a media server first.
+      No libraries found. Configure a media server first.
     </div>
 
-    <!-- Active server info -->
-    <div *ngIf="libraries.length > 0" class="text-muted mb-3" style="font-size: 13px;">
-      Using {{ activeSource | titlecase }} server: {{ activeServerName }}
-    </div>
-
-    <!-- Config form -->
     <div *ngIf="libraries.length > 0">
-      <div class="form-group mb-3">
-        <label class="form-label">Library</label>
-        <select class="form-select dark-select" [(ngModel)]="selectedLibrary">
-          <option value="" disabled hidden>Select a library...</option>
-          <option *ngFor="let lib of libraries" [value]="lib.title">{{ lib.title }}</option>
-        </select>
+      <div class="text-muted mb-3" style="font-size: 13px;">
+        Using {{ activeSource | titlecase }} server: {{ activeServerName }}
       </div>
 
-      <div class="form-group mb-3">
-        <label class="form-label">Frequency</label>
-        <select class="form-select dark-select" [(ngModel)]="selectedPreset">
-          <option value="" disabled hidden>Select frequency...</option>
-          <option *ngFor="let key of presetKeys" [value]="key">{{ schedule?.presets?.[key] }}</option>
-        </select>
+      <!-- Movie schedule -->
+      <div class="pref-card mb-4 p-3">
+        <h5 class="mb-2">Movies</h5>
+        <div class="status-indicator mb-2">
+          <span *ngIf="schedule?.movie?.enabled" class="status-ok">
+            ✓ Scheduled: {{ schedule?.presets?.[schedule?.movie?.preset ?? ''] }}
+          </span>
+          <span *ngIf="!schedule?.movie?.enabled" class="status-missing">✗ Not scheduled</span>
+        </div>
+        <div *ngIf="schedule?.movie?.enabled && schedule?.movie?.next_run" class="text-muted mb-3" style="font-size: 13px;">
+          Next scan: {{ schedule?.movie?.next_run }}
+        </div>
+
+        <div class="form-group mb-2">
+          <label class="form-label">Movie library</label>
+          <select class="form-select dark-select" [(ngModel)]="movieLibrary">
+            <option value="" disabled hidden>Select a library...</option>
+            <option *ngFor="let lib of movieLibraries" [value]="lib.title">{{ lib.title }}</option>
+          </select>
+        </div>
+        <div class="form-group mb-3">
+          <label class="form-label">Frequency</label>
+          <select class="form-select dark-select" [(ngModel)]="moviePreset">
+            <option value="" disabled hidden>Select frequency...</option>
+            <option *ngFor="let key of presetKeys" [value]="key">{{ schedule?.presets?.[key] }}</option>
+          </select>
+        </div>
+        <div class="d-flex gap-2">
+          <button class="btn btn-primary" (click)="save('movie')"
+                  [disabled]="saving.movie || !moviePreset || !movieLibrary">
+            {{ saving.movie ? 'Saving...' : 'Save Movie Schedule' }}
+          </button>
+          <button class="btn btn-outline-secondary" (click)="disable('movie')"
+                  [disabled]="saving.movie || !schedule?.movie?.enabled">
+            Disable
+          </button>
+        </div>
       </div>
 
-      <div class="d-flex gap-2">
-        <button
-          class="btn btn-primary"
-          (click)="saveSchedule()"
-          [disabled]="saving || !selectedPreset || !selectedLibrary">
-          {{ saving ? 'Saving...' : 'Save Schedule' }}
-        </button>
-        <button
-          class="btn btn-outline-secondary"
-          (click)="disableSchedule()"
-          [disabled]="saving || !schedule?.enabled">
-          Disable
-        </button>
+      <!-- TV schedule -->
+      <div class="pref-card mb-4 p-3" *ngIf="tvLibraries.length > 0">
+        <h5 class="mb-2">TV Shows</h5>
+        <div class="status-indicator mb-2">
+          <span *ngIf="schedule?.tv?.enabled" class="status-ok">
+            ✓ Scheduled: {{ schedule?.presets?.[schedule?.tv?.preset ?? ''] }}
+          </span>
+          <span *ngIf="!schedule?.tv?.enabled" class="status-missing">✗ Not scheduled</span>
+        </div>
+        <div *ngIf="schedule?.tv?.enabled && schedule?.tv?.next_run" class="text-muted mb-3" style="font-size: 13px;">
+          Next scan: {{ schedule?.tv?.next_run }}
+        </div>
+
+        <div class="form-group mb-2">
+          <label class="form-label">TV library</label>
+          <select class="form-select dark-select" [(ngModel)]="tvLibrary">
+            <option value="" disabled hidden>Select a library...</option>
+            <option *ngFor="let lib of tvLibraries" [value]="lib.title">{{ lib.title }}</option>
+          </select>
+        </div>
+        <div class="form-group mb-3">
+          <label class="form-label">Frequency</label>
+          <select class="form-select dark-select" [(ngModel)]="tvPreset">
+            <option value="" disabled hidden>Select frequency...</option>
+            <option *ngFor="let key of presetKeys" [value]="key">{{ schedule?.presets?.[key] }}</option>
+          </select>
+        </div>
+        <div class="text-muted mb-2" style="font-size: 12px;">
+          TV scans require <a [routerLink]="['/settings/tvdb']" class="activeLink">TheTVDB</a> to be configured.
+        </div>
+        <div class="d-flex gap-2">
+          <button class="btn btn-primary" (click)="save('tv')"
+                  [disabled]="saving.tv || !tvPreset || !tvLibrary">
+            {{ saving.tv ? 'Saving...' : 'Save TV Schedule' }}
+          </button>
+          <button class="btn btn-outline-secondary" (click)="disable('tv')"
+                  [disabled]="saving.tv || !schedule?.tv?.enabled">
+            Disable
+          </button>
+        </div>
       </div>
     </div>
 
@@ -95,6 +115,7 @@
           <thead>
             <tr>
               <th>When</th>
+              <th>Type</th>
               <th>Status</th>
               <th>Library</th>
               <th>Result</th>
@@ -103,6 +124,7 @@
           <tbody>
             <tr *ngFor="let run of schedule.run_history">
               <td>{{ run.timestamp | date:'medium' }}</td>
+              <td>{{ run.mediaType === 'tv' ? 'TV' : 'Movies' }}</td>
               <td>
                 <span class="badge"
                       [class.bg-success]="run.status === 'success'"
@@ -114,7 +136,8 @@
               <td>{{ run.library || '&mdash;' }}</td>
               <td>
                 <ng-container *ngIf="run.status === 'success'">
-                  {{ run.missing }} missing across {{ run.collections }} collection(s)
+                  {{ run.missing }} missing across {{ run.collections }}
+                  {{ run.mediaType === 'tv' ? 'franchise(s)' : 'collection(s)' }}
                 </ng-container>
                 <ng-container *ngIf="run.status !== 'success'">
                   {{ run.message || '&mdash;' }}

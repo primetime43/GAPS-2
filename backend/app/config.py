@@ -11,6 +11,12 @@ class BaseConfig:
     TMDB_BASE_URL = "https://api.themoviedb.org/3"
     TMDB_IMAGE_BASE_URL = "https://image.tmdb.org/t/p/w500"
 
+    # TheTVDB v4 REST API. Used for TV franchise gap-finding (issue #10):
+    # group owned series by their official TheTVDB "lists" (e.g. "Yellowstone
+    # Franchise") and surface member series not in the library. Image fields
+    # returned by TVDB are already absolute URLs, so no image base is needed.
+    TVDB_BASE_URL = "https://api4.thetvdb.com/v4"
+
     RESPONSE_MESSAGES = {
         "api_key_success": "API key is working!",
         "api_key_failure": "Failed to connect to API, status code: ",

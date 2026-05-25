@@ -264,8 +264,12 @@ export class PlexSettingsComponent implements OnInit, OnDestroy {
     return this.activeLibraries.filter(lib => lib.type === 'movie');
   }
 
+  get activeTvLibraries(): PlexLibrary[] {
+    return this.activeLibraries.filter(lib => lib.type === 'show');
+  }
+
   get activeOtherLibraries(): PlexLibrary[] {
-    return this.activeLibraries.filter(lib => lib.type !== 'movie');
+    return this.activeLibraries.filter(lib => lib.type !== 'movie' && lib.type !== 'show');
   }
 
   private startPolling(): void {

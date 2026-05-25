@@ -12,20 +12,4 @@
   font-weight: 600;
   margin-bottom: 10px;
 }
-
-.dark-input {
-  background-color: #222;
-  border: 1px solid #444;
-  color: #fff;
-
-  &::placeholder {
-    color: #666;
-  }
-
-  &:focus {
-    background-color: #333;
-    border-color: #00bc8c;
-    color: #fff;
-    box-shadow: none;
-  }
-}
+/* .dark-input is shared globally in src/styles.scss */

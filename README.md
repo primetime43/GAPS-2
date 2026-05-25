@@ -1,17 +1,21 @@
 # GAPS 2
 
-GAPS 2 is a rewrite of the original [GAPS](https://github.com/JasonHHouse/gaps) project. GAPS (Gaps A Plex Server) finds movies you're missing in your media server based on movie collections from The Movie Database (TMDB).
+GAPS 2 is a rewrite of the original [GAPS](https://github.com/JasonHHouse/gaps) project. GAPS (Gaps A Plex Server) finds **movies and TV shows you're missing** in your media server:
 
-For example, if you own *Alien (1979)*, GAPS will recommend *Aliens (1986)* and *Alien³ (1992)* to complete the collection.
+- **Movies** — based on movie collections from The Movie Database (TMDB). For example, if you own *Alien (1979)*, GAPS recommends *Aliens (1986)* and *Alien³ (1992)* to complete the collection.
+- **TV shows** — based on official franchise lists from [TheTVDB](https://thetvdb.com). For example, if you own *Yellowstone*, GAPS surfaces *1883* and *1923* from the same franchise.
 
 ## Features
 
 - **Multi-server support** — Plex (OAuth), Jellyfin, and Emby
-- Browse libraries and view your movie collection
-- Find missing movies based on TMDB collections and recommendations
-- Scheduled automatic scanning of libraries
+- **Unified "Missing" view** with a Movies / TV Shows toggle — browse a library, scan it for gaps, or click a single title to check just its collection/franchise
+- **Find missing movies** based on TMDB collections and recommendations
+- **Find missing TV shows** based on TheTVDB's official franchise lists
+- **Send to Radarr / Sonarr** — add missing movies to Radarr (by TMDB id) and missing shows to Sonarr (by TheTVDB id) directly from the results
+- Filter results: show/hide owned, hide future (unreleased) titles, ignore individual titles or whole collections, and export to CSV/Excel
+- **Independent scheduled scans** for movies and TV, each with its own cadence
 - Notifications via Discord, Telegram, and Email
-- User preferences (default library, movies per page, language, hide owned movies, etc.)
+- User preferences (default library, items per page, language, hide owned, etc.)
 - Responsive dark-themed UI built with Angular 19 and Bootstrap 5
 - Dockerized deployment with persistent configuration
 - Windows standalone executable (single .exe via PyInstaller)
@@ -68,7 +72,7 @@ This automatically sets up a Python virtual environment, installs all dependenci
 
 **Manual setup:**
 
-Prerequisites: Python 3.9+, Node.js 20+, a [TMDB API key](https://www.themoviedb.org/settings/api)
+Prerequisites: Python 3.9+, Node.js 20+, a [TMDB API key](https://www.themoviedb.org/settings/api) (for movies), and optionally a free [TheTVDB v4 API key](https://thetvdb.com/dashboard/account/apikey) (for TV franchise scanning)
 
 ```bash
 # Backend
@@ -91,10 +95,14 @@ The Angular dev server starts at `http://localhost:4200` and proxies API request
 
 ## Usage
 
-1. Go to **Settings > TMDB** and enter your TMDB API key
-2. Go to **Settings > Plex/Jellyfin/Emby** and connect your media server
-3. Go to **Recommended** to browse your libraries and find missing movies
-4. Optionally configure **scheduled scans** and **notifications** in Settings
+1. Go to **Settings > TMDB** and enter your TMDB API key (required for movies)
+2. *(Optional, for TV)* Go to **Settings > TheTVDB** and enter your free TheTVDB API key
+3. Go to **Settings > Plex/Jellyfin/Emby** and connect your media server
+4. Go to **Missing**, choose **Movies** or **TV Shows**, pick a library, and click **Scan for Gaps** — or click a single title to check just its collection/franchise
+5. *(Optional)* Configure **Radarr** and/or **Sonarr** in Settings to send missing titles straight to your downloaders
+6. *(Optional)* Configure **scheduled scans** (separate cadences for movies and TV) and **notifications** in Settings
+
+> **TheTVDB API key:** create a free key on your [TheTVDB dashboard](https://thetvdb.com/dashboard/account/apikey). Some keys are tied to the *User Subscription* funding model and require your subscriber PIN; if so, GAPS will tell you, and you can enter the PIN on the TheTVDB settings page.
 
 ## License
 

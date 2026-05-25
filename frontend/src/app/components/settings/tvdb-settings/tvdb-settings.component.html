@@ -1,0 +1,74 @@
+<div class="top-margin regular-text">
+  <p>
+    Connect to <a href="https://thetvdb.com" target="_blank" rel="noopener">TheTVDB</a> to find
+    missing shows in your franchises &mdash; e.g. owning <em>Yellowstone</em> will surface
+    <em>1883</em> and <em>1923</em> from the same official franchise list.
+  </p>
+  <p class="text-muted" style="font-size: 13px;">
+    Create a free API key on your
+    <a href="https://thetvdb.com/dashboard/account/apikey" target="_blank" rel="noopener">TheTVDB dashboard</a>.
+    Most keys connect without a PIN &mdash; only enter your subscriber PIN if a
+    <em>User Subscription</em> key reports that one is required.
+  </p>
+
+  <!-- Status -->
+  <div class="status-indicator mb-3">
+    <span *ngIf="config.enabled" class="status-ok">✓ TheTVDB configured</span>
+    <span *ngIf="!config.enabled" class="status-missing">✗ TheTVDB not configured</span>
+  </div>
+
+  <!-- Message -->
+  <div *ngIf="message"
+       class="alert"
+       [class.alert-success]="messageType === 'success'"
+       [class.alert-danger]="messageType === 'error'">
+    {{ message }}
+  </div>
+
+  <div class="form-group mb-3">
+    <label class="form-label">API Key</label>
+    <div class="input-group">
+      <input
+        class="form-control dark-input"
+        [type]="showKey ? 'text' : 'password'"
+        placeholder="TheTVDB API key"
+        [(ngModel)]="config.api_key"
+      >
+      <button class="btn btn-outline-secondary" type="button" (click)="showKey = !showKey">
+        {{ showKey ? 'Hide' : 'Show' }}
+      </button>
+    </div>
+  </div>
+
+  <div class="form-group mb-3">
+    <label class="form-label">Subscriber PIN <span class="text-muted">(optional)</span></label>
+    <div class="input-group">
+      <input
+        class="form-control dark-input"
+        [type]="showPin ? 'text' : 'password'"
+        placeholder="Only needed for some User Subscription keys"
+        [(ngModel)]="config.pin"
+      >
+      <button class="btn btn-outline-secondary" type="button" (click)="showPin = !showPin">
+        {{ showPin ? 'Hide' : 'Show' }}
+      </button>
+    </div>
+  </div>
+
+  <div class="d-flex gap-2 mb-3">
+    <button class="btn btn-info" type="button" (click)="testConnection()" [disabled]="testing || saving">
+      {{ testing ? 'Testing...' : 'Test Connection' }}
+    </button>
+    <button class="btn btn-primary" type="button" (click)="saveConfig()" [disabled]="testing || saving">
+      {{ saving ? 'Saving...' : 'Save' }}
+    </button>
+    <button
+      *ngIf="config.enabled"
+      class="btn btn-outline-danger ms-auto"
+      type="button"
+      (click)="clearConfig()"
+      [disabled]="testing || saving">
+      Clear
+    </button>
+  </div>
+</div>

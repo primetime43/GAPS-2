@@ -122,13 +122,16 @@ describe('EmbySettingsComponent', () => {
     expect(component.movieLibraries[0].title).toBe('Movies');
   });
 
-  it('should filter active movie vs other libraries', () => {
+  it('should filter active movie, tv and other libraries', () => {
     component.activeLibraries = [
       { title: 'Movies', type: 'movie' },
       { title: 'TV', type: 'show' },
+      { title: 'Shows', type: 'tvshows' },
       { title: 'Anime', type: 'movie' },
+      { title: 'Music', type: 'music' },
     ];
     expect(component.activeMovieLibraries.length).toBe(2);
+    expect(component.activeTvLibraries.length).toBe(2);
     expect(component.activeOtherLibraries.length).toBe(1);
   });
 

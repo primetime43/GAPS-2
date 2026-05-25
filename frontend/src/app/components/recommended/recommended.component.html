@@ -1,14 +1,28 @@
 <app-confirm-modal
   [visible]="showFreshScanConfirm"
   title="Fresh Scan"
-  message="This will clear all cached TMDB data and re-fetch everything from scratch. This will take significantly longer than a normal scan."
+  [message]="mediaType === 'tv'
+    ? 'This will clear all cached TheTVDB data and re-fetch everything from scratch. This will take longer than a normal scan.'
+    : 'This will clear all cached TMDB data and re-fetch everything from scratch. This will take significantly longer than a normal scan.'"
   confirmText="Start Fresh Scan"
   type="info"
   (confirmed)="onFreshScanConfirm()"
   (cancelled)="onFreshScanCancel()"
 ></app-confirm-modal>
 
-<div class="container top-margin">
+<div class="container top-margin pb-5">
+  <!-- Movies / TV Shows toggle -->
+  <div class="btn-group media-type-toggle mb-3" role="group">
+    <button type="button" class="btn"
+            [class.btn-primary]="mediaType === 'movie'"
+            [class.btn-outline-secondary]="mediaType !== 'movie'"
+            (click)="setMediaType('movie')">Movies</button>
+    <button type="button" class="btn"
+            [class.btn-primary]="mediaType === 'tv'"
+            [class.btn-outline-secondary]="mediaType !== 'tv'"
+            (click)="setMediaType('tv')">TV Shows</button>
+  </div>
+
   <!-- Loading -->
   <div *ngIf="loading" class="text-center mt-4">
     <div class="spinner"></div>
@@ -26,18 +40,30 @@
 
   <!-- Main content -->
   <div *ngIf="!loading && hasServer">
-    <h3 class="regular-text">Find Missing Movies</h3>
-    <p class="text-muted">Find gaps in your movie collections using TMDB data.</p>
+    <h3 class="regular-text">{{ mediaType === 'tv' ? 'Find Missing TV Shows' : 'Find Missing Movies' }}</h3>
+    <p class="text-muted" *ngIf="mediaType === 'movie'">Find gaps in your movie collections using TMDB data.</p>
+    <p class="text-muted" *ngIf="mediaType === 'tv'">Find shows missing from your franchises using TheTVDB's official franchise lists.</p>
+
+    <!-- TheTVDB not configured -->
+    <div *ngIf="mediaType === 'tv' && !tvdbEnabled" class="alert alert-warning">
+      TheTVDB is not configured.
+      <a [routerLink]="['/settings/tvdb']" class="alert-link">Add your free API key in Settings</a>
+      to enable TV franchise scanning.
+    </div>
+
+    <!-- No libraries of this type -->
+    <div *ngIf="mediaType === 'tv' && tvdbEnabled && libraries.length === 0" class="alert alert-info">
+      No TV libraries found on <strong>{{ activeServerName }}</strong>.
+    </div>
 
     <!-- Library selector + controls -->
-    <div class="row mb-3">
+    <div *ngIf="(mediaType === 'movie' || tvdbEnabled) && libraries.length > 0" class="row mb-3">
       <div class="col-md-5">
         <label class="text-muted mb-1">Select a Library</label>
         <select class="form-select dark-select" [(ngModel)]="selectedLibrary" (ngModelChange)="onLibrarySelect()">
           <option value="" disabled hidden>Choose a library...</option>
           <option *ngFor="let lib of libraries" [value]="lib.title">{{ lib.title }}</option>
         </select>
-        <!-- Multi-library selection for scanning -->
         <div *ngIf="libraries.length > 1 && selectedLibrary" class="mt-2">
           <label class="text-muted mb-1" style="font-size: 13px;">Include in scan:</label>
           <div class="d-flex flex-wrap gap-2">
@@ -59,24 +85,24 @@
       <div class="col-md-4 d-flex align-items-end gap-3">
         <button
           class="btn btn-primary"
-          [disabled]="!selectedLibrary || loadingMovies || loadingGaps || movies.length === 0"
+          [disabled]="!selectedLibrary || loadingItems || loadingGaps || items.length === 0"
           (click)="scanLibrary(false)">
           Scan for Gaps
         </button>
         <button
           class="btn btn-outline-secondary"
-          [disabled]="!selectedLibrary || loadingMovies || loadingGaps || movies.length === 0"
+          [disabled]="!selectedLibrary || loadingItems || loadingGaps || items.length === 0"
           (click)="scanLibrary(true)"
-          title="Clear TMDB cache and re-fetch all data from scratch">
+          title="Clear cached data and re-fetch from scratch">
           Fresh Scan
         </button>
       </div>
     </div>
 
-    <!-- Loading movies -->
-    <div *ngIf="loadingMovies" class="text-center mt-4">
+    <!-- Loading items -->
+    <div *ngIf="loadingItems" class="text-center mt-4">
       <div class="spinner"></div>
-      <p class="text-muted mt-2">Loading library movies...</p>
+      <p class="text-muted mt-2">Loading library {{ mediaType === 'tv' ? 'shows' : 'movies' }}...</p>
     </div>
 
     <!-- Error -->
@@ -85,36 +111,39 @@
       <a *ngIf="errorMessage.includes('Settings')" [routerLink]="['/settings']" class="alert-link ms-1">Go to Settings</a>
     </div>
 
-    <!-- Movie picker (when library loaded, no scan/movie selected) -->
-    <div *ngIf="!loadingMovies && movies.length > 0 && !scanMode && !selectedMovie && !loadingGaps">
-      <p class="text-muted">
-        Click <strong>Scan for Gaps</strong> to check all {{ movies.length }} movies,
+    <!-- Item picker -->
+    <div *ngIf="!loadingItems && items.length > 0 && !scanMode && !selectedItem && !loadingGaps">
+      <p class="text-muted" *ngIf="mediaType === 'movie'">
+        Click <strong>Scan for Gaps</strong> to check all {{ items.length }} movies,
         or click a movie below to check its collection.
+      </p>
+      <p class="text-muted" *ngIf="mediaType === 'tv'">
+        Click <strong>Scan for Gaps</strong> to check all {{ items.length }} shows,
+        or click a show below to check its franchise.
       </p>
       <input
         class="form-control dark-input mb-3"
         type="text"
-        placeholder="Filter movies by name..."
-        [(ngModel)]="movieFilter"
+        [placeholder]="mediaType === 'tv' ? 'Filter shows by name...' : 'Filter movies by name...'"
+        [(ngModel)]="itemFilter"
         (ngModelChange)="currentPage = 1; prefetchNextPage()"
       >
       <div class="movie-grid">
-        <div *ngFor="let movie of pagedMovies" class="movie-card clickable" (click)="selectMovie(movie)">
+        <div *ngFor="let item of pagedItems" class="movie-card clickable" (click)="selectItem(item)">
           <img
-            *ngIf="movie.posterUrl"
-            [src]="movie.posterUrl"
-            [alt]="movie.name"
+            *ngIf="item.posterUrl"
+            [src]="item.posterUrl"
+            [alt]="item.name"
             class="movie-poster"
             loading="lazy"
           >
-          <div *ngIf="!movie.posterUrl" class="movie-poster-placeholder">No Image</div>
+          <div *ngIf="!item.posterUrl" class="movie-poster-placeholder">No Image</div>
           <div class="movie-info">
-            <div class="movie-title">{{ movie.name }}</div>
-            <div class="movie-year">{{ movie.year }}</div>
+            <div class="movie-title">{{ item.name }}</div>
+            <div class="movie-year">{{ item.year }}</div>
           </div>
         </div>
       </div>
-      <!-- Pagination -->
       <div *ngIf="totalPages > 1" class="pagination-controls mt-3 d-flex align-items-center justify-content-center gap-3">
         <button class="btn btn-sm btn-outline-light" [disabled]="currentPage === 1" (click)="onPageChange(-1)">
           &larr; Prev
@@ -128,27 +157,22 @@
 
     <!-- Loading gaps -->
     <div *ngIf="loadingGaps" class="mt-4">
-      <!-- Single movie lookup (no progress needed) -->
       <div *ngIf="!scanMode" class="text-center">
         <div class="spinner"></div>
-        <p class="text-muted mt-2">Finding collection gaps...</p>
+        <p class="text-muted mt-2">Finding {{ mediaType === 'tv' ? 'franchise' : 'collection' }} gaps...</p>
       </div>
 
-      <!-- Library scan with progress -->
       <div *ngIf="scanMode" class="scan-progress-container">
         <div *ngIf="scanProgress" class="mb-3">
           <div class="d-flex justify-content-between text-muted mb-1">
-            <span>Scanning movies... {{ scanProgress.processed }} / {{ scanProgress.total }}</span>
-            <span>{{ scanProgress.collections_found }} collections found</span>
+            <span>{{ scanProgress.label }}</span>
+            <span>{{ scanProgress.groupsFound }} {{ scanProgress.groupsLabel }}</span>
           </div>
           <div class="progress-bar-track">
-            <div
-              class="progress-bar-fill"
-              [style.width.%]="scanProgress.total ? (scanProgress.processed / scanProgress.total * 100) : 0"
-            ></div>
+            <div class="progress-bar-fill" [style.width.%]="scanProgress.percent"></div>
           </div>
-          <p class="text-muted mt-2 current-movie" *ngIf="scanProgress.current_movie">
-            Checking: {{ scanProgress.current_movie }}
+          <p class="text-muted mt-2 current-movie" *ngIf="scanProgress.currentLabel">
+            Checking: {{ scanProgress.currentLabel }}
           </p>
         </div>
         <div *ngIf="!scanProgress" class="text-center">
@@ -156,22 +180,24 @@
           <p class="text-muted mt-2">Starting scan...</p>
         </div>
         <div *ngIf="freshScanActive" class="fresh-scan-notice mt-2">
-          Cache cleared — all data is being fetched fresh from TMDB.
+          Cache cleared — all data is being fetched fresh from {{ mediaType === 'tv' ? 'TheTVDB' : 'TMDB' }}.
+        </div>
+        <div class="text-center mt-3">
+          <button class="btn btn-outline-danger btn-sm" (click)="stopScan()">Stop Scan</button>
         </div>
       </div>
     </div>
 
     <!-- Gaps results -->
-    <div *ngIf="!loadingGaps && (scanMode || selectedMovie) && collectionGroups.length > 0">
+    <div *ngIf="!loadingGaps && (scanMode || selectedItem) && collectionGroups.length > 0">
       <div class="d-flex align-items-center mb-3">
-        <button class="btn btn-sm btn-outline-light me-3" (click)="clearResults()">
-          &larr; Back
-        </button>
+        <button class="btn btn-sm btn-outline-light me-3" (click)="clearResults()">&larr; Back</button>
         <h5 class="regular-text mb-0" *ngIf="scanMode">
-          Found {{ missingCount }} missing movies across {{ collectionGroups.length }} collections
+          Found {{ missingCount }} missing {{ mediaType === 'tv' ? 'shows' : 'movies' }}
+          across {{ collectionGroups.length }} {{ mediaType === 'tv' ? 'franchises' : 'collections' }}
         </h5>
-        <h5 class="regular-text mb-0" *ngIf="selectedMovie">
-          Collection for: {{ selectedMovie.name }} ({{ selectedMovie.year }})
+        <h5 class="regular-text mb-0" *ngIf="selectedItem">
+          {{ mediaType === 'tv' ? 'Franchise' : 'Collection' }} for: {{ selectedItem.name }} ({{ selectedItem.year }})
         </h5>
         <div class="d-flex ms-auto gap-3">
           <div class="dropdown">
@@ -191,9 +217,7 @@
               [(ngModel)]="showOwned"
               (ngModelChange)="onShowOwnedChange()"
             >
-            <label class="form-check-label text-muted" for="showOwned">
-              Show owned
-            </label>
+            <label class="form-check-label text-muted" for="showOwned">Show owned</label>
           </div>
           <div class="form-check">
             <input
@@ -203,7 +227,7 @@
               [(ngModel)]="hideFutureReleases"
               (ngModelChange)="onHideFutureReleasesChange()"
             >
-            <label class="form-check-label text-muted" for="hideFutureReleases" title="Hide unreleased movies (release date in the future or unannounced)">
+            <label class="form-check-label text-muted" for="hideFutureReleases" title="Hide unreleased titles">
               Hide future releases
             </label>
           </div>
@@ -222,8 +246,8 @@
         </div>
       </div>
 
-      <!-- Cross-check other libraries -->
-      <div *ngIf="selectedMovie && libraries.length > 1" class="pref-card mb-3 p-3">
+      <!-- Cross-check other libraries (movies, single lookup) -->
+      <div *ngIf="mediaType === 'movie' && selectedItem && libraries.length > 1" class="pref-card mb-3 p-3">
         <div class="d-flex align-items-center justify-content-between">
           <div>
             <strong class="text-muted">Check ownership across other libraries</strong>
@@ -238,9 +262,7 @@
                   [disabled]="lib.title === selectedLibrary"
                   (change)="toggleCrossCheckLibrary(lib.title)"
                 >
-                <label class="form-check-label text-muted" [for]="'cross-' + lib.title">
-                  {{ lib.title }}
-                </label>
+                <label class="form-check-label text-muted" [for]="'cross-' + lib.title">{{ lib.title }}</label>
               </div>
             </div>
           </div>
@@ -258,26 +280,26 @@
       <input
         class="form-control dark-input mb-3"
         type="text"
-        placeholder="Filter results by movie or collection name..."
+        [placeholder]="mediaType === 'tv' ? 'Filter results by show or franchise name...' : 'Filter results by movie or collection name...'"
         [(ngModel)]="searchFilter"
         (ngModelChange)="applyFilter()"
       >
 
-      <!-- Collection groups -->
+      <!-- Groups -->
       <div *ngFor="let group of filteredGroups" class="collection-group mb-4">
         <div class="d-flex align-items-center mb-2">
           <h6 class="collection-name mb-0">{{ group.name }}</h6>
           <button
             *ngIf="collectionHasUnignoredGaps(group)"
             class="btn btn-sm btn-outline-warning ms-2 collection-ignore-btn"
-            title="Ignore all missing movies in this collection"
+            title="Ignore all missing titles in this group"
             (click)="ignoreCollection(group, $event)">
             Ignore All
           </button>
           <button
             *ngIf="showIgnored && !collectionHasUnignoredGaps(group)"
             class="btn btn-sm btn-outline-secondary ms-2 collection-ignore-btn"
-            title="Unignore all movies in this collection"
+            title="Unignore all titles in this group"
             (click)="unignoreCollection(group, $event)">
             Unignore All
           </button>
@@ -289,11 +311,11 @@
             <button
               *ngIf="!gap.owned"
               class="ignore-btn"
-              [title]="isIgnored(gap) ? 'Unignore this movie' : 'Ignore this movie'"
+              [title]="isIgnored(gap) ? 'Unignore' : 'Ignore'"
               (click)="toggleIgnore(gap, $event)">
-              {{ isIgnored(gap) ? '&#10003;' : '&#10005;' }}
+              {{ isIgnored(gap) ? '✓' : '✕' }}
             </button>
-            <a *ngIf="gap.tmdbId" [href]="'https://www.themoviedb.org/movie/' + gap.tmdbId" target="_blank" rel="noopener noreferrer">
+            <a [href]="gap.externalUrl" target="_blank" rel="noopener noreferrer">
               <img
                 *ngIf="gap.posterUrl"
                 [src]="gap.posterUrl"
@@ -303,30 +325,28 @@
               >
               <div *ngIf="!gap.posterUrl" class="rec-poster-placeholder">No Image</div>
             </a>
-            <ng-container *ngIf="!gap.tmdbId">
-              <img
-                *ngIf="gap.posterUrl"
-                [src]="gap.posterUrl"
-                [alt]="gap.name"
-                class="rec-poster"
-                loading="lazy"
-              >
-              <div *ngIf="!gap.posterUrl" class="rec-poster-placeholder">No Image</div>
-            </ng-container>
             <div class="rec-info">
-              <a *ngIf="gap.tmdbId" [href]="'https://www.themoviedb.org/movie/' + gap.tmdbId" target="_blank" rel="noopener noreferrer" class="rec-title-link">
+              <a [href]="gap.externalUrl" target="_blank" rel="noopener noreferrer" class="rec-title-link">
                 {{ gap.name }}
               </a>
-              <div *ngIf="!gap.tmdbId" class="rec-title">{{ gap.name }}</div>
               <div class="rec-year">{{ gap.year }}</div>
               <button
-                *ngIf="radarrEnabled && !gap.owned && !isIgnored(gap) && gap.tmdbId"
+                *ngIf="radarrEnabled && gap.radarrEligible && !gap.owned && !isIgnored(gap)"
                 class="btn btn-sm radarr-btn mt-2"
-                [ngClass]="radarrButtonClass(gap.tmdbId)"
-                [disabled]="radarrStatus.get(gap.tmdbId) === 'sending' || radarrStatus.get(gap.tmdbId) === 'sent'"
-                [title]="radarrErrors.get(gap.tmdbId) || 'Add this movie to Radarr'"
+                [ngClass]="radarrButtonClass(gap.id)"
+                [disabled]="radarrStatus.get(gap.id) === 'sending' || radarrStatus.get(gap.id) === 'sent'"
+                [title]="radarrErrors.get(gap.id) || 'Add this movie to Radarr'"
                 (click)="sendToRadarr(gap, $event)">
-                {{ radarrButtonLabel(gap.tmdbId) }}
+                {{ radarrButtonLabel(gap.id) }}
+              </button>
+              <button
+                *ngIf="sonarrEnabled && gap.sonarrEligible && !gap.owned && !isIgnored(gap)"
+                class="btn btn-sm radarr-btn mt-2"
+                [ngClass]="sonarrButtonClass(gap.id)"
+                [disabled]="sonarrStatus.get(gap.id) === 'sending' || sonarrStatus.get(gap.id) === 'sent'"
+                [title]="sonarrErrors.get(gap.id) || 'Add this show to Sonarr'"
+                (click)="sendToSonarr(gap, $event)">
+                {{ sonarrButtonLabel(gap.id) }}
               </button>
             </div>
           </div>
@@ -335,13 +355,13 @@
     </div>
 
     <!-- No gaps found -->
-    <div *ngIf="!loadingGaps && (scanMode || selectedMovie) && collectionGroups.length === 0 && !errorMessage" class="mt-3">
-      <button class="btn btn-sm btn-outline-light mb-2" (click)="clearResults()">
-        &larr; Back
-      </button>
+    <div *ngIf="!loadingGaps && (scanMode || selectedItem) && collectionGroups.length === 0 && !errorMessage" class="mt-3">
+      <button class="btn btn-sm btn-outline-light mb-2" (click)="clearResults()">&larr; Back</button>
       <p class="text-muted">
-        <span *ngIf="selectedMovie">This movie doesn't belong to a collection, or your collection is complete!</span>
-        <span *ngIf="scanMode">No collection gaps found. Your library is complete!</span>
+        <span *ngIf="selectedItem && mediaType === 'movie'">This movie doesn't belong to a collection, or your collection is complete!</span>
+        <span *ngIf="selectedItem && mediaType === 'tv'">This show isn't in a TheTVDB franchise, or your franchise is complete!</span>
+        <span *ngIf="scanMode && mediaType === 'movie'">No collection gaps found. Your library is complete!</span>
+        <span *ngIf="scanMode && mediaType === 'tv'">No missing shows found — your franchises are complete!</span>
       </p>
     </div>
   </div>

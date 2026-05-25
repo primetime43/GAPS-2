@@ -7,7 +7,7 @@ import { CollectionGap } from '../models/recommendation.model';
 import { Movie } from '../models/movie.model';
 
 export interface ScanProgress {
-  status: 'idle' | 'scanning' | 'done' | 'error';
+  status: 'idle' | 'scanning' | 'done' | 'error' | 'cancelled';
   processed: number;
   total: number;
   current_movie: string;
@@ -76,6 +76,12 @@ export class RecommendationService {
   getScanProgress(): Observable<ScanProgress> {
     return this.http.get<ScanProgress>(
       `${environment.apiUrl}/recommendations/scan/progress`
+    );
+  }
+
+  cancelScan(): Observable<{ cancelled: boolean }> {
+    return this.http.post<{ cancelled: boolean }>(
+      `${environment.apiUrl}/recommendations/scan/cancel`, {}
     );
   }
 

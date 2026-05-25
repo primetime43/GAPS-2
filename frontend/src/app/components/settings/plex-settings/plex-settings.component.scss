@@ -111,23 +111,7 @@
 }
 
 /* Dark select */
-.dark-select {
-  background-color: #2d2d2d;
-  border: 1px solid #444;
-  color: #fff;
-
-  &:focus {
-    background-color: #333;
-    border-color: #00bc8c;
-    color: #fff;
-    box-shadow: none;
-  }
-
-  option {
-    background-color: #2d2d2d;
-    color: #fff;
-  }
-}
+/* .dark-select is shared globally in src/styles.scss */
 
 /* Libraries as tags */
 .libraries-row {
@@ -154,6 +138,11 @@
 .lib-tag-movie {
   border-color: #00bc8c66;
   color: #a0e8d0;
+}
+
+.lib-tag-tv {
+  border-color: #5b9bd566;
+  color: #aed0ef;
 }
 
 /* Token */

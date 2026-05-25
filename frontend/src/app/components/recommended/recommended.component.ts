@@ -1,23 +1,43 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
 import { NavigationEnd, Router } from '@angular/router';
-import { forkJoin, Subject, Subscription, timer } from 'rxjs';
+import { forkJoin, Observable, Subject, Subscription, timer } from 'rxjs';
 import { catchError, filter, skip, switchMap, takeUntil } from 'rxjs/operators';
 import { of } from 'rxjs';
 import { PlexService } from '../../services/plex.service';
 import { JellyfinService } from '../../services/jellyfin.service';
 import { EmbyService } from '../../services/emby.service';
 import { LibraryService } from '../../services/library.service';
-import { RecommendationService, ScanProgress } from '../../services/recommendation.service';
-import { Movie } from '../../models/movie.model';
-import { CollectionGap } from '../../models/recommendation.model';
+import { RecommendationService } from '../../services/recommendation.service';
+import { TvdbService } from '../../services/tvdb.service';
+import { Gap } from '../../models/recommendation.model';
 import { ActiveServerResponse, MediaLibrary } from '../../models/media-server.model';
 import { PreferencesService } from '../../services/preferences.service';
 import { ExportService, ExportFormat } from '../../services/export.service';
 import { RadarrService } from '../../services/radarr.service';
+import { SonarrService } from '../../services/sonarr.service';
 
-interface CollectionGroup {
+type MediaType = 'movie' | 'tv';
+
+interface BrowseItem {
   name: string;
-  gaps: CollectionGap[];
+  year: number | string;
+  posterUrl: string | null;
+  imdbId?: string;
+  tmdbId?: number;
+  tvdbId?: number | string;
+}
+
+interface GapGroup {
+  name: string;
+  gaps: Gap[];
+}
+
+interface UnifiedProgress {
+  label: string;        // main status line ("Checking your shows... 120 / 658")
+  percent: number;      // 0–100 for the current phase
+  currentLabel: string; // sub-line ("Checking: <title>")
+  groupsFound: number;
+  groupsLabel: string;  // "collections found" | "franchises found"
 }
 
 @Component({
@@ -27,42 +47,43 @@ interface CollectionGroup {
     standalone: false
 })
 export class RecommendedComponent implements OnInit, OnDestroy {
+  // Movies vs TV shows — swaps the data source for the whole view.
+  mediaType: MediaType = 'movie';
+
   libraries: MediaLibrary[] = [];
   selectedLibrary = '';
   selectedLibraries: string[] = [];
-  movies: Movie[] = [];
-  movieFilter = '';
+  items: BrowseItem[] = [];
+  itemFilter = '';
   showOwned = false;
   hideFutureReleases = false;
-  moviesPerPage = 50;
+  itemsPerPage = 50;
   currentPage = 1;
   searchFilter = '';
   posterPrefetch = false;
 
-  get filteredMovies(): Movie[] {
-    const query = this.movieFilter.trim().toLowerCase();
-    const all = query ? this.movies.filter(m => m.name.toLowerCase().includes(query)) : this.movies;
-    return all;
+  get filteredItems(): BrowseItem[] {
+    const query = this.itemFilter.trim().toLowerCase();
+    return query ? this.items.filter(m => m.name.toLowerCase().includes(query)) : this.items;
   }
 
-  get pagedMovies(): Movie[] {
-    const start = (this.currentPage - 1) * this.moviesPerPage;
-    return this.filteredMovies.slice(start, start + this.moviesPerPage);
+  get pagedItems(): BrowseItem[] {
+    const start = (this.currentPage - 1) * this.itemsPerPage;
+    return this.filteredItems.slice(start, start + this.itemsPerPage);
   }
 
   get totalPages(): number {
-    return Math.ceil(this.filteredMovies.length / this.moviesPerPage);
+    return Math.ceil(this.filteredItems.length / this.itemsPerPage);
   }
 
-  // All gaps from backend (always includes owned)
-  allGaps: CollectionGap[] = [];
-  // Filtered view
-  collectionGroups: CollectionGroup[] = [];
-  filteredGroups: CollectionGroup[] = [];
-  // Ignored movies
+  // All gaps from backend (normalized; always includes owned)
+  allGaps: Gap[] = [];
+  collectionGroups: GapGroup[] = [];
+  filteredGroups: GapGroup[] = [];
+  // Ignored items (TMDB ids for movies, TheTVDB ids for shows — reloaded on toggle)
   ignoredIds: Set<number> = new Set();
   showIgnored = false;
-  selectedMovie: Movie | null = null;
+  selectedItem: BrowseItem | null = null;
   scanMode = false;
   crossCheckLibraries: string[] = [];
 
@@ -70,30 +91,32 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   activeSource: 'plex' | 'jellyfin' | 'emby' = 'plex';
   activeServerName = '';
 
+  // TheTVDB availability (TV mode)
+  tvdbEnabled = false;
+
   // UI
   loading = true;
-  loadingMovies = false;
+  loadingItems = false;
   loadingGaps = false;
   hasServer = false;
   errorMessage = '';
   totalOwned = 0;
   missingCount = 0;
 
-  // Scan progress
-  scanProgress: ScanProgress | null = null;
+  // Scan progress (normalized across movie/TV scans)
+  scanProgress: UnifiedProgress | null = null;
   freshScanActive = false;
   showFreshScanConfirm = false;
 
-  // Radarr
+  // Radarr (movies) / Sonarr (TV)
   radarrEnabled = false;
-  // tmdbId -> 'sending' | 'sent' | 'error' so the button can swap label/state without
-  // affecting other movies. 'sent' covers both "newly added" and "already exists".
   radarrStatus = new Map<number, 'sending' | 'sent' | 'error'>();
   radarrErrors = new Map<number, string>();
-  // Cache of completed scans keyed by sorted-library combination, so toggling
-  // library selection back to any previously-scanned set restores its gaps
-  // without re-running. In-memory only; backend persists just the most recent.
-  private completedScans = new Map<string, { gaps: CollectionGap[]; totalOwned: number }>();
+  sonarrEnabled = false;
+  sonarrStatus = new Map<number, 'sending' | 'sent' | 'error'>();
+  sonarrErrors = new Map<number, string>();
+
+  private completedScans = new Map<string, { gaps: Gap[]; totalOwned: number }>();
   private pollSub: Subscription | null = null;
   private destroy$ = new Subject<void>();
 
@@ -103,18 +126,17 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     private embyService: EmbyService,
     private libraryService: LibraryService,
     private recommendationService: RecommendationService,
+    private tvdb: TvdbService,
     private preferencesService: PreferencesService,
     private exportService: ExportService,
     private radarrService: RadarrService,
+    private sonarrService: SonarrService,
     private router: Router,
   ) {}
 
   ngOnInit(): void {
-    this.refreshRadarrStatus();
     this.loadContext(true);
 
-    // Re-load context on every return to /recommended so prefs / server changes
-    // made in Settings are picked up without a full page reload.
     this.router.events.pipe(
       filter((e): e is NavigationEnd => e instanceof NavigationEnd),
       filter(e => e.urlAfterRedirects.split(/[?#]/)[0] === '/recommended'),
@@ -129,16 +151,56 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     this.destroy$.complete();
   }
 
+  setMediaType(type: MediaType): void {
+    if (this.mediaType === type) return;
+    // Cancel any in-flight scan for the current media type so it doesn't keep
+    // running on the backend after we switch away from it.
+    if (this.loadingGaps && this.scanMode) {
+      const cancel$ = this.mediaType === 'tv'
+        ? this.tvdb.cancelScan()
+        : this.recommendationService.cancelScan();
+      cancel$.subscribe({ next: () => {}, error: () => {} });
+    }
+    this.mediaType = type;
+    this.stopPolling();
+    this.selectedLibrary = '';
+    this.selectedLibraries = [];
+    this.items = [];
+    this.itemFilter = '';
+    this.currentPage = 1;
+    this.allGaps = [];
+    this.collectionGroups = [];
+    this.filteredGroups = [];
+    this.selectedItem = null;
+    this.scanMode = false;
+    this.scanProgress = null;
+    this.loadingGaps = false;
+    this.loadingItems = false;
+    this.searchFilter = '';
+    this.errorMessage = '';
+    this.loadIgnored();
+    this.applyLibraryFilter();
+  }
+
+  private isTvLibrary(lib: MediaLibrary): boolean {
+    return lib.type === 'show' || lib.type === 'tvshows';
+  }
+
+  // -- Context / init --
+
   private loadContext(autoSelectLibrary: boolean): void {
-    this.recommendationService.getIgnored().pipe(
-      catchError(() => of([]))
-    ).subscribe(ids => this.ignoredIds = new Set(ids));
+    this.loadIgnored();
+    this.refreshRadarrStatus();
+    this.refreshSonarrStatus();
+    this.tvdb.getConfig().pipe(catchError(() => of(null))).subscribe(cfg => {
+      this.tvdbEnabled = !!(cfg && cfg.enabled);
+    });
 
     this.preferencesService.load().pipe(
       catchError(() => of(null))
     ).subscribe((prefs) => {
       if (prefs) {
-        this.moviesPerPage = prefs.moviesPerPage || 50;
+        this.itemsPerPage = prefs.moviesPerPage || 50;
         this.showOwned = !prefs.hideOwnedByDefault;
         this.hideFutureReleases = prefs.hideFutureReleasesByDefault || false;
         this.posterPrefetch = prefs.posterPrefetch || false;
@@ -146,6 +208,13 @@ export class RecommendedComponent implements OnInit, OnDestroy {
       this.detectActiveServer(prefs, autoSelectLibrary);
     });
   }
+
+  private loadIgnored(): void {
+    const src$ = this.mediaType === 'tv' ? this.tvdb.getIgnored() : this.recommendationService.getIgnored();
+    src$.pipe(catchError(() => of([]))).subscribe(ids => this.ignoredIds = new Set(ids));
+  }
+
+  private allServerLibraries: MediaLibrary[] = [];
 
   private detectActiveServer(prefs: any, autoSelectLibrary: boolean): void {
     forkJoin({
@@ -171,32 +240,40 @@ export class RecommendedComponent implements OnInit, OnDestroy {
         this.hasServer = true;
         this.activeSource = source;
         this.activeServerName = res.server;
-        this.libraries = Array.isArray(res.libraries)
-          ? res.libraries.filter((lib: MediaLibrary) => lib.type === 'movie')
-          : [];
+        this.allServerLibraries = Array.isArray(res.libraries) ? res.libraries : [];
+        this.applyLibraryFilter();
         this.finishInitialization(prefs, autoSelectLibrary);
       } else {
         this.hasServer = false;
         this.activeServerName = '';
+        this.allServerLibraries = [];
         this.libraries = [];
         this.loading = false;
       }
     });
   }
 
+  private applyLibraryFilter(): void {
+    this.libraries = this.allServerLibraries.filter(lib =>
+      this.mediaType === 'tv' ? this.isTvLibrary(lib) : lib.type === 'movie'
+    );
+  }
+
   private finishInitialization(prefs: any, autoSelectLibrary: boolean): void {
-    // Skip restore if the user is mid-scan or drilled into a single movie.
-    if (this.scanProgress || this.selectedMovie) {
+    if (this.scanProgress || this.selectedItem) {
       if (autoSelectLibrary) this.applyDefaultLibrary(prefs);
       this.loading = false;
       return;
     }
 
-    // Re-entry: the component preserves its state across navigation, so the
-    // user's in-memory selection and gaps are the source of truth. Don't
-    // re-hydrate from the persisted scan — it may be stale relative to a
-    // library change the user made before navigating away (issue #36).
     if (!autoSelectLibrary) {
+      this.loading = false;
+      return;
+    }
+
+    // Restore the last movie scan on first load (movies only — TV re-scans are cheap).
+    if (this.mediaType !== 'movie') {
+      this.applyDefaultLibrary(prefs);
       this.loading = false;
       return;
     }
@@ -207,8 +284,6 @@ export class RecommendedComponent implements OnInit, OnDestroy {
       const validScan = !!(progress && progress.status === 'done' && progress.gaps?.length);
       const scanLibs = validScan ? (progress!.libraries || []) : [];
 
-      // The scan's libraries take precedence over the user's default so the
-      // dropdown matches the gaps that are about to render.
       if (scanLibs.length && this.libraries.some(l => scanLibs.includes(l.title))) {
         this.selectedLibrary = scanLibs[0];
         this.selectedLibraries = [...scanLibs];
@@ -218,11 +293,11 @@ export class RecommendedComponent implements OnInit, OnDestroy {
       }
 
       if (validScan) {
-        this.allGaps = progress!.gaps;
+        this.allGaps = this.normalizeGaps(progress!.gaps);
         this.totalOwned = progress!.total_owned;
         this.scanMode = true;
         this.applyFilter();
-        this.cacheCompletedScan(scanLibs, progress!.gaps, progress!.total_owned);
+        this.cacheCompletedScan(scanLibs, this.allGaps, progress!.total_owned);
       }
       this.loading = false;
     });
@@ -236,43 +311,41 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     }
   }
 
+  // -- Library selection / browse --
+
   onLibrarySelect(): void {
     if (!this.selectedLibrary) return;
-    // Keep selectedLibraries in sync when using the dropdown
     if (!this.selectedLibraries.includes(this.selectedLibrary)) {
       this.selectedLibraries = [this.selectedLibrary];
     }
-    this.movies = [];
-    this.movieFilter = '';
+    this.items = [];
+    this.itemFilter = '';
     this.allGaps = [];
     this.collectionGroups = [];
-    this.selectedMovie = null;
+    this.selectedItem = null;
     this.scanMode = false;
     this.errorMessage = '';
 
-    // If the cached last scan matches this selection exactly, restore its
-    // gaps so users don't have to re-scan just to view results they already
-    // have. Otherwise stay in browse mode.
     this.tryRestoreScanForCurrentSelection();
 
-    // Always load movies so "Scan for Gaps" can run without a re-fetch. When
-    // a scan was restored we hide the spinner since the user is now looking
-    // at the gaps panel, not the movie picker.
-    this.loadingMovies = !this.scanMode;
-    this.libraryService.getMovies(this.selectedLibrary, this.activeSource).subscribe({
+    this.loadingItems = !this.scanMode;
+    const load$: Observable<any> = this.mediaType === 'tv'
+      ? this.libraryService.getShows(this.selectedLibrary, this.activeSource)
+      : this.libraryService.getMovies(this.selectedLibrary, this.activeSource);
+    load$.subscribe({
       next: (res: any) => {
         if (res.error) {
           this.errorMessage = this.friendlyError(res.error);
-          this.loadingMovies = false;
+          this.loadingItems = false;
           return;
         }
-        this.movies = Array.isArray(res) ? res : (res.movies || []);
-        this.loadingMovies = false;
+        this.items = Array.isArray(res) ? res : (res.movies || res.shows || []);
+        this.loadingItems = false;
         this.prefetchNextPage();
       },
       error: (err) => {
-        this.errorMessage = this.friendlyError(err.error?.error || 'Failed to load movies from library.');
-        this.loadingMovies = false;
+        this.errorMessage = this.friendlyError(err.error?.error || 'Failed to load library.');
+        this.loadingItems = false;
       }
     });
   }
@@ -288,7 +361,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     this.applyFilter();
   }
 
-  private cacheCompletedScan(libraries: string[], gaps: CollectionGap[], totalOwned: number): void {
+  private cacheCompletedScan(libraries: string[], gaps: Gap[], totalOwned: number): void {
     const key = this.scanKey(libraries);
     if (!key) return;
     this.completedScans.set(key, { gaps, totalOwned });
@@ -296,9 +369,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
 
   private scanKey(libraries: string[]): string {
     if (!libraries?.length) return '';
-    // Order-independent identifier for a library set. Partial overlaps don't
-    // qualify — a single-library selection won't restore a multi-library scan.
-    return [...libraries].sort().join('|');
+    return `${this.mediaType}:` + [...libraries].sort().join('|');
   }
 
   toggleLibrarySelection(libTitle: string): void {
@@ -313,6 +384,8 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   isLibrarySelected(libTitle: string): boolean {
     return this.selectedLibraries.includes(libTitle);
   }
+
+  // -- Scan --
 
   scanLibrary(freshScan = false): void {
     if (freshScan) {
@@ -334,7 +407,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   private startScan(freshScan: boolean): void {
     this.freshScanActive = freshScan;
     this.scanMode = true;
-    this.selectedMovie = null;
+    this.selectedItem = null;
     this.loadingGaps = true;
     this.allGaps = [];
     this.collectionGroups = [];
@@ -343,17 +416,30 @@ export class RecommendedComponent implements OnInit, OnDestroy {
 
     const scanLibraries = this.selectedLibraries.length > 0 ? this.selectedLibraries : [this.selectedLibrary];
 
-    // Pre-load movies for all selected libraries so the backend has them cached
+    if (this.mediaType === 'tv') {
+      this.tvdb.startScan({
+        source: this.activeSource,
+        libraryNames: scanLibraries,
+        showExisting: true,
+        freshScan,
+      }).subscribe({
+        next: () => this.startPolling(scanLibraries),
+        error: (err) => {
+          this.errorMessage = err.error?.error || 'Failed to start scan.';
+          this.loadingGaps = false;
+        }
+      });
+      return;
+    }
+
+    // Movies: pre-load movies for all selected libraries so the backend has them cached.
     const loadRequests = scanLibraries.map(lib =>
       this.libraryService.getMovies(lib, this.activeSource).pipe(catchError(() => of({ movies: [] })))
     );
-
     forkJoin(loadRequests).subscribe({
       next: () => {
         this.recommendationService.startScan(scanLibraries, true, freshScan, this.activeSource).subscribe({
-          next: () => {
-            this.startPolling();
-          },
+          next: () => this.startPolling(scanLibraries),
           error: (err) => {
             this.errorMessage = err.error?.error || 'Failed to start scan.';
             this.loadingGaps = false;
@@ -367,35 +453,49 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     });
   }
 
-  private startPolling(): void {
+  private startPolling(scanLibraries: string[]): void {
     this.stopPolling();
-    this.pollSub = timer(0, 1000).pipe(
+    this.pollSub = timer(0, this.mediaType === 'tv' ? 1500 : 1000).pipe(
       takeUntil(this.destroy$),
-      switchMap(() => this.recommendationService.getScanProgress()),
+      switchMap(() => this.mediaType === 'tv'
+        ? this.tvdb.getScanProgress()
+        : this.recommendationService.getScanProgress()),
     ).subscribe({
-        next: (progress) => {
-          this.scanProgress = progress;
+        next: (progress: any) => {
+          this.scanProgress = this.normalizeProgress(progress);
 
           if (progress.status === 'done') {
             this.stopPolling();
-            this.allGaps = progress.gaps;
+            this.allGaps = this.normalizeGaps(progress.gaps);
             this.totalOwned = progress.total_owned;
             this.applyFilter();
             this.loadingGaps = false;
             this.scanProgress = null;
-            const scanLibs = progress.libraries?.length ? progress.libraries : [...this.selectedLibraries];
-            this.cacheCompletedScan(scanLibs, progress.gaps, progress.total_owned);
+            const scanLibs = progress.libraries?.length ? progress.libraries : [...scanLibraries];
+            this.cacheCompletedScan(scanLibs, this.allGaps, progress.total_owned);
           } else if (progress.status === 'error') {
             this.stopPolling();
             this.errorMessage = progress.error || 'Scan failed.';
             this.loadingGaps = false;
             this.scanProgress = null;
+          } else if (progress.status === 'cancelled' || progress.status === 'idle') {
+            this.stopPolling();
+            this.loadingGaps = false;
+            this.scanProgress = null;
+            this.scanMode = false;
           }
         },
-        error: () => {
-          // Ignore transient polling errors
-        }
+        error: () => {}
       });
+  }
+
+  stopScan(): void {
+    const cancel$ = this.mediaType === 'tv' ? this.tvdb.cancelScan() : this.recommendationService.cancelScan();
+    cancel$.subscribe({ next: () => {}, error: () => {} });
+    this.stopPolling();
+    this.loadingGaps = false;
+    this.scanProgress = null;
+    this.scanMode = false;
   }
 
   private stopPolling(): void {
@@ -403,16 +503,47 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     this.pollSub = null;
   }
 
-  selectMovie(movie: Movie): void {
-    this.selectedMovie = movie;
+  private normalizeProgress(p: any): UnifiedProgress {
+    const processed = p.processed || 0;
+    const total = p.total || 0;
+    const percent = total ? (processed / total * 100) : 0;
+
+    if (this.mediaType === 'tv') {
+      const phase = p.phase || 'shows';
+      const phaseLabel = phase === 'franchises'
+        ? 'Loading franchises'
+        : phase === 'titles'
+          ? 'Fetching missing titles'
+          : 'Checking your shows';
+      return {
+        label: `${phaseLabel}... ${processed} / ${total}`,
+        percent,
+        currentLabel: phase === 'shows' ? (p.current_show || '') : '',
+        groupsFound: p.franchises_found || 0,
+        groupsLabel: 'franchises found',
+      };
+    }
+
+    return {
+      label: `Scanning movies... ${processed} / ${total}`,
+      percent,
+      currentLabel: p.current_movie || '',
+      groupsFound: p.collections_found || 0,
+      groupsLabel: 'collections found',
+    };
+  }
+
+  // -- Single-item lookup --
+
+  selectItem(item: BrowseItem): void {
+    this.selectedItem = item;
     this.scanMode = false;
     this.loadingGaps = true;
     this.allGaps = [];
     this.collectionGroups = [];
     this.crossCheckLibraries = [];
     this.errorMessage = '';
-
-    this.fetchGapsForSelectedMovie();
+    this.fetchGapsForSelectedItem();
   }
 
   toggleCrossCheckLibrary(libTitle: string): void {
@@ -421,7 +552,6 @@ export class RecommendedComponent implements OnInit, OnDestroy {
       this.crossCheckLibraries.splice(idx, 1);
     } else {
       this.crossCheckLibraries.push(libTitle);
-      // Pre-load movies for that library so the backend has them cached
       this.libraryService.getMovies(libTitle, this.activeSource).subscribe();
     }
   }
@@ -429,26 +559,45 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   recheckWithLibraries(): void {
     this.loadingGaps = true;
     this.errorMessage = '';
-    this.fetchGapsForSelectedMovie();
+    this.fetchGapsForSelectedItem();
   }
 
-  private fetchGapsForSelectedMovie(): void {
-    if (!this.selectedMovie) return;
+  private fetchGapsForSelectedItem(): void {
+    if (!this.selectedItem) return;
 
-    // Always fetch with showExisting=true; backend uses fallback chain for ID resolution
+    if (this.mediaType === 'tv') {
+      const tvdbId = this.selectedItem.tvdbId;
+      if (typeof tvdbId !== 'number') {
+        this.errorMessage = `"${this.selectedItem.name}" has no TheTVDB ID, so its franchise can't be looked up.`;
+        this.loadingGaps = false;
+        return;
+      }
+      const libs = this.selectedLibraries.length ? this.selectedLibraries : [this.selectedLibrary];
+      this.tvdb.getGapsForShow(tvdbId, libs, true, this.activeSource).subscribe({
+        next: (gaps) => {
+          this.allGaps = this.normalizeGaps(gaps);
+          if (this.allGaps.length > 0 && this.allGaps.every(g => g.owned)) this.showOwned = true;
+          this.applyFilter();
+          this.loadingGaps = false;
+        },
+        error: () => {
+          this.errorMessage = 'Failed to find franchise gaps.';
+          this.loadingGaps = false;
+        }
+      });
+      return;
+    }
+
     this.recommendationService.getGapsForMovie(
-      this.selectedMovie,
+      this.selectedItem as any,
       this.selectedLibrary,
       true,
       this.activeSource,
       this.crossCheckLibraries
     ).subscribe({
       next: (gaps) => {
-        this.allGaps = gaps;
-        // Auto-show owned if collection is complete (no missing movies)
-        if (gaps.length > 0 && gaps.every(g => g.owned)) {
-          this.showOwned = true;
-        }
+        this.allGaps = this.normalizeGaps(gaps);
+        if (this.allGaps.length > 0 && this.allGaps.every(g => g.owned)) this.showOwned = true;
         this.applyFilter();
         this.loadingGaps = false;
       },
@@ -459,83 +608,113 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     });
   }
 
-  onShowOwnedChange(): void {
-    this.applyFilter();
+  // -- Gap normalization --
+
+  private normalizeGaps(raw: any[]): Gap[] {
+    if (!Array.isArray(raw)) return [];
+    if (this.mediaType === 'tv') {
+      return raw.map(g => ({
+        id: g.tvdbId,
+        name: g.name,
+        year: g.year,
+        releaseDate: g.releaseDate,
+        posterUrl: g.posterUrl ?? null,
+        overview: g.overview || '',
+        groupName: g.franchiseName || 'Unknown franchise',
+        owned: !!g.owned,
+        externalUrl: g.slug ? `https://thetvdb.com/series/${g.slug}` : 'https://thetvdb.com',
+        radarrEligible: false,
+        sonarrEligible: !!g.tvdbId,
+      }));
+    }
+    return raw.map(g => ({
+      id: g.tmdbId,
+      name: g.name,
+      year: g.year,
+      releaseDate: g.releaseDate,
+      posterUrl: g.posterUrl ?? null,
+      overview: g.overview || '',
+      groupName: g.collectionName || 'Unknown Collection',
+      owned: !!g.owned,
+      externalUrl: g.tmdbId ? `https://www.themoviedb.org/movie/${g.tmdbId}` : '',
+      radarrEligible: !!g.tmdbId,
+      sonarrEligible: false,
+    }));
   }
 
-  onHideFutureReleasesChange(): void {
-    this.applyFilter();
-  }
+  // -- Filters --
 
-  isFutureRelease(gap: CollectionGap): boolean {
+  onShowOwnedChange(): void { this.applyFilter(); }
+  onHideFutureReleasesChange(): void { this.applyFilter(); }
+  onShowIgnoredChange(): void { this.applyFilter(); }
+
+  isFutureRelease(gap: Gap): boolean {
     const today = new Date().toISOString().slice(0, 10);
-    if (gap.releaseDate) {
-      return gap.releaseDate > today;
-    }
-    // No release date set on TMDB — treat as unannounced/future
-    return true;
+    // Prefer an exact date (movie release date or TV first-aired date).
+    if (gap.releaseDate) return gap.releaseDate > today;
+    if (this.mediaType === 'movie') return true; // no date → unannounced/future
+    // TV with no first-aired date: fall back to the year.
+    const year = parseInt(String(gap.year), 10);
+    return year ? year > new Date().getFullYear() : false;
   }
 
-  isIgnored(gap: CollectionGap): boolean {
-    return this.ignoredIds.has(gap.tmdbId);
+  isIgnored(gap: Gap): boolean {
+    return this.ignoredIds.has(gap.id);
   }
 
-  toggleIgnore(gap: CollectionGap, event: Event): void {
+  toggleIgnore(gap: Gap, event: Event): void {
     event.stopPropagation();
-    if (this.ignoredIds.has(gap.tmdbId)) {
-      this.ignoredIds.delete(gap.tmdbId);
-      this.recommendationService.removeIgnored(gap.tmdbId).subscribe({
-        error: () => this.ignoredIds.add(gap.tmdbId)
-      });
+    if (this.ignoredIds.has(gap.id)) {
+      this.ignoredIds.delete(gap.id);
+      this.ignoreRemove(gap.id).subscribe({ error: () => this.ignoredIds.add(gap.id) });
     } else {
-      this.ignoredIds.add(gap.tmdbId);
-      this.recommendationService.addIgnored(gap.tmdbId).subscribe({
-        error: () => this.ignoredIds.delete(gap.tmdbId)
-      });
+      this.ignoredIds.add(gap.id);
+      this.ignoreAdd(gap.id).subscribe({ error: () => this.ignoredIds.delete(gap.id) });
     }
     this.applyFilter();
   }
 
-  ignoreCollection(group: CollectionGroup, event: Event): void {
+  ignoreCollection(group: GapGroup, event: Event): void {
     event.stopPropagation();
-    const idsToIgnore = group.gaps
-      .filter(g => !g.owned && !this.ignoredIds.has(g.tmdbId))
-      .map(g => g.tmdbId);
-    if (idsToIgnore.length === 0) return;
-    for (const id of idsToIgnore) {
-      this.ignoredIds.add(id);
-    }
-    this.recommendationService.addIgnoredBulk(idsToIgnore).subscribe({
-      error: () => { for (const id of idsToIgnore) this.ignoredIds.delete(id); this.applyFilter(); }
+    const ids = group.gaps.filter(g => !g.owned && !this.ignoredIds.has(g.id)).map(g => g.id);
+    if (!ids.length) return;
+    for (const id of ids) this.ignoredIds.add(id);
+    this.ignoreAddBulk(ids).subscribe({
+      error: () => { for (const id of ids) this.ignoredIds.delete(id); this.applyFilter(); }
     });
     this.applyFilter();
   }
 
-  unignoreCollection(group: CollectionGroup, event: Event): void {
+  unignoreCollection(group: GapGroup, event: Event): void {
     event.stopPropagation();
-    const idsToUnignore = group.gaps
-      .filter(g => this.ignoredIds.has(g.tmdbId))
-      .map(g => g.tmdbId);
-    if (idsToUnignore.length === 0) return;
-    for (const id of idsToUnignore) {
-      this.ignoredIds.delete(id);
-    }
-    this.recommendationService.removeIgnoredBulk(idsToUnignore).subscribe({
-      error: () => { for (const id of idsToUnignore) this.ignoredIds.add(id); this.applyFilter(); }
+    const ids = group.gaps.filter(g => this.ignoredIds.has(g.id)).map(g => g.id);
+    if (!ids.length) return;
+    for (const id of ids) this.ignoredIds.delete(id);
+    this.ignoreRemoveBulk(ids).subscribe({
+      error: () => { for (const id of ids) this.ignoredIds.add(id); this.applyFilter(); }
     });
     this.applyFilter();
   }
 
-  collectionHasUnignoredGaps(group: CollectionGroup): boolean {
-    return group.gaps.some(g => !g.owned && !this.ignoredIds.has(g.tmdbId));
+  collectionHasUnignoredGaps(group: GapGroup): boolean {
+    return group.gaps.some(g => !g.owned && !this.ignoredIds.has(g.id));
   }
 
-  onShowIgnoredChange(): void {
-    this.applyFilter();
+  private ignoreAdd(id: number) {
+    return this.mediaType === 'tv' ? this.tvdb.addIgnored(id) : this.recommendationService.addIgnored(id);
+  }
+  private ignoreAddBulk(ids: number[]) {
+    return this.mediaType === 'tv' ? this.tvdb.addIgnoredBulk(ids) : this.recommendationService.addIgnoredBulk(ids);
+  }
+  private ignoreRemove(id: number) {
+    return this.mediaType === 'tv' ? this.tvdb.removeIgnored(id) : this.recommendationService.removeIgnored(id);
+  }
+  private ignoreRemoveBulk(ids: number[]) {
+    return this.mediaType === 'tv' ? this.tvdb.removeIgnoredBulk(ids) : this.recommendationService.removeIgnoredBulk(ids);
   }
 
   clearResults(): void {
-    this.selectedMovie = null;
+    this.selectedItem = null;
     this.scanMode = false;
     this.allGaps = [];
     this.collectionGroups = [];
@@ -572,23 +751,21 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     if (!this.posterPrefetch) return;
     const nextPage = this.currentPage + 1;
     if (nextPage > this.totalPages) return;
-    const start = (nextPage - 1) * this.moviesPerPage;
-    const nextMovies = this.filteredMovies.slice(start, start + this.moviesPerPage);
-    for (const movie of nextMovies) {
-      if (movie.posterUrl) {
+    const start = (nextPage - 1) * this.itemsPerPage;
+    const nextItems = this.filteredItems.slice(start, start + this.itemsPerPage);
+    for (const item of nextItems) {
+      if (item.posterUrl) {
         const img = new Image();
-        img.src = movie.posterUrl;
+        img.src = item.posterUrl;
       }
     }
   }
 
   applyFilter(): void {
-    let filtered = this.showOwned
-      ? this.allGaps
-      : this.allGaps.filter(g => !g.owned);
+    let filtered = this.showOwned ? this.allGaps : this.allGaps.filter(g => !g.owned);
 
     if (!this.showIgnored) {
-      filtered = filtered.filter(g => !this.ignoredIds.has(g.tmdbId));
+      filtered = filtered.filter(g => !this.ignoredIds.has(g.id));
     }
 
     if (this.hideFutureReleases) {
@@ -597,21 +774,17 @@ export class RecommendedComponent implements OnInit, OnDestroy {
 
     this.missingCount = this.allGaps.filter(g =>
       !g.owned
-      && !this.ignoredIds.has(g.tmdbId)
+      && !this.ignoredIds.has(g.id)
       && (!this.hideFutureReleases || !this.isFutureRelease(g))
     ).length;
 
-    const groups = new Map<string, CollectionGap[]>();
+    const groups = new Map<string, Gap[]>();
     for (const gap of filtered) {
-      const name = gap.collectionName;
-      if (!groups.has(name)) {
-        groups.set(name, []);
-      }
-      groups.get(name)!.push(gap);
+      if (!groups.has(gap.groupName)) groups.set(gap.groupName, []);
+      groups.get(gap.groupName)!.push(gap);
     }
     this.collectionGroups = Array.from(groups.entries()).map(([name, gaps]) => ({ name, gaps }));
 
-    // Apply search filter
     const query = this.searchFilter.trim().toLowerCase();
     if (!query) {
       this.filteredGroups = this.collectionGroups;
@@ -621,59 +794,52 @@ export class RecommendedComponent implements OnInit, OnDestroy {
           name: group.name,
           gaps: group.gaps.filter(g =>
             g.name.toLowerCase().includes(query) ||
-            g.collectionName.toLowerCase().includes(query)
+            g.groupName.toLowerCase().includes(query)
           )
         }))
         .filter(group => group.gaps.length > 0);
     }
   }
 
+  // -- Radarr (movies only) --
+
   refreshRadarrStatus(): void {
     this.radarrService.getConfig().pipe(catchError(() => of(null))).subscribe(cfg => {
       this.radarrEnabled = !!(cfg && cfg.enabled);
-      if (this.radarrEnabled) {
-        this.loadRadarrLibrary();
-      }
+      if (this.radarrEnabled) this.loadRadarrLibrary();
     });
   }
 
-  /** Flag movies already in the Radarr library so they show as "In Radarr". */
   loadRadarrLibrary(): void {
     this.radarrService.getLibraryTmdbIds()
       .pipe(catchError(() => of({ tmdb_ids: [] })))
       .subscribe(res => {
         for (const id of res.tmdb_ids || []) {
-          if (this.radarrStatus.get(id) !== 'sending') {
-            this.radarrStatus.set(id, 'sent');
-          }
+          if (this.radarrStatus.get(id) !== 'sending') this.radarrStatus.set(id, 'sent');
         }
       });
   }
 
-  sendToRadarr(gap: CollectionGap, event: Event): void {
+  sendToRadarr(gap: Gap, event: Event): void {
     event.stopPropagation();
     event.preventDefault();
-    if (!gap.tmdbId || !this.radarrEnabled) {
-      return;
-    }
-    if (this.radarrStatus.get(gap.tmdbId) === 'sending') {
-      return;
-    }
-    this.radarrStatus.set(gap.tmdbId, 'sending');
-    this.radarrErrors.delete(gap.tmdbId);
-    const yearNum = parseInt(gap.year, 10) || 0;
-    this.radarrService.addMovie(gap.tmdbId, gap.name, yearNum).subscribe({
-      next: () => this.radarrStatus.set(gap.tmdbId!, 'sent'),
+    if (!gap.id || !this.radarrEnabled || !gap.radarrEligible) return;
+    if (this.radarrStatus.get(gap.id) === 'sending') return;
+    this.radarrStatus.set(gap.id, 'sending');
+    this.radarrErrors.delete(gap.id);
+    const yearNum = parseInt(String(gap.year), 10) || 0;
+    this.radarrService.addMovie(gap.id, gap.name, yearNum).subscribe({
+      next: () => this.radarrStatus.set(gap.id, 'sent'),
       error: (err) => {
-        this.radarrStatus.set(gap.tmdbId!, 'error');
-        this.radarrErrors.set(gap.tmdbId!, err.error?.error || 'Failed to add to Radarr');
+        this.radarrStatus.set(gap.id, 'error');
+        this.radarrErrors.set(gap.id, err.error?.error || 'Failed to add to Radarr');
       },
     });
   }
 
-  radarrButtonLabel(tmdbId: number | undefined): string {
-    if (!tmdbId) return 'Send to Radarr';
-    switch (this.radarrStatus.get(tmdbId)) {
+  radarrButtonLabel(id: number | undefined): string {
+    if (!id) return 'Send to Radarr';
+    switch (this.radarrStatus.get(id)) {
       case 'sending': return 'Sending...';
       case 'sent': return 'In Radarr';
       case 'error': return 'Retry';
@@ -681,9 +847,63 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     }
   }
 
-  radarrButtonClass(tmdbId: number | undefined): string {
-    if (!tmdbId) return 'btn-outline-primary';
-    switch (this.radarrStatus.get(tmdbId)) {
+  radarrButtonClass(id: number | undefined): string {
+    if (!id) return 'btn-outline-primary';
+    switch (this.radarrStatus.get(id)) {
+      case 'sent': return 'btn-success';
+      case 'error': return 'btn-outline-danger';
+      default: return 'btn-outline-primary';
+    }
+  }
+
+  // -- Sonarr (TV only) --
+
+  refreshSonarrStatus(): void {
+    this.sonarrService.getConfig().pipe(catchError(() => of(null))).subscribe(cfg => {
+      this.sonarrEnabled = !!(cfg && cfg.enabled);
+      if (this.sonarrEnabled) this.loadSonarrLibrary();
+    });
+  }
+
+  loadSonarrLibrary(): void {
+    this.sonarrService.getLibraryTvdbIds()
+      .pipe(catchError(() => of({ tvdb_ids: [] })))
+      .subscribe(res => {
+        for (const id of res.tvdb_ids || []) {
+          if (this.sonarrStatus.get(id) !== 'sending') this.sonarrStatus.set(id, 'sent');
+        }
+      });
+  }
+
+  sendToSonarr(gap: Gap, event: Event): void {
+    event.stopPropagation();
+    event.preventDefault();
+    if (!gap.id || !this.sonarrEnabled || !gap.sonarrEligible) return;
+    if (this.sonarrStatus.get(gap.id) === 'sending') return;
+    this.sonarrStatus.set(gap.id, 'sending');
+    this.sonarrErrors.delete(gap.id);
+    this.sonarrService.addSeries(gap.id, gap.name).subscribe({
+      next: () => this.sonarrStatus.set(gap.id, 'sent'),
+      error: (err) => {
+        this.sonarrStatus.set(gap.id, 'error');
+        this.sonarrErrors.set(gap.id, err.error?.error || 'Failed to add to Sonarr');
+      },
+    });
+  }
+
+  sonarrButtonLabel(id: number | undefined): string {
+    if (!id) return 'Send to Sonarr';
+    switch (this.sonarrStatus.get(id)) {
+      case 'sending': return 'Sending...';
+      case 'sent': return 'In Sonarr';
+      case 'error': return 'Retry';
+      default: return 'Send to Sonarr';
+    }
+  }
+
+  sonarrButtonClass(id: number | undefined): string {
+    if (!id) return 'btn-outline-primary';
+    switch (this.sonarrStatus.get(id)) {
       case 'sent': return 'btn-success';
       case 'error': return 'btn-outline-danger';
       default: return 'btn-outline-primary';

@@ -23,6 +23,12 @@
           <span *ngFor="let lib of activeMovieLibraries" class="lib-tag lib-tag-movie">{{ lib.title }}</span>
         </div>
       </div>
+      <div class="lib-group" *ngIf="activeTvLibraries.length > 0">
+        <span class="lib-group-label">TV Libraries</span>
+        <div class="libraries-row">
+          <span *ngFor="let lib of activeTvLibraries" class="lib-tag lib-tag-tv">{{ lib.title }}</span>
+        </div>
+      </div>
       <div class="lib-group" *ngIf="activeOtherLibraries.length > 0">
         <span class="lib-group-label">Other Libraries</span>
         <div class="libraries-row">
