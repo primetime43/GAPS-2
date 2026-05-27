@@ -34,8 +34,8 @@
         placeholder="TheTVDB API key"
         [(ngModel)]="config.api_key"
       >
-      <button class="btn btn-outline-secondary" type="button" (click)="showKey = !showKey">
-        {{ showKey ? 'Hide' : 'Show' }}
+      <button class="btn btn-outline-secondary" type="button" (click)="toggleShowKey()" [disabled]="revealingKey">
+        {{ revealingKey ? '...' : (showKey ? 'Hide' : 'Show') }}
       </button>
     </div>
   </div>
@@ -49,8 +49,8 @@
         placeholder="Only needed for some User Subscription keys"
         [(ngModel)]="config.pin"
       >
-      <button class="btn btn-outline-secondary" type="button" (click)="showPin = !showPin">
-        {{ showPin ? 'Hide' : 'Show' }}
+      <button class="btn btn-outline-secondary" type="button" (click)="toggleShowPin()" [disabled]="revealingPin">
+        {{ revealingPin ? '...' : (showPin ? 'Hide' : 'Show') }}
       </button>
     </div>
   </div>

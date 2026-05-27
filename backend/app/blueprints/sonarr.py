@@ -10,7 +10,11 @@ sonarr_bp = Blueprint('sonarr', __name__)
 @sonarr_bp.route('/config', methods=['GET'])
 def get_config():
     cfg = current_app.sonarr_service.get_config()
-    cfg['api_key'] = '••••••' if cfg.get('api_key') else ''
+    # Reveal the real API key only when the UI explicitly asks (via the Show
+    # button); otherwise echo a masked placeholder.
+    reveal = request.args.get('reveal', 'false').lower() == 'true'
+    if not reveal:
+        cfg['api_key'] = '••••••' if cfg.get('api_key') else ''
     return jsonify(cfg)
 
 

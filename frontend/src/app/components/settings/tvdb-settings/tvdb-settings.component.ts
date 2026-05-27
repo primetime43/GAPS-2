@@ -18,10 +18,64 @@ export class TvdbSettingsComponent implements OnInit {
   saving = false;
   showKey = false;
   showPin = false;
+  revealingKey = false;
+  revealingPin = false;
   message = '';
   messageType: 'success' | 'error' | '' = '';
 
   constructor(private tvdb: TvdbService) {}
+
+  private static isMasked(value: string | undefined | null): boolean {
+    return !!value && /^•+$/.test(value);
+  }
+
+  toggleShowKey(): void {
+    if (this.showKey) {
+      this.showKey = false;
+      return;
+    }
+    if (!TvdbSettingsComponent.isMasked(this.config.api_key)) {
+      this.showKey = true;
+      return;
+    }
+    this.revealingKey = true;
+    this.tvdb.getConfig(true).subscribe({
+      next: (cfg) => {
+        this.config.api_key = cfg.api_key;
+        this.config.pin = cfg.pin;
+        this.showKey = true;
+        this.revealingKey = false;
+      },
+      error: () => {
+        this.revealingKey = false;
+        this.showKey = true;
+      },
+    });
+  }
+
+  toggleShowPin(): void {
+    if (this.showPin) {
+      this.showPin = false;
+      return;
+    }
+    if (!TvdbSettingsComponent.isMasked(this.config.pin)) {
+      this.showPin = true;
+      return;
+    }
+    this.revealingPin = true;
+    this.tvdb.getConfig(true).subscribe({
+      next: (cfg) => {
+        this.config.api_key = cfg.api_key;
+        this.config.pin = cfg.pin;
+        this.showPin = true;
+        this.revealingPin = false;
+      },
+      error: () => {
+        this.revealingPin = false;
+        this.showPin = true;
+      },
+    });
+  }
 
   ngOnInit(): void {
     this.tvdb.getConfig().subscribe({

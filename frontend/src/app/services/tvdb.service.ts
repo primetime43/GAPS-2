@@ -50,8 +50,9 @@ export interface TvdbScanRequest {
 export class TvdbService {
   constructor(private http: HttpClient) {}
 
-  getConfig(): Observable<TvdbConfig> {
-    return this.http.get<TvdbConfig>(`${environment.apiUrl}/tvdb/config`);
+  getConfig(reveal: boolean = false): Observable<TvdbConfig> {
+    const params = reveal ? new HttpParams().set('reveal', 'true') : undefined;
+    return this.http.get<TvdbConfig>(`${environment.apiUrl}/tvdb/config`, { params });
   }
 
   saveConfig(config: Partial<TvdbConfig>): Observable<TvdbConfig> {

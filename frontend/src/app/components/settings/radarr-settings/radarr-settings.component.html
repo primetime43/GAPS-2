@@ -37,8 +37,8 @@
         placeholder="Radarr API key (Settings &rarr; General)"
         [(ngModel)]="config.api_key"
       >
-      <button class="btn btn-outline-secondary" type="button" (click)="showKey = !showKey">
-        {{ showKey ? 'Hide' : 'Show' }}
+      <button class="btn btn-outline-secondary" type="button" (click)="toggleShowKey()" [disabled]="revealingKey">
+        {{ revealingKey ? '...' : (showKey ? 'Hide' : 'Show') }}
       </button>
     </div>
   </div>

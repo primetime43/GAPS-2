@@ -25,8 +25,36 @@ export class RadarrSettingsComponent implements OnInit {
   saving = false;
   loadingMeta = false;
   showKey = false;
+  revealingKey = false;
   message = '';
   messageType: 'success' | 'error' | '' = '';
+
+  private static isMasked(value: string | undefined | null): boolean {
+    return !!value && /^•+$/.test(value);
+  }
+
+  toggleShowKey(): void {
+    if (this.showKey) {
+      this.showKey = false;
+      return;
+    }
+    if (!RadarrSettingsComponent.isMasked(this.config.api_key)) {
+      this.showKey = true;
+      return;
+    }
+    this.revealingKey = true;
+    this.radarr.getConfig(true).subscribe({
+      next: (cfg) => {
+        this.config.api_key = cfg.api_key;
+        this.showKey = true;
+        this.revealingKey = false;
+      },
+      error: () => {
+        this.revealingKey = false;
+        this.showKey = true;
+      },
+    });
+  }
 
   availabilityOptions = [
     { value: 'announced', label: 'Announced' },
