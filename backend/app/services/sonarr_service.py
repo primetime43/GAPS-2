@@ -1,4 +1,5 @@
 import logging
+import time
 import requests
 from app.services import config_store
 
@@ -6,6 +7,13 @@ logger = logging.getLogger(__name__)
 
 CONFIG_KEY = 'sonarr'
 DEFAULT_TIMEOUT = 10
+# Add can legitimately take longer than a normal read (metadata fetch, disk
+# scaffolding) so allow a bigger window before we fall back to verification.
+ADD_TIMEOUT = 30
+# After a POST timeout, Sonarr may still be processing — re-check the library
+# a few times before declaring failure.
+VERIFY_ATTEMPTS = 3
+VERIFY_INTERVAL_SECONDS = 2
 
 
 def _normalize_url(url: str) -> str:
@@ -126,6 +134,21 @@ class SonarrService:
                 ids.append(tvdb_id)
         return ids
 
+    def _series_in_library(self, tvdb_id: int) -> bool:
+        """Quick library probe used to confirm an add after a POST timeout."""
+        try:
+            return tvdb_id in self.get_library_tvdb_ids()
+        except requests.exceptions.RequestException:
+            return False
+
+    def _wait_until_added(self, tvdb_id: int) -> bool:
+        """Poll the library a few times to see whether Sonarr finished the add."""
+        for _ in range(VERIFY_ATTEMPTS):
+            if self._series_in_library(tvdb_id):
+                return True
+            time.sleep(VERIFY_INTERVAL_SECONDS)
+        return False
+
     def add_series(self, tvdb_id: int, title: str = '') -> tuple[bool, str]:
         """Add a series to Sonarr by TheTVDB id.
 
@@ -175,7 +198,17 @@ class SonarrService:
         }
 
         try:
-            resp = self._request('POST', f'{url}/api/v3/series', api_key, json=payload)
+            resp = self._request(
+                'POST', f'{url}/api/v3/series', api_key, json=payload, timeout=ADD_TIMEOUT,
+            )
+        except requests.exceptions.Timeout:
+            # Sonarr is slow but probably still processing — confirm via the library.
+            logger.warning(
+                "Sonarr POST /series timed out for tvdb=%s; verifying via library", tvdb_id,
+            )
+            if self._wait_until_added(tvdb_id):
+                return True, f'Added "{payload["title"]}" to Sonarr (confirmed after slow response)'
+            return False, 'Sonarr did not respond in time; the series is not yet in the library'
         except requests.exceptions.RequestException as e:
             return False, f'Sonarr request failed: {e}'
 
