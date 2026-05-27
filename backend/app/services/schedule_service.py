@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
-from app.services import config_store
+from app.services import config_store, scan_history
 
 logger = logging.getLogger(__name__)
 
@@ -140,7 +140,9 @@ class ScheduleService:
                 library_name, len(missing), collections,
             )
             self._record_last_run(
-                status='success', library=library_name, missing=len(missing), collections=collections,
+                status='success', library=library_name, missing=len(missing),
+                collections=collections, total_owned=len(owned_ids),
+                gaps=missing,
             )
             self._app.notification_service.notify_scan_results(
                 len(missing), collections, library_name, media_type='movie'
@@ -200,7 +202,8 @@ class ScheduleService:
             )
             self._record_last_run(
                 status='success', library=tv_library, missing=len(missing),
-                collections=franchises, media_type='tv',
+                collections=franchises, media_type='tv', total_owned=len(owned_ids),
+                gaps=missing,
             )
             self._app.notification_service.notify_scan_results(
                 len(missing), franchises, tv_library, media_type='tv'
@@ -219,9 +222,12 @@ class ScheduleService:
         collections: int = 0,
         message: str = '',
         media_type: str = 'movie',
+        total_owned: int = 0,
+        gaps: list[dict] | None = None,
     ) -> None:
+        timestamp = datetime.now(timezone.utc).isoformat()
         entry = {
-            'timestamp': datetime.now(timezone.utc).isoformat(),
+            'timestamp': timestamp,
             'status': status,
             'library': library,
             'missing': missing,
@@ -236,6 +242,19 @@ class ScheduleService:
             config_store.put(HISTORY_KEY, history)
         except OSError as e:
             logger.warning("Failed to persist scheduled scan history: %s", e)
+        # Mirror into the unified scan history so the dashboard sees scheduled
+        # runs alongside manual ones.
+        scan_history.record(
+            media_type=media_type,
+            libraries=[library] if library else [],
+            total_owned=total_owned,
+            missing=missing,
+            status=status,
+            trigger='scheduled',
+            message=message,
+            completed_at=timestamp,
+            gaps=gaps,
+        )
 
     @staticmethod
     def _load_history() -> list[dict]:

@@ -66,6 +66,7 @@ def create_app(config_name=None):
     from app.blueprints.radarr import radarr_bp
     from app.blueprints.sonarr import sonarr_bp
     from app.blueprints.tvdb import tvdb_bp
+    from app.blueprints.scan_history import scan_history_bp
 
     app.register_blueprint(plex_bp, url_prefix='/api/plex')
     app.register_blueprint(jellyfin_bp, url_prefix='/api/jellyfin')
@@ -81,6 +82,7 @@ def create_app(config_name=None):
     app.register_blueprint(radarr_bp, url_prefix='/api/radarr')
     app.register_blueprint(sonarr_bp, url_prefix='/api/sonarr')
     app.register_blueprint(tvdb_bp, url_prefix='/api/tvdb')
+    app.register_blueprint(scan_history_bp, url_prefix='/api/scan-history')
 
     # In production, serve Angular dist
     bundle_dir = _get_bundle_dir()

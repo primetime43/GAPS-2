@@ -77,24 +77,49 @@
 
     <!-- Last Scan -->
     <div class="col-md-6 mb-3">
-      <div class="status-card" [class.status-ok]="lastScanStatus === 'done'" [class.status-missing]="lastScanStatus !== 'done'">
+      <div
+        class="status-card last-scan-card"
+        [class.status-ok]="hasAnyLastScan"
+        [class.status-missing]="!hasAnyLastScan"
+        [class.clickable]="hasAnyLastScan"
+        (click)="openHistory()"
+        role="button"
+        tabindex="0"
+        (keydown.enter)="openHistory()"
+      >
         <div class="status-icon">
-          <span *ngIf="lastScanStatus === 'done'">&#128269;</span>
-          <span *ngIf="lastScanStatus !== 'done'">&#8212;</span>
+          <span *ngIf="hasAnyLastScan">&#128269;</span>
+          <span *ngIf="!hasAnyLastScan">&#8212;</span>
         </div>
         <div class="status-body">
-          <h5>Last Scan</h5>
-          <p *ngIf="lastScanStatus === 'done'">
-            Found <strong>{{ lastScanGaps }}</strong> gap(s) across <strong>{{ lastScanTotal }}</strong> movies.
-          </p>
-          <p *ngIf="lastScanStatus !== 'done'">
+          <h5>
+            Last Scan
+            <span *ngIf="hasAnyLastScan" class="view-history-hint">View history &rsaquo;</span>
+          </h5>
+
+          <p *ngIf="!hasAnyLastScan">
             No scan results yet.
-            <a [routerLink]="['/recommended']" class="activeLink">Run a scan</a>
+            <a [routerLink]="['/recommended']" class="activeLink" (click)="$event.stopPropagation()">Run a scan</a>
+          </p>
+
+          <p *ngIf="lastMovieScan" class="scan-line">
+            <span class="scan-badge badge-movie">Movies</span>
+            Found <strong>{{ lastMovieScan.missing }}</strong> gap(s) across
+            <strong>{{ lastMovieScan.totalOwned }}</strong> movies.
+            <span class="text-muted">— {{ lastMovieScan.timestamp | date:'short' }}</span>
+          </p>
+
+          <p *ngIf="lastTvScan" class="scan-line">
+            <span class="scan-badge badge-tv">TV</span>
+            Found <strong>{{ lastTvScan.missing }}</strong> gap(s) across
+            <strong>{{ lastTvScan.totalOwned }}</strong> shows.
+            <span class="text-muted">— {{ lastTvScan.timestamp | date:'short' }}</span>
           </p>
         </div>
       </div>
     </div>
   </div>
+
 
   <!-- Quick Actions -->
   <h4 class="mt-4 text-primary">Quick Actions</h4>

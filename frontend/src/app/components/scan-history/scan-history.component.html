@@ -1,0 +1,108 @@
+<div class="container top-margin scan-history-page">
+  <div class="page-header">
+    <div>
+      <h3 class="regular-text mb-1">Scan History</h3>
+      <p class="text-muted mb-0">
+        Recent movie and TV gap scans, manual and scheduled. Export the gap list for any scan from its row.
+      </p>
+    </div>
+    <a [routerLink]="['/']" class="back-link">&lsaquo; Back to dashboard</a>
+  </div>
+
+  <div class="toolbar">
+    <div class="filter-group" role="tablist" aria-label="Filter scan history by media type">
+      <button
+        type="button"
+        class="filter-btn"
+        [class.active]="mediaTypeFilter === 'all'"
+        (click)="setFilter('all')"
+      >All</button>
+      <button
+        type="button"
+        class="filter-btn"
+        [class.active]="mediaTypeFilter === 'movie'"
+        (click)="setFilter('movie')"
+      >Movies</button>
+      <button
+        type="button"
+        class="filter-btn"
+        [class.active]="mediaTypeFilter === 'tv'"
+        (click)="setFilter('tv')"
+      >TV</button>
+    </div>
+  </div>
+
+  <div *ngIf="loading" class="text-center py-4">
+    <div class="spinner"></div>
+    <p class="text-muted mt-2 mb-0">Loading scan history...</p>
+  </div>
+
+  <div *ngIf="error && !loading" class="error-text">{{ error }}</div>
+
+  <div *ngIf="!loading && !error && entries.length === 0" class="empty-text">
+    No previous scans recorded yet.
+  </div>
+
+  <div *ngIf="!loading && !error && entries.length > 0" class="table-wrapper">
+    <table class="history-table">
+      <thead>
+        <tr>
+          <th>When</th>
+          <th>Type</th>
+          <th>Library</th>
+          <th class="num">Owned</th>
+          <th class="num">Missing</th>
+          <th>Trigger</th>
+          <th>Status</th>
+          <th class="actions-col">Export</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr
+          *ngFor="let entry of entries"
+          [class.row-error]="entry.status === 'error'"
+          [class.row-skipped]="entry.status === 'skipped'"
+        >
+          <td>{{ entry.timestamp | date:'short' }}</td>
+          <td>
+            <span
+              class="badge"
+              [class.badge-movie]="entry.mediaType === 'movie'"
+              [class.badge-tv]="entry.mediaType === 'tv'"
+            >{{ entry.mediaType === 'tv' ? 'TV' : 'Movie' }}</span>
+          </td>
+          <td>{{ (entry.libraries || []).join(', ') || '—' }}</td>
+          <td class="num">{{ entry.totalOwned }}</td>
+          <td class="num">{{ entry.missing }}</td>
+          <td>{{ entry.trigger === 'scheduled' ? 'Scheduled' : 'Manual' }}</td>
+          <td>
+            <span class="status-pill" [ngClass]="'status-' + entry.status" [title]="entry.message">
+              {{ entry.status }}
+            </span>
+          </td>
+          <td class="actions-col">
+            <div class="export-cell">
+              <div class="export-buttons">
+                <button
+                  type="button"
+                  class="row-export-btn"
+                  [disabled]="!canExport(entry) || isExporting(entry, 'csv') || isExporting(entry, 'xlsx')"
+                  [title]="exportTooltip(entry, 'csv')"
+                  (click)="exportRow(entry, 'csv')"
+                >{{ isExporting(entry, 'csv') ? '…' : 'CSV' }}</button>
+                <button
+                  type="button"
+                  class="row-export-btn primary"
+                  [disabled]="!canExport(entry) || isExporting(entry, 'csv') || isExporting(entry, 'xlsx')"
+                  [title]="exportTooltip(entry, 'xlsx')"
+                  (click)="exportRow(entry, 'xlsx')"
+                >{{ isExporting(entry, 'xlsx') ? '…' : 'XLSX' }}</button>
+              </div>
+              <div *ngIf="entry.id && rowError[entry.id]" class="row-error-text">{{ rowError[entry.id] }}</div>
+            </div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
