@@ -6,6 +6,7 @@ export the gaps that were found.
 """
 
 import logging
+import threading
 import uuid
 from datetime import datetime, timezone
 
@@ -15,6 +16,12 @@ logger = logging.getLogger(__name__)
 
 HISTORY_KEY = 'scan_history'
 MAX_HISTORY = 50
+
+# Serializes record()'s load/insert/put so two scans completing concurrently
+# (e.g. scheduled movie + TV jobs, or a manual scan finishing alongside a
+# scheduled one) can't both load the same history and lose one entry when the
+# later put() overwrites the earlier.
+_RECORD_LOCK = threading.Lock()
 
 
 def _strip_gap(media_type: str, gap: dict) -> dict:
@@ -62,10 +69,11 @@ def record(
         'gaps': [_strip_gap(mt, g) for g in (gaps or [])],
     }
     try:
-        history = _load_raw()
-        history.insert(0, entry)
-        del history[MAX_HISTORY:]
-        config_store.put(HISTORY_KEY, history)
+        with _RECORD_LOCK:
+            history = _load_raw()
+            history.insert(0, entry)
+            del history[MAX_HISTORY:]
+            config_store.put(HISTORY_KEY, history)
     except OSError as e:
         logger.warning("Failed to persist scan history: %s", e)
 

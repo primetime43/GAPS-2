@@ -104,15 +104,31 @@
 
           <p *ngIf="lastMovieScan" class="scan-line">
             <span class="scan-badge badge-movie">Movies</span>
-            Found <strong>{{ lastMovieScan.missing }}</strong> gap(s) across
-            <strong>{{ lastMovieScan.totalOwned }}</strong> movies.
+            <ng-container *ngIf="lastMovieScan.status === 'success'">
+              Found <strong>{{ lastMovieScan.missing }}</strong> gap(s) across
+              <strong>{{ lastMovieScan.totalOwned }}</strong> movies.
+            </ng-container>
+            <ng-container *ngIf="lastMovieScan.status === 'skipped'">
+              Skipped<ng-container *ngIf="lastMovieScan.message">: {{ lastMovieScan.message }}</ng-container>.
+            </ng-container>
+            <ng-container *ngIf="lastMovieScan.status === 'error'">
+              Failed<ng-container *ngIf="lastMovieScan.message">: {{ lastMovieScan.message }}</ng-container>.
+            </ng-container>
             <span class="text-muted">— {{ lastMovieScan.timestamp | date:'short' }}</span>
           </p>
 
           <p *ngIf="lastTvScan" class="scan-line">
             <span class="scan-badge badge-tv">TV</span>
-            Found <strong>{{ lastTvScan.missing }}</strong> gap(s) across
-            <strong>{{ lastTvScan.totalOwned }}</strong> shows.
+            <ng-container *ngIf="lastTvScan.status === 'success'">
+              Found <strong>{{ lastTvScan.missing }}</strong> gap(s) across
+              <strong>{{ lastTvScan.totalOwned }}</strong> shows.
+            </ng-container>
+            <ng-container *ngIf="lastTvScan.status === 'skipped'">
+              Skipped<ng-container *ngIf="lastTvScan.message">: {{ lastTvScan.message }}</ng-container>.
+            </ng-container>
+            <ng-container *ngIf="lastTvScan.status === 'error'">
+              Failed<ng-container *ngIf="lastTvScan.message">: {{ lastTvScan.message }}</ng-container>.
+            </ng-container>
             <span class="text-muted">— {{ lastTvScan.timestamp | date:'short' }}</span>
           </p>
         </div>
