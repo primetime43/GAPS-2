@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 
 import requests
 
-from app.services import config_store
+from app.services import config_store, scan_history
 
 logger = logging.getLogger(__name__)
 
@@ -615,9 +615,29 @@ class TvdbService:
                 })
             except OSError as e:
                 logger.warning("Failed to persist last_tv_scan: %s", e)
+            missing_gaps = [g for g in gaps if not g.get('owned')]
+            scan_history.record(
+                media_type='tv',
+                libraries=libraries,
+                total_owned=len(owned_series_ids),
+                missing=len(missing_gaps),
+                status='success',
+                trigger='manual',
+                completed_at=completed_at,
+                gaps=missing_gaps,
+            )
         except Exception as e:
             logger.exception("TVDB scan failed")
             with self._scan_progress_lock:
                 if self._scan_generation == generation:
                     self._scan_progress['error'] = str(e)
                     self._scan_progress['status'] = 'error'
+            scan_history.record(
+                media_type='tv',
+                libraries=libraries,
+                total_owned=len(owned_series_ids),
+                missing=0,
+                status='error',
+                trigger='manual',
+                message=str(e),
+            )

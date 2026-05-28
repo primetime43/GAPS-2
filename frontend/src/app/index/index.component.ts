@@ -1,4 +1,5 @@
 import { Component, OnInit } from '@angular/core';
+import { Router } from '@angular/router';
 import { forkJoin, of } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 import { TmdbService } from '../services/tmdb/tmdb.service';
@@ -6,8 +7,7 @@ import { PlexService } from '../services/plex.service';
 import { JellyfinService } from '../services/jellyfin.service';
 import { EmbyService } from '../services/emby.service';
 import { ScheduleService, ScheduleConfig, ScheduleLastRun } from '../services/schedule.service';
-import { HttpClient } from '@angular/common/http';
-import { environment } from '../../environments/environment';
+import { ScanHistoryEntry, ScanHistoryService } from '../services/scan-history.service';
 
 @Component({
     selector: 'app-index',
@@ -27,9 +27,8 @@ export class IndexComponent implements OnInit {
   nextRun: string | null = null;
   scheduleLastRun: ScheduleLastRun | null = null;
 
-  lastScanStatus = '';
-  lastScanGaps = 0;
-  lastScanTotal = 0;
+  lastMovieScan: ScanHistoryEntry | null = null;
+  lastTvScan: ScanHistoryEntry | null = null;
 
   constructor(
     private tmdbService: TmdbService,
@@ -37,7 +36,8 @@ export class IndexComponent implements OnInit {
     private jellyfinService: JellyfinService,
     private embyService: EmbyService,
     private scheduleService: ScheduleService,
-    private http: HttpClient
+    private scanHistoryService: ScanHistoryService,
+    private router: Router,
   ) {}
 
   ngOnInit(): void {
@@ -77,15 +77,21 @@ export class IndexComponent implements OnInit {
       error: () => {}
     });
 
-    this.http.get<any>(`${environment.apiUrl}/recommendations/scan/progress`).subscribe({
-      next: (progress) => {
-        if (progress.status === 'done') {
-          this.lastScanStatus = 'done';
-          this.lastScanGaps = (progress.gaps || []).length;
-          this.lastScanTotal = progress.total_owned || 0;
-        }
+    this.scanHistoryService.get().subscribe({
+      next: (resp) => {
+        this.lastMovieScan = resp.lastMovie;
+        this.lastTvScan = resp.lastTv;
       },
-      error: () => {}
+      error: () => {},
     });
+  }
+
+  get hasAnyLastScan(): boolean {
+    return !!(this.lastMovieScan || this.lastTvScan);
+  }
+
+  openHistory(): void {
+    if (!this.hasAnyLastScan) return;
+    this.router.navigate(['/scan-history']);
   }
 }

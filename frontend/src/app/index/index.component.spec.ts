@@ -1,6 +1,8 @@
 import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 import { RouterTestingModule } from '@angular/router/testing';
+import { Router } from '@angular/router';
+import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
 import { IndexComponent } from './index.component';
 import { environment } from '../../environments/environment';
 
@@ -13,6 +15,7 @@ describe('IndexComponent', () => {
     await TestBed.configureTestingModule({
       imports: [HttpClientTestingModule, RouterTestingModule],
       declarations: [IndexComponent],
+      schemas: [CUSTOM_ELEMENTS_SCHEMA],
     }).compileComponents();
 
     fixture = TestBed.createComponent(IndexComponent);
@@ -30,7 +33,7 @@ describe('IndexComponent', () => {
     jellyfin?: any;
     emby?: any;
     schedule?: any;
-    progress?: any;
+    scanHistory?: any;
   }) {
     fixture.detectChanges();
 
@@ -44,8 +47,8 @@ describe('IndexComponent', () => {
       .flush(options?.emby ?? {});
     httpMock.expectOne(`${environment.apiUrl}/schedule`)
       .flush(options?.schedule ?? { enabled: false, preset: '', next_run: null, last_run: null, run_history: [], presets: {} });
-    httpMock.expectOne(`${environment.apiUrl}/recommendations/scan/progress`)
-      .flush(options?.progress ?? { status: 'idle' });
+    httpMock.expectOne(`${environment.apiUrl}/scan-history`)
+      .flush(options?.scanHistory ?? { history: [], lastMovie: null, lastTv: null });
   }
 
   it('should create', () => {
@@ -129,18 +132,54 @@ describe('IndexComponent', () => {
     expect(component.nextRun).toBe('2026-04-07T00:00:00Z');
   }));
 
-  it('should load last scan status when scan is done', fakeAsync(() => {
+  it('should load latest movie and TV scan summaries', fakeAsync(() => {
     flushInitRequests({
-      progress: {
-        status: 'done',
-        gaps: [{ tmdbId: 1 }, { tmdbId: 2 }],
-        total_owned: 500,
+      scanHistory: {
+        history: [],
+        lastMovie: {
+          timestamp: '2026-05-20T10:00:00Z', mediaType: 'movie', libraries: ['Movies'],
+          totalOwned: 500, missing: 42, status: 'success', trigger: 'manual', message: '',
+        },
+        lastTv: {
+          timestamp: '2026-05-19T10:00:00Z', mediaType: 'tv', libraries: ['Shows'],
+          totalOwned: 120, missing: 7, status: 'success', trigger: 'manual', message: '',
+        },
       },
     });
     tick();
 
-    expect(component.lastScanStatus).toBe('done');
-    expect(component.lastScanGaps).toBe(2);
-    expect(component.lastScanTotal).toBe(500);
+    expect(component.lastMovieScan?.missing).toBe(42);
+    expect(component.lastMovieScan?.totalOwned).toBe(500);
+    expect(component.lastTvScan?.missing).toBe(7);
+    expect(component.lastTvScan?.totalOwned).toBe(120);
+    expect(component.hasAnyLastScan).toBeTrue();
+  }));
+
+  it('navigates to /scan-history when card is clicked', fakeAsync(() => {
+    flushInitRequests({
+      scanHistory: {
+        history: [],
+        lastMovie: { timestamp: '2026-05-20T10:00:00Z', mediaType: 'movie', libraries: [], totalOwned: 1, missing: 1, status: 'success', trigger: 'manual', message: '' },
+        lastTv: null,
+      },
+    });
+    tick();
+
+    const router = TestBed.inject(Router);
+    const spy = spyOn(router, 'navigate');
+    component.openHistory();
+
+    expect(spy).toHaveBeenCalledWith(['/scan-history']);
+  }));
+
+  it('does not navigate when there is no scan history', fakeAsync(() => {
+    flushInitRequests();
+    tick();
+
+    const router = TestBed.inject(Router);
+    const spy = spyOn(router, 'navigate');
+    component.openHistory();
+
+    expect(spy).not.toHaveBeenCalled();
   }));
 });

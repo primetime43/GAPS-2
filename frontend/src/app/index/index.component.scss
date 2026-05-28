@@ -62,3 +62,76 @@
     text-decoration: none;
   }
 }
+
+.last-scan-card {
+  flex-direction: row;
+  align-items: flex-start;
+}
+
+.last-scan-card.clickable {
+  cursor: pointer;
+  transition: background-color 0.15s, transform 0.15s;
+
+  &:hover {
+    background-color: #353535;
+  }
+
+  &:focus-visible {
+    outline: 2px solid #00bc8c;
+    outline-offset: 2px;
+  }
+}
+
+.last-scan-card .status-body {
+  flex: 1;
+}
+
+.last-scan-card h5 {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.view-history-hint {
+  font-size: 12px;
+  font-weight: 400;
+  color: #00bc8c;
+  white-space: nowrap;
+}
+
+.scan-line {
+  margin-bottom: 4px !important;
+  font-size: 13px;
+  line-height: 1.5;
+
+  &:last-child {
+    margin-bottom: 0 !important;
+  }
+}
+
+.scan-line .text-muted {
+  color: #777 !important;
+  font-size: 12px;
+}
+
+.scan-badge {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 9px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  margin-right: 6px;
+  vertical-align: middle;
+
+  &.badge-movie {
+    background: rgba(0, 188, 140, 0.15);
+    color: #00bc8c;
+  }
+
+  &.badge-tv {
+    background: rgba(91, 153, 255, 0.15);
+    color: #5b99ff;
+  }
+}

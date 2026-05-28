@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../environments/environment';
 import { ApiMessage } from '../models/api-response.model';
@@ -30,8 +30,9 @@ export interface SonarrRootFolder {
 export class SonarrService {
   constructor(private http: HttpClient) {}
 
-  getConfig(): Observable<SonarrConfig> {
-    return this.http.get<SonarrConfig>(`${environment.apiUrl}/sonarr/config`);
+  getConfig(reveal: boolean = false): Observable<SonarrConfig> {
+    const params = reveal ? new HttpParams().set('reveal', 'true') : undefined;
+    return this.http.get<SonarrConfig>(`${environment.apiUrl}/sonarr/config`, { params });
   }
 
   saveConfig(config: Partial<SonarrConfig>): Observable<SonarrConfig> {

@@ -10,8 +10,11 @@ radarr_bp = Blueprint('radarr', __name__)
 @radarr_bp.route('/config', methods=['GET'])
 def get_config():
     cfg = current_app.radarr_service.get_config()
-    # Hide the API key on read so it isn't echoed back to the browser unnecessarily.
-    cfg['api_key'] = '••••••' if cfg.get('api_key') else ''
+    # Reveal the real API key only when the UI explicitly asks (via the Show
+    # button); otherwise echo a masked placeholder.
+    reveal = request.args.get('reveal', 'false').lower() == 'true'
+    if not reveal:
+        cfg['api_key'] = '••••••' if cfg.get('api_key') else ''
     return jsonify(cfg)
 
 

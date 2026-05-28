@@ -1,4 +1,5 @@
 import logging
+import time
 import requests
 from app.services import config_store
 
@@ -6,6 +7,13 @@ logger = logging.getLogger(__name__)
 
 CONFIG_KEY = 'radarr'
 DEFAULT_TIMEOUT = 10
+# Add can legitimately take longer than a normal read (metadata fetch, disk
+# scaffolding) so allow a bigger window before we fall back to verification.
+ADD_TIMEOUT = 30
+# After a POST timeout, Radarr may still be processing — re-check the library
+# a few times before declaring failure.
+VERIFY_ATTEMPTS = 3
+VERIFY_INTERVAL_SECONDS = 2
 
 
 def _normalize_url(url: str) -> str:
@@ -123,6 +131,21 @@ class RadarrService:
                 ids.append(tmdb_id)
         return ids
 
+    def _movie_in_library(self, tmdb_id: int) -> bool:
+        """Quick library probe used to confirm an add after a POST timeout."""
+        try:
+            return tmdb_id in self.get_library_tmdb_ids()
+        except requests.exceptions.RequestException:
+            return False
+
+    def _wait_until_added(self, tmdb_id: int) -> bool:
+        """Poll the library a few times to see whether Radarr finished the add."""
+        for _ in range(VERIFY_ATTEMPTS):
+            if self._movie_in_library(tmdb_id):
+                return True
+            time.sleep(VERIFY_INTERVAL_SECONDS)
+        return False
+
     def _resolve_root_folder(self, year: int, url: str, api_key: str, default_path: str) -> str:
         """Pick a root folder whose path matches the movie's decade (e.g. 2021 -> /movies/2020s).
 
@@ -200,7 +223,17 @@ class RadarrService:
         }
 
         try:
-            resp = self._request('POST', f'{url}/api/v3/movie', api_key, json=payload)
+            resp = self._request(
+                'POST', f'{url}/api/v3/movie', api_key, json=payload, timeout=ADD_TIMEOUT,
+            )
+        except requests.exceptions.Timeout:
+            # Radarr is slow but probably still processing — confirm via the library.
+            logger.warning(
+                "Radarr POST /movie timed out for tmdb=%s; verifying via library", tmdb_id,
+            )
+            if self._wait_until_added(tmdb_id):
+                return True, f'Added "{payload["title"]}" to Radarr (confirmed after slow response)'
+            return False, 'Radarr did not respond in time; the movie is not yet in the library'
         except requests.exceptions.RequestException as e:
             return False, f'Radarr request failed: {e}'
 

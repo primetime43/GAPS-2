@@ -4,6 +4,7 @@ import { RouterModule, Routes } from '@angular/router';
 import { RecommendedComponent } from './components/recommended/recommended.component';
 import { AboutComponent } from './components/about/about.component';
 import { LogsComponent } from './components/logs/logs.component';
+import { ScanHistoryComponent } from './components/scan-history/scan-history.component';
 import { IndexComponent } from './index/index.component';
 
 //Settings
@@ -24,6 +25,7 @@ const routes: Routes = [
   { path: 'recommended', component: RecommendedComponent, data: { reuse: true } },
   { path: 'about', component: AboutComponent },
   { path: 'logs', component: LogsComponent },
+  { path: 'scan-history', component: ScanHistoryComponent },
   { path: 'settings', component: SettingsComponent, children: [
     { path: '', redirectTo: 'tmdb', pathMatch: 'full' },
     { path: 'tmdb', component: TmdbSettingsComponent },

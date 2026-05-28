@@ -25,9 +25,12 @@ def _stored_secret(field: str) -> str:
 @tvdb_bp.route('/config', methods=['GET'])
 def get_config():
     cfg = current_app.tvdb_service.get_config()
-    # Don't echo secrets back to the browser; the UI shows a masked placeholder.
-    cfg['api_key'] = _MASK if cfg.get('api_key') else ''
-    cfg['pin'] = _MASK if cfg.get('pin') else ''
+    # Reveal the real secrets only when the UI explicitly asks (via the Show
+    # button); otherwise echo masked placeholders so casual reads don't leak them.
+    reveal = request.args.get('reveal', 'false').lower() == 'true'
+    if not reveal:
+        cfg['api_key'] = _MASK if cfg.get('api_key') else ''
+        cfg['pin'] = _MASK if cfg.get('pin') else ''
     return jsonify(cfg)
 
 

@@ -26,12 +26,14 @@ import { RadarrSettingsComponent } from './components/settings/radarr-settings/r
 import { SonarrSettingsComponent } from './components/settings/sonarr-settings/sonarr-settings.component';
 import { TvdbSettingsComponent } from './components/settings/tvdb-settings/tvdb-settings.component';
 import { ConfirmModalComponent } from './components/confirm-modal/confirm-modal.component';
+import { ScanHistoryComponent } from './components/scan-history/scan-history.component';
 import { LogsComponent } from './components/logs/logs.component';
 
 @NgModule({ declarations: [
         AppComponent,
         HeaderComponent,
         ConfirmModalComponent,
+        ScanHistoryComponent,
         RecommendedComponent,
         AboutComponent,
         IndexComponent,
