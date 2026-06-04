@@ -37,6 +37,41 @@ export class UserPreferencesSettingsComponent implements OnInit {
 
   pageSizeOptions = [25, 50, 100, 200];
 
+  // Collapsible preference sections; all expanded by default. Persisted to
+  // localStorage (pure UI state — not worth a round-trip to the backend prefs).
+  private static readonly COLLAPSED_KEY = 'gaps2.prefSectionsCollapsed';
+  collapsedSections: Record<string, boolean> = this.loadCollapsedSections();
+
+  toggleSection(key: string): void {
+    this.collapsedSections[key] = !this.collapsedSections[key];
+    this.saveCollapsedSections();
+  }
+
+  isCollapsed(key: string): boolean {
+    return !!this.collapsedSections[key];
+  }
+
+  private loadCollapsedSections(): Record<string, boolean> {
+    try {
+      const raw = localStorage.getItem(UserPreferencesSettingsComponent.COLLAPSED_KEY);
+      const parsed = raw ? JSON.parse(raw) : null;
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+
+  private saveCollapsedSections(): void {
+    try {
+      localStorage.setItem(
+        UserPreferencesSettingsComponent.COLLAPSED_KEY,
+        JSON.stringify(this.collapsedSections),
+      );
+    } catch {
+      // Ignore storage failures (private mode / quota) — collapse is non-critical.
+    }
+  }
+
   constructor(
     private preferencesService: PreferencesService,
     private activeServerService: ActiveServerService,

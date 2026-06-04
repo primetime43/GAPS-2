@@ -2,6 +2,19 @@
   <div *ngIf="loading" class="text-muted">Loading preferences...</div>
 
   <div *ngIf="!loading">
+
+    <!-- ============ Browsing & Display ============ -->
+    <div class="pref-section" (click)="toggleSection('browsing')" (keydown.enter)="toggleSection('browsing')"
+         role="button" tabindex="0" [attr.aria-expanded]="!isCollapsed('browsing')">
+      <div class="pref-section-heading">
+        <h4 class="pref-section-title">Browsing &amp; Display</h4>
+        <span class="pref-section-chevron" [class.collapsed]="isCollapsed('browsing')">▾</span>
+      </div>
+      <p class="pref-section-desc">How you browse libraries and what content appears on the Missing page.</p>
+    </div>
+
+    <div class="pref-section-body" *ngIf="!isCollapsed('browsing')">
+
     <!-- Default Library -->
     <div class="pref-card mb-3">
       <h5>Default Library</h5>
@@ -20,6 +33,29 @@
         <option *ngFor="let size of pageSizeOptions" [ngValue]="size">{{ size }}</option>
       </select>
     </div>
+
+    <!-- Language Filter -->
+    <div class="pref-card mb-3">
+      <h5>TMDB Language</h5>
+      <p class="text-muted small">Language for movie titles and descriptions from TMDB.</p>
+      <select class="form-select dark-select" [(ngModel)]="prefs.language">
+        <option *ngFor="let lang of languages" [value]="lang.code">{{ lang.name }}</option>
+      </select>
+    </div>
+
+    </div><!-- /Browsing & Display body -->
+
+    <!-- ============ Gap Results Filters ============ -->
+    <div class="pref-section" (click)="toggleSection('filters')" (keydown.enter)="toggleSection('filters')"
+         role="button" tabindex="0" [attr.aria-expanded]="!isCollapsed('filters')">
+      <div class="pref-section-heading">
+        <h4 class="pref-section-title">Gap Results Filters</h4>
+        <span class="pref-section-chevron" [class.collapsed]="isCollapsed('filters')">▾</span>
+      </div>
+      <p class="pref-section-desc">Defaults for which missing titles show up after a scan. Most can still be toggled live on the Missing page.</p>
+    </div>
+
+    <div class="pref-section-body" *ngIf="!isCollapsed('filters')">
 
     <!-- Hide Owned by Default -->
     <div class="pref-card mb-3">
@@ -68,31 +104,19 @@
       </div>
     </div>
 
-    <!-- Language Filter -->
-    <div class="pref-card mb-3">
-      <h5>TMDB Language</h5>
-      <p class="text-muted small">Language for movie titles and descriptions from TMDB.</p>
-      <select class="form-select dark-select" [(ngModel)]="prefs.language">
-        <option *ngFor="let lang of languages" [value]="lang.code">{{ lang.name }}</option>
-      </select>
+    </div><!-- /Gap Results Filters body -->
+
+    <!-- ============ Performance & Connections ============ -->
+    <div class="pref-section" (click)="toggleSection('performance')" (keydown.enter)="toggleSection('performance')"
+         role="button" tabindex="0" [attr.aria-expanded]="!isCollapsed('performance')">
+      <div class="pref-section-heading">
+        <h4 class="pref-section-title">Performance &amp; Connections</h4>
+        <span class="pref-section-chevron" [class.collapsed]="isCollapsed('performance')">▾</span>
+      </div>
+      <p class="pref-section-desc">Speed, caching, and reliability when talking to your media server.</p>
     </div>
 
-    <!-- Port Number -->
-    <div class="pref-card mb-3">
-      <h5>Port Number</h5>
-      <p class="text-muted small">Server port for production/exe mode (requires restart to take effect). Does not apply during development.</p>
-      <input type="number" class="form-control dark-input" [(ngModel)]="prefs.port" min="1024" max="65535">
-    </div>
-
-    <!-- Auto-Open Browser -->
-    <div class="pref-card mb-3">
-      <h5>Auto-Open Browser</h5>
-      <p class="text-muted small">Automatically open the browser when launching the standalone exe.</p>
-      <label class="toggle-label">
-        <input type="checkbox" [(ngModel)]="prefs.autoOpenBrowser">
-        <span class="ms-2">{{ prefs.autoOpenBrowser ? 'Enabled' : 'Disabled' }}</span>
-      </label>
-    </div>
+    <div class="pref-section-body" *ngIf="!isCollapsed('performance')">
 
     <!-- Poster Prefetch -->
     <div class="pref-card mb-3">
@@ -120,6 +144,39 @@
       <p class="text-muted small">Timeout in seconds for requests to Plex, Emby, and Jellyfin. Increase for large libraries (3000+ movies).</p>
       <input type="number" class="form-control dark-input" [(ngModel)]="prefs.mediaServerTimeout" min="10" max="300">
     </div>
+
+    </div><!-- /Performance & Connections body -->
+
+    <!-- ============ Application (Standalone App) ============ -->
+    <div class="pref-section" (click)="toggleSection('application')" (keydown.enter)="toggleSection('application')"
+         role="button" tabindex="0" [attr.aria-expanded]="!isCollapsed('application')">
+      <div class="pref-section-heading">
+        <h4 class="pref-section-title">Application (Standalone App)</h4>
+        <span class="pref-section-chevron" [class.collapsed]="isCollapsed('application')">▾</span>
+      </div>
+      <p class="pref-section-desc">Settings for the bundled Windows executable. These don't apply during development.</p>
+    </div>
+
+    <div class="pref-section-body" *ngIf="!isCollapsed('application')">
+
+    <!-- Port Number -->
+    <div class="pref-card mb-3">
+      <h5>Port Number</h5>
+      <p class="text-muted small">Server port for production/exe mode (requires restart to take effect). Does not apply during development.</p>
+      <input type="number" class="form-control dark-input" [(ngModel)]="prefs.port" min="1024" max="65535">
+    </div>
+
+    <!-- Auto-Open Browser -->
+    <div class="pref-card mb-3">
+      <h5>Auto-Open Browser</h5>
+      <p class="text-muted small">Automatically open the browser when launching the standalone exe.</p>
+      <label class="toggle-label">
+        <input type="checkbox" [(ngModel)]="prefs.autoOpenBrowser">
+        <span class="ms-2">{{ prefs.autoOpenBrowser ? 'Enabled' : 'Disabled' }}</span>
+      </label>
+    </div>
+
+    </div><!-- /Application body -->
 
     <!-- Save Button -->
     <div class="mt-4 mb-4">
