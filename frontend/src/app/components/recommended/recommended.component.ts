@@ -1,22 +1,24 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
 import { NavigationEnd, Router } from '@angular/router';
 import { forkJoin, Observable, Subject, Subscription, timer } from 'rxjs';
-import { catchError, filter, skip, switchMap, takeUntil } from 'rxjs/operators';
+import { catchError, filter, map, skip, switchMap, takeUntil } from 'rxjs/operators';
 import { of } from 'rxjs';
-import { PlexService } from '../../services/plex.service';
-import { JellyfinService } from '../../services/jellyfin.service';
-import { EmbyService } from '../../services/emby.service';
+import { ActiveServerService } from '../../services/active-server.service';
 import { LibraryService } from '../../services/library.service';
 import { RecommendationService } from '../../services/recommendation.service';
 import { TvdbService } from '../../services/tvdb.service';
 import { Gap } from '../../models/recommendation.model';
-import { ActiveServerResponse, MediaLibrary } from '../../models/media-server.model';
+import { MediaLibrary } from '../../models/media-server.model';
 import { PreferencesService } from '../../services/preferences.service';
 import { ExportService, ExportFormat } from '../../services/export.service';
 import { RadarrService } from '../../services/radarr.service';
 import { SonarrService } from '../../services/sonarr.service';
 
 type MediaType = 'movie' | 'tv';
+// "Downloaders" — the *arr integration a gap can be sent to. Movies → Radarr,
+// TV → Sonarr; the active one always follows the current mediaType.
+type Downloader = 'radarr' | 'sonarr';
+type SendState = 'sending' | 'sent' | 'error';
 
 interface BrowseItem {
   name: string;
@@ -40,6 +42,16 @@ interface UnifiedProgress {
   groupsLabel: string;  // "collections found" | "franchises found"
 }
 
+// Per-integration behavior for the generic "send to *arr" plumbing.
+interface DownloaderDef {
+  label: string;
+  addHint: string;
+  getConfig: () => Observable<any>;
+  ownedIds: () => Observable<number[]>;
+  add: (gap: Gap) => Observable<any>;
+  eligible: (gap: Gap) => boolean;
+}
+
 @Component({
     selector: 'app-recommended',
     templateUrl: './recommended.component.html',
@@ -57,6 +69,12 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   itemFilter = '';
   showOwned = false;
   hideFutureReleases = false;
+  // Quality filter (movies only) — exclude low-tier gaps by TMDB rating / vote
+  // count. Set before scanning; applied server-side so the gaps are excluded
+  // from the scan (and from scheduled scans, which share the same setting).
+  qualityFilter = false;
+  minRating = 0;
+  minVoteCount = 0;
   itemsPerPage = 50;
   currentPage = 1;
   searchFilter = '';
@@ -108,22 +126,22 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   freshScanActive = false;
   showFreshScanConfirm = false;
 
-  // Radarr (movies) / Sonarr (TV)
-  radarrEnabled = false;
-  radarrStatus = new Map<number, 'sending' | 'sent' | 'error'>();
-  radarrErrors = new Map<number, string>();
-  sonarrEnabled = false;
-  sonarrStatus = new Map<number, 'sending' | 'sent' | 'error'>();
-  sonarrErrors = new Map<number, string>();
+  // Radarr (movies) / Sonarr (TV) send state, keyed by downloader.
+  private downloaders: Record<Downloader, {
+    enabled: boolean;
+    status: Map<number, SendState>;
+    errors: Map<number, string>;
+  }> = {
+    radarr: { enabled: false, status: new Map(), errors: new Map() },
+    sonarr: { enabled: false, status: new Map(), errors: new Map() },
+  };
 
   private completedScans = new Map<string, { gaps: Gap[]; totalOwned: number }>();
   private pollSub: Subscription | null = null;
   private destroy$ = new Subject<void>();
 
   constructor(
-    private plexService: PlexService,
-    private jellyfinService: JellyfinService,
-    private embyService: EmbyService,
+    private activeServerService: ActiveServerService,
     private libraryService: LibraryService,
     private recommendationService: RecommendationService,
     private tvdb: TvdbService,
@@ -190,8 +208,8 @@ export class RecommendedComponent implements OnInit, OnDestroy {
 
   private loadContext(autoSelectLibrary: boolean): void {
     this.loadIgnored();
-    this.refreshRadarrStatus();
-    this.refreshSonarrStatus();
+    this.refreshDownloaderStatus('radarr');
+    this.refreshDownloaderStatus('sonarr');
     this.tvdb.getConfig().pipe(catchError(() => of(null))).subscribe(cfg => {
       this.tvdbEnabled = !!(cfg && cfg.enabled);
     });
@@ -204,6 +222,9 @@ export class RecommendedComponent implements OnInit, OnDestroy {
         this.showOwned = !prefs.hideOwnedByDefault;
         this.hideFutureReleases = prefs.hideFutureReleasesByDefault || false;
         this.posterPrefetch = prefs.posterPrefetch || false;
+        this.qualityFilter = prefs.qualityFilterEnabled || false;
+        this.minRating = prefs.minRating || 0;
+        this.minVoteCount = prefs.minVoteCount || 0;
       }
       this.detectActiveServer(prefs, autoSelectLibrary);
     });
@@ -217,30 +238,12 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   private allServerLibraries: MediaLibrary[] = [];
 
   private detectActiveServer(prefs: any, autoSelectLibrary: boolean): void {
-    forkJoin({
-      plex: this.plexService.getActiveServer().pipe(catchError(() => of(null))),
-      jellyfin: this.jellyfinService.getActiveServer().pipe(catchError(() => of(null))),
-      emby: this.embyService.getActiveServer().pipe(catchError(() => of(null))),
-    }).subscribe((servers) => {
-      let res: ActiveServerResponse | null = null;
-      let source: 'plex' | 'jellyfin' | 'emby' = this.activeSource;
-
-      if (servers.plex && (servers.plex as any).server) {
-        res = servers.plex as ActiveServerResponse;
-        source = 'plex';
-      } else if (servers.jellyfin && (servers.jellyfin as any).server) {
-        res = servers.jellyfin as ActiveServerResponse;
-        source = 'jellyfin';
-      } else if (servers.emby && (servers.emby as any).server) {
-        res = servers.emby as ActiveServerResponse;
-        source = 'emby';
-      }
-
-      if (res && res.server) {
+    this.activeServerService.getActive().subscribe((active) => {
+      if (active) {
         this.hasServer = true;
-        this.activeSource = source;
-        this.activeServerName = res.server;
-        this.allServerLibraries = Array.isArray(res.libraries) ? res.libraries : [];
+        this.activeSource = active.source;
+        this.activeServerName = active.server;
+        this.allServerLibraries = active.libraries;
         this.applyLibraryFilter();
         this.finishInitialization(prefs, autoSelectLibrary);
       } else {
@@ -432,24 +435,29 @@ export class RecommendedComponent implements OnInit, OnDestroy {
       return;
     }
 
-    // Movies: pre-load movies for all selected libraries so the backend has them cached.
-    const loadRequests = scanLibraries.map(lib =>
-      this.libraryService.getMovies(lib, this.activeSource).pipe(catchError(() => of({ movies: [] })))
-    );
-    forkJoin(loadRequests).subscribe({
-      next: () => {
-        this.recommendationService.startScan(scanLibraries, true, freshScan, this.activeSource).subscribe({
-          next: () => this.startPolling(scanLibraries),
-          error: (err) => {
-            this.errorMessage = err.error?.error || 'Failed to start scan.';
-            this.loadingGaps = false;
-          }
-        });
-      },
-      error: () => {
-        this.errorMessage = 'Failed to load movies from selected libraries.';
-        this.loadingGaps = false;
-      }
+    // Persist the quality filter first so the backend (which filters at scan
+    // time) excludes low-tier movies from this scan. Proceed even if the save
+    // fails — the scan should still run.
+    this.saveQualityPrefs().pipe(catchError(() => of(null))).subscribe(() => {
+      // Movies: pre-load movies for all selected libraries so the backend has them cached.
+      const loadRequests = scanLibraries.map(lib =>
+        this.libraryService.getMovies(lib, this.activeSource).pipe(catchError(() => of({ movies: [] })))
+      );
+      forkJoin(loadRequests).subscribe({
+        next: () => {
+          this.recommendationService.startScan(scanLibraries, true, freshScan, this.activeSource).subscribe({
+            next: () => this.startPolling(scanLibraries),
+            error: (err) => {
+              this.errorMessage = err.error?.error || 'Failed to start scan.';
+              this.loadingGaps = false;
+            }
+          });
+        },
+        error: () => {
+          this.errorMessage = 'Failed to load movies from selected libraries.';
+          this.loadingGaps = false;
+        }
+      });
     });
   }
 
@@ -648,6 +656,27 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   onHideFutureReleasesChange(): void { this.applyFilter(); }
   onShowIgnoredChange(): void { this.applyFilter(); }
 
+  /**
+   * Persist the quality-filter settings. This is a scan-time filter applied
+   * server-side, so saving it (which reloads the TMDB service) makes the next
+   * scan — manual or scheduled — exclude low-tier movies. Fire-and-forget on
+   * change so scheduled scans honor it even without a manual scan.
+   */
+  private saveQualityPrefs() {
+    return this.preferencesService.save({
+      qualityFilterEnabled: this.qualityFilter,
+      minRating: this.minRating || 0,
+      minVoteCount: this.minVoteCount || 0,
+    });
+  }
+
+  onQualityFilterChange(): void {
+    this.saveQualityPrefs().subscribe({ next: () => {}, error: () => {} });
+  }
+
+  // NOTE: mirrored on the backend by `_is_future_release` in
+  // backend/app/services/scan_history.py (used so scheduled scans count gaps
+  // the same way). Keep the two in sync if this logic changes.
   isFutureRelease(gap: Gap): boolean {
     const today = new Date().toISOString().slice(0, 10);
     // Prefer an exact date (movie release date or TV first-aired date).
@@ -801,109 +830,106 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     }
   }
 
-  // -- Radarr (movies only) --
+  // -- Radarr (movies) / Sonarr (TV) --
+  // One generic implementation; the per-integration differences (which service,
+  // how a gap is added, eligibility, labels) live in the definition below.
 
-  refreshRadarrStatus(): void {
-    this.radarrService.getConfig().pipe(catchError(() => of(null))).subscribe(cfg => {
-      this.radarrEnabled = !!(cfg && cfg.enabled);
-      if (this.radarrEnabled) this.loadRadarrLibrary();
+  /** The downloader that applies to the current view (movies → Radarr, TV → Sonarr). */
+  get activeDownloader(): Downloader {
+    return this.mediaType === 'tv' ? 'sonarr' : 'radarr';
+  }
+
+  private downloaderDef(d: Downloader): DownloaderDef {
+    if (d === 'sonarr') {
+      return {
+        label: 'Sonarr',
+        addHint: 'Add this show to Sonarr',
+        getConfig: () => this.sonarrService.getConfig(),
+        ownedIds: () => this.sonarrService.getLibraryTvdbIds().pipe(
+          map(res => res.tvdb_ids || []), catchError(() => of([] as number[]))),
+        add: (gap: Gap) => this.sonarrService.addSeries(gap.id, gap.name),
+        eligible: (gap: Gap) => gap.sonarrEligible,
+      };
+    }
+    return {
+      label: 'Radarr',
+      addHint: 'Add this movie to Radarr',
+      getConfig: () => this.radarrService.getConfig(),
+      ownedIds: () => this.radarrService.getLibraryTmdbIds().pipe(
+        map(res => res.tmdb_ids || []), catchError(() => of([] as number[]))),
+      add: (gap: Gap) => this.radarrService.addMovie(gap.id, gap.name, parseInt(String(gap.year), 10) || 0),
+      eligible: (gap: Gap) => gap.radarrEligible,
+    };
+  }
+
+  refreshDownloaderStatus(d: Downloader): void {
+    const def = this.downloaderDef(d);
+    def.getConfig().pipe(catchError(() => of(null))).subscribe((cfg: any) => {
+      const enabled = !!(cfg && cfg.enabled);
+      this.downloaders[d].enabled = enabled;
+      if (!enabled) return;
+      def.ownedIds().subscribe(ids => {
+        const status = this.downloaders[d].status;
+        for (const id of ids) {
+          if (status.get(id) !== 'sending') status.set(id, 'sent');
+        }
+      });
     });
   }
 
-  loadRadarrLibrary(): void {
-    this.radarrService.getLibraryTmdbIds()
-      .pipe(catchError(() => of({ tmdb_ids: [] })))
-      .subscribe(res => {
-        for (const id of res.tmdb_ids || []) {
-          if (this.radarrStatus.get(id) !== 'sending') this.radarrStatus.set(id, 'sent');
-        }
-      });
-  }
-
-  sendToRadarr(gap: Gap, event: Event): void {
+  sendToDownloader(gap: Gap, event: Event): void {
     event.stopPropagation();
     event.preventDefault();
-    if (!gap.id || !this.radarrEnabled || !gap.radarrEligible) return;
-    if (this.radarrStatus.get(gap.id) === 'sending') return;
-    this.radarrStatus.set(gap.id, 'sending');
-    this.radarrErrors.delete(gap.id);
-    const yearNum = parseInt(String(gap.year), 10) || 0;
-    this.radarrService.addMovie(gap.id, gap.name, yearNum).subscribe({
-      next: () => this.radarrStatus.set(gap.id, 'sent'),
-      error: (err) => {
-        this.radarrStatus.set(gap.id, 'error');
-        this.radarrErrors.set(gap.id, err.error?.error || 'Failed to add to Radarr');
+    const d = this.activeDownloader;
+    const def = this.downloaderDef(d);
+    const state = this.downloaders[d];
+    if (!gap.id || !state.enabled || !def.eligible(gap)) return;
+    if (state.status.get(gap.id) === 'sending') return;
+    state.status.set(gap.id, 'sending');
+    state.errors.delete(gap.id);
+    def.add(gap).subscribe({
+      next: () => state.status.set(gap.id, 'sent'),
+      error: (err: any) => {
+        state.status.set(gap.id, 'error');
+        state.errors.set(gap.id, err.error?.error || `Failed to add to ${def.label}`);
       },
     });
   }
 
-  radarrButtonLabel(id: number | undefined): string {
-    if (!id) return 'Send to Radarr';
-    switch (this.radarrStatus.get(id)) {
+  // -- Template helpers for the active downloader --
+
+  get downloaderAddHint(): string {
+    return this.downloaderDef(this.activeDownloader).addHint;
+  }
+
+  canSendToDownloader(gap: Gap): boolean {
+    const d = this.activeDownloader;
+    return this.downloaders[d].enabled
+      && this.downloaderDef(d).eligible(gap)
+      && !gap.owned
+      && !this.isIgnored(gap);
+  }
+
+  downloaderStatusOf(id: number | undefined): SendState | undefined {
+    return id ? this.downloaders[this.activeDownloader].status.get(id) : undefined;
+  }
+
+  downloaderErrorOf(id: number | undefined): string | undefined {
+    return id ? this.downloaders[this.activeDownloader].errors.get(id) : undefined;
+  }
+
+  downloaderButtonLabel(id: number | undefined): string {
+    const label = this.downloaderDef(this.activeDownloader).label;
+    switch (this.downloaderStatusOf(id)) {
       case 'sending': return 'Sending...';
-      case 'sent': return 'In Radarr';
+      case 'sent': return `In ${label}`;
       case 'error': return 'Retry';
-      default: return 'Send to Radarr';
+      default: return `Send to ${label}`;
     }
   }
 
-  radarrButtonClass(id: number | undefined): string {
-    if (!id) return 'btn-outline-primary';
-    switch (this.radarrStatus.get(id)) {
-      case 'sent': return 'btn-success';
-      case 'error': return 'btn-outline-danger';
-      default: return 'btn-outline-primary';
-    }
-  }
-
-  // -- Sonarr (TV only) --
-
-  refreshSonarrStatus(): void {
-    this.sonarrService.getConfig().pipe(catchError(() => of(null))).subscribe(cfg => {
-      this.sonarrEnabled = !!(cfg && cfg.enabled);
-      if (this.sonarrEnabled) this.loadSonarrLibrary();
-    });
-  }
-
-  loadSonarrLibrary(): void {
-    this.sonarrService.getLibraryTvdbIds()
-      .pipe(catchError(() => of({ tvdb_ids: [] })))
-      .subscribe(res => {
-        for (const id of res.tvdb_ids || []) {
-          if (this.sonarrStatus.get(id) !== 'sending') this.sonarrStatus.set(id, 'sent');
-        }
-      });
-  }
-
-  sendToSonarr(gap: Gap, event: Event): void {
-    event.stopPropagation();
-    event.preventDefault();
-    if (!gap.id || !this.sonarrEnabled || !gap.sonarrEligible) return;
-    if (this.sonarrStatus.get(gap.id) === 'sending') return;
-    this.sonarrStatus.set(gap.id, 'sending');
-    this.sonarrErrors.delete(gap.id);
-    this.sonarrService.addSeries(gap.id, gap.name).subscribe({
-      next: () => this.sonarrStatus.set(gap.id, 'sent'),
-      error: (err) => {
-        this.sonarrStatus.set(gap.id, 'error');
-        this.sonarrErrors.set(gap.id, err.error?.error || 'Failed to add to Sonarr');
-      },
-    });
-  }
-
-  sonarrButtonLabel(id: number | undefined): string {
-    if (!id) return 'Send to Sonarr';
-    switch (this.sonarrStatus.get(id)) {
-      case 'sending': return 'Sending...';
-      case 'sent': return 'In Sonarr';
-      case 'error': return 'Retry';
-      default: return 'Send to Sonarr';
-    }
-  }
-
-  sonarrButtonClass(id: number | undefined): string {
-    if (!id) return 'btn-outline-primary';
-    switch (this.sonarrStatus.get(id)) {
+  downloaderButtonClass(id: number | undefined): string {
+    switch (this.downloaderStatusOf(id)) {
       case 'sent': return 'btn-success';
       case 'error': return 'btn-outline-danger';
       default: return 'btn-outline-primary';

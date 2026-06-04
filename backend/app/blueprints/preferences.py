@@ -3,6 +3,9 @@ from app.services import config_store
 
 preferences_bp = Blueprint('preferences', __name__)
 
+# Mirrored on the frontend by DEFAULT_PREFERENCES in
+# frontend/src/app/services/preferences.service.ts — keep the two in sync when
+# adding a preference.
 DEFAULTS = {
     'defaultLibrary': '',
     'moviesPerPage': 50,
@@ -14,6 +17,12 @@ DEFAULTS = {
     'posterPrefetch': False,
     'imageCacheEnabled': False,
     'mediaServerTimeout': 30,
+    # Quality filter — exclude low-tier movie gaps (issue #47). When enabled,
+    # already-released missing movies below either threshold are dropped from
+    # scan results. Unreleased titles are exempt (use hideFutureReleases for those).
+    'qualityFilterEnabled': False,
+    'minRating': 0.0,       # TMDB vote_average, 0–10
+    'minVoteCount': 0,      # TMDB vote_count (number of ratings)
 }
 
 

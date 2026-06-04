@@ -1,11 +1,7 @@
 import { Component, OnInit } from '@angular/core';
-import { forkJoin, of } from 'rxjs';
-import { catchError } from 'rxjs/operators';
 import { ScheduleService, ScheduleConfig } from '../../../services/schedule.service';
-import { PlexService } from '../../../services/plex.service';
-import { JellyfinService } from '../../../services/jellyfin.service';
-import { EmbyService } from '../../../services/emby.service';
-import { MediaLibrary, ActiveServerResponse } from '../../../models/media-server.model';
+import { ActiveServerService } from '../../../services/active-server.service';
+import { MediaLibrary } from '../../../models/media-server.model';
 
 type MediaType = 'movie' | 'tv';
 
@@ -25,14 +21,30 @@ export class ScheduleSettingsComponent implements OnInit {
   // Per-media-type form selections.
   moviePreset = '';
   movieLibrary = '';
+  movieTime = '04:00';
+  movieDayOfWeek = 'mon';
   tvPreset = '';
   tvLibrary = '';
+  tvTime = '04:00';
+  tvDayOfWeek = 'mon';
 
   saving: { movie: boolean; tv: boolean } = { movie: false, tv: false };
   message = '';
   messageType: 'success' | 'error' | '' = '';
 
   presetKeys: string[] = [];
+  days: { [key: string]: string } = {};
+  dayKeys: string[] = [];
+
+  /** Time-of-day applies to every frequency except hourly (which runs on the hour). */
+  showTime(preset: string): boolean {
+    return !!preset && preset !== 'hourly';
+  }
+
+  /** Day-of-week only applies to the weekly frequency. */
+  showDayOfWeek(preset: string): boolean {
+    return preset === 'weekly';
+  }
 
   get movieLibraries(): MediaLibrary[] {
     return this.libraries.filter(l => l.type === 'movie');
@@ -44,33 +56,15 @@ export class ScheduleSettingsComponent implements OnInit {
 
   constructor(
     private scheduleService: ScheduleService,
-    private plexService: PlexService,
-    private jellyfinService: JellyfinService,
-    private embyService: EmbyService,
+    private activeServerService: ActiveServerService,
   ) {}
 
   ngOnInit(): void {
-    forkJoin({
-      plex: this.plexService.getActiveServer().pipe(catchError(() => of(null))),
-      jellyfin: this.jellyfinService.getActiveServer().pipe(catchError(() => of(null))),
-      emby: this.embyService.getActiveServer().pipe(catchError(() => of(null))),
-    }).subscribe((servers) => {
-      let res: ActiveServerResponse | null = null;
-
-      if (servers.plex && (servers.plex as any).server) {
-        res = servers.plex as ActiveServerResponse;
-        this.activeSource = 'plex';
-      } else if (servers.jellyfin && (servers.jellyfin as any).server) {
-        res = servers.jellyfin as ActiveServerResponse;
-        this.activeSource = 'jellyfin';
-      } else if (servers.emby && (servers.emby as any).server) {
-        res = servers.emby as ActiveServerResponse;
-        this.activeSource = 'emby';
-      }
-
-      if (res && res.libraries) {
-        this.activeServerName = res.server;
-        this.libraries = res.libraries.filter(
+    this.activeServerService.getActive().subscribe((active) => {
+      if (active) {
+        this.activeSource = active.source;
+        this.activeServerName = active.server;
+        this.libraries = active.libraries.filter(
           (lib: MediaLibrary) => lib.type === 'movie' || lib.type === 'show' || lib.type === 'tvshows'
         );
       }
@@ -91,12 +85,27 @@ export class ScheduleSettingsComponent implements OnInit {
     this.schedule = config;
     this.moviePreset = config.movie?.preset || '';
     this.movieLibrary = config.movie?.library || '';
+    this.movieTime = this.formatTime(config.movie?.hour ?? 4, config.movie?.minute ?? 0);
+    this.movieDayOfWeek = config.movie?.dayOfWeek || 'mon';
     this.tvPreset = config.tv?.preset || '';
     this.tvLibrary = config.tv?.library || '';
+    this.tvTime = this.formatTime(config.tv?.hour ?? 4, config.tv?.minute ?? 0);
+    this.tvDayOfWeek = config.tv?.dayOfWeek || 'mon';
     if (config.source) {
       this.activeSource = config.source as any;
     }
     this.presetKeys = Object.keys(config.presets);
+    this.days = config.days || {};
+    this.dayKeys = Object.keys(this.days);
+  }
+
+  private formatTime(hour: number, minute: number): string {
+    return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+  }
+
+  private parseTime(value: string): [number, number] {
+    const [h, m] = (value || '04:00').split(':').map(n => parseInt(n, 10));
+    return [isNaN(h) ? 4 : h, isNaN(m) ? 0 : m];
   }
 
   save(type: MediaType): void {
@@ -106,9 +115,13 @@ export class ScheduleSettingsComponent implements OnInit {
       this.showMessage(`Select a frequency and library for the ${type === 'tv' ? 'TV' : 'movie'} schedule.`, 'error');
       return;
     }
+    const [hour, minute] = this.parseTime(type === 'tv' ? this.tvTime : this.movieTime);
+    const dayOfWeek = type === 'tv' ? this.tvDayOfWeek : this.movieDayOfWeek;
     this.saving[type] = true;
     this.clearMessage();
-    this.scheduleService.setSchedule(type, preset, library, this.activeSource).subscribe({
+    this.scheduleService.setSchedule({
+      mediaType: type, preset, library, source: this.activeSource, hour, minute, dayOfWeek,
+    }).subscribe({
       next: (config) => {
         this.applyConfig(config);
         this.showMessage(`${type === 'tv' ? 'TV' : 'Movie'} schedule saved.`, 'success');

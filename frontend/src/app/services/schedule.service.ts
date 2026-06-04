@@ -17,6 +17,10 @@ export interface ScheduleBlock {
   enabled: boolean;
   preset: string;
   library: string;
+  hour: number;
+  minute: number;
+  dayOfWeek: string;
+  description: string;   // human-readable, e.g. "Weekly on Wednesday at 6:00 AM"
   next_run: string | null;
 }
 
@@ -26,11 +30,23 @@ export interface ScheduleConfig {
   tv: ScheduleBlock;
   last_run: ScheduleLastRun | null;
   run_history: ScheduleLastRun[];
-  presets: { [key: string]: string };
+  presets: { [key: string]: string };  // frequency key → label (Hourly, Daily, …)
+  days: { [key: string]: string };     // day-of-week key → label (mon → Monday)
   // Convenience fields summarising both schedules (used by the dashboard).
   enabled: boolean;
   preset: string;
+  description: string;
   next_run: string | null;
+}
+
+export interface SetScheduleRequest {
+  mediaType: 'movie' | 'tv';
+  preset: string;
+  library: string;
+  source: string;
+  hour: number;
+  minute: number;
+  dayOfWeek: string;
 }
 
 @Injectable({
@@ -44,13 +60,8 @@ export class ScheduleService {
     return this.http.get<ScheduleConfig>(`${environment.apiUrl}/schedule`);
   }
 
-  setSchedule(
-    mediaType: 'movie' | 'tv', preset: string, library: string, source: string,
-  ): Observable<ScheduleConfig> {
-    return this.http.post<ScheduleConfig>(
-      `${environment.apiUrl}/schedule`,
-      { mediaType, preset, library, source },
-    );
+  setSchedule(req: SetScheduleRequest): Observable<ScheduleConfig> {
+    return this.http.post<ScheduleConfig>(`${environment.apiUrl}/schedule`, req);
   }
 
   disableSchedule(mediaType: 'movie' | 'tv'): Observable<ScheduleConfig> {

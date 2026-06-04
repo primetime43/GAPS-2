@@ -1,17 +1,13 @@
 from flask import Blueprint, jsonify, request, current_app
-from app.services import config_store
+from app.services.media_servers import media_service_for
+from app.blueprints import ignored_helpers
 
 recommendations_bp = Blueprint('recommendations', __name__)
 
 
 def _get_service(source: str):
     """Get the appropriate media server service."""
-    if source == 'jellyfin':
-        return current_app.jellyfin_service
-    elif source == 'emby':
-        return current_app.emby_service
-    else:
-        return current_app.plex_service
+    return media_service_for(current_app, source)
 
 
 def _get_movies_cache(source: str) -> dict:
@@ -143,41 +139,16 @@ def cancel_scan():
 @recommendations_bp.route('/ignored', methods=['GET'])
 def get_ignored():
     """Return the list of ignored TMDB IDs."""
-    ignored = config_store.get('ignored_movies', [])
-    return jsonify(ignored=ignored)
+    return ignored_helpers.get_ignored('ignored_movies')
 
 
 @recommendations_bp.route('/ignored', methods=['POST'])
 def add_ignored():
     """Add one or more movies to the ignored list."""
-    data = request.get_json() or {}
-    tmdb_id = data.get('tmdbId')
-    tmdb_ids = data.get('tmdbIds', [])
-    if not tmdb_id and not tmdb_ids:
-        return jsonify(error='tmdbId or tmdbIds is required'), 400
-    ignored = config_store.get('ignored_movies', [])
-    ids_to_add = tmdb_ids if tmdb_ids else [tmdb_id]
-    changed = False
-    for tid in ids_to_add:
-        if tid not in ignored:
-            ignored.append(tid)
-            changed = True
-    if changed:
-        config_store.put('ignored_movies', ignored)
-    return jsonify(result='ok')
+    return ignored_helpers.add_ignored('ignored_movies', 'tmdbId', 'tmdbIds')
 
 
 @recommendations_bp.route('/ignored', methods=['DELETE'])
 def remove_ignored():
     """Remove one or more movies from the ignored list."""
-    data = request.get_json() or {}
-    tmdb_id = data.get('tmdbId')
-    tmdb_ids = data.get('tmdbIds', [])
-    if not tmdb_id and not tmdb_ids:
-        return jsonify(error='tmdbId or tmdbIds is required'), 400
-    ignored = config_store.get('ignored_movies', [])
-    ids_to_remove = set(tmdb_ids if tmdb_ids else [tmdb_id])
-    new_ignored = [i for i in ignored if i not in ids_to_remove]
-    if len(new_ignored) != len(ignored):
-        config_store.put('ignored_movies', new_ignored)
-    return jsonify(result='ok')
+    return ignored_helpers.remove_ignored('ignored_movies', 'tmdbId', 'tmdbIds')

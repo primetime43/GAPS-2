@@ -1,6 +1,8 @@
 import logging
 from flask import Blueprint, jsonify, request, current_app
 from app.services import config_store
+from app.services.media_servers import media_service_for
+from app.blueprints import ignored_helpers
 
 logger = logging.getLogger(__name__)
 
@@ -11,11 +13,7 @@ _MASK = '••••••'
 
 def _get_service(source: str):
     """Get the appropriate media server service."""
-    if source == 'jellyfin':
-        return current_app.jellyfin_service
-    if source == 'emby':
-        return current_app.emby_service
-    return current_app.plex_service
+    return media_service_for(current_app, source)
 
 
 def _stored_secret(field: str) -> str:
@@ -170,40 +168,16 @@ def cancel_scan():
 @tvdb_bp.route('/ignored', methods=['GET'])
 def get_ignored():
     """Return the list of ignored TheTVDB series IDs."""
-    return jsonify(ignored=config_store.get('ignored_shows', []))
+    return ignored_helpers.get_ignored('ignored_shows')
 
 
 @tvdb_bp.route('/ignored', methods=['POST'])
 def add_ignored():
     """Add one or more shows to the ignored list."""
-    data = request.get_json() or {}
-    tvdb_id = data.get('tvdbId')
-    tvdb_ids = data.get('tvdbIds', [])
-    if not tvdb_id and not tvdb_ids:
-        return jsonify(error='tvdbId or tvdbIds is required'), 400
-    ignored = config_store.get('ignored_shows', [])
-    ids_to_add = tvdb_ids if tvdb_ids else [tvdb_id]
-    changed = False
-    for tid in ids_to_add:
-        if tid not in ignored:
-            ignored.append(tid)
-            changed = True
-    if changed:
-        config_store.put('ignored_shows', ignored)
-    return jsonify(result='ok')
+    return ignored_helpers.add_ignored('ignored_shows', 'tvdbId', 'tvdbIds')
 
 
 @tvdb_bp.route('/ignored', methods=['DELETE'])
 def remove_ignored():
     """Remove one or more shows from the ignored list."""
-    data = request.get_json() or {}
-    tvdb_id = data.get('tvdbId')
-    tvdb_ids = data.get('tvdbIds', [])
-    if not tvdb_id and not tvdb_ids:
-        return jsonify(error='tvdbId or tvdbIds is required'), 400
-    ignored = config_store.get('ignored_shows', [])
-    ids_to_remove = set(tvdb_ids if tvdb_ids else [tvdb_id])
-    new_ignored = [i for i in ignored if i not in ids_to_remove]
-    if len(new_ignored) != len(ignored):
-        config_store.put('ignored_shows', new_ignored)
-    return jsonify(result='ok')
+    return ignored_helpers.remove_ignored('ignored_shows', 'tvdbId', 'tvdbIds')

@@ -6,6 +6,8 @@ from collections import OrderedDict
 import requests as http_requests
 from flask import Blueprint, jsonify, request, current_app, Response
 
+from app.services.media_servers import media_service_for
+
 logger = logging.getLogger(__name__)
 
 libraries_bp = Blueprint('libraries', __name__)
@@ -41,12 +43,7 @@ def _cache_put(key: str, data: bytes, content_type: str) -> None:
 
 def _get_service(source: str):
     """Get the media server service by source name."""
-    if source == 'jellyfin':
-        return current_app.jellyfin_service
-    elif source == 'emby':
-        return current_app.emby_service
-    else:
-        return current_app.plex_service
+    return media_service_for(current_app, source)
 
 
 @libraries_bp.route('/movies', methods=['GET'])

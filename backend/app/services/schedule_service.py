@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from app.services import config_store, scan_history
+from app.services.media_servers import media_service_for
 
 logger = logging.getLogger(__name__)
 
@@ -11,17 +12,65 @@ HISTORY_KEY = 'schedule_run_history'
 LEGACY_LAST_RUN_KEY = 'schedule_last_run'  # 2.4.0 single-record format; migrated on first new write
 MAX_HISTORY = 50
 
-# Preset schedule options with cron expressions
-SCHEDULE_PRESETS = {
-    'hourly': {'trigger': CronTrigger(minute=0), 'label': 'Every hour'},
-    'daily': {'trigger': CronTrigger(hour=4, minute=0), 'label': 'Daily at 4:00 AM'},
-    'weekly': {'trigger': CronTrigger(day_of_week='mon', hour=4, minute=0), 'label': 'Weekly (Monday 4:00 AM)'},
-    'biweekly': {'trigger': CronTrigger(day='1,15', hour=4, minute=0), 'label': 'Bi-weekly (1st & 15th)'},
-    'monthly': {'trigger': CronTrigger(day=1, hour=4, minute=0), 'label': 'Monthly (1st)'},
+# Schedule frequencies. The time of day (hour/minute) and, for weekly, the day
+# of week are user-configurable — only the cadence is fixed per option.
+SCHEDULE_FREQUENCIES = {
+    'hourly': 'Hourly',
+    'daily': 'Daily',
+    'weekly': 'Weekly',
+    'biweekly': 'Bi-weekly (1st & 15th)',
+    'monthly': 'Monthly (1st)',
 }
+
+DAY_NAMES = {
+    'mon': 'Monday', 'tue': 'Tuesday', 'wed': 'Wednesday', 'thu': 'Thursday',
+    'fri': 'Friday', 'sat': 'Saturday', 'sun': 'Sunday',
+}
+
+DEFAULT_HOUR = 4
+DEFAULT_MINUTE = 0
+DEFAULT_DOW = 'mon'
 
 MOVIE_JOB_ID = 'scheduled_movie_scan'
 TV_JOB_ID = 'scheduled_tv_scan'
+
+
+def _build_trigger(preset: str, hour: int, minute: int, day_of_week: str):
+    """Build a CronTrigger for a frequency at the chosen time. Hourly ignores
+    the hour (runs every hour at the top); only weekly uses day_of_week."""
+    if preset == 'hourly':
+        return CronTrigger(minute=0)
+    if preset == 'daily':
+        return CronTrigger(hour=hour, minute=minute)
+    if preset == 'weekly':
+        return CronTrigger(day_of_week=day_of_week, hour=hour, minute=minute)
+    if preset == 'biweekly':
+        return CronTrigger(day='1,15', hour=hour, minute=minute)
+    if preset == 'monthly':
+        return CronTrigger(day=1, hour=hour, minute=minute)
+    return None
+
+
+def _format_time(hour: int, minute: int) -> str:
+    suffix = 'AM' if hour < 12 else 'PM'
+    h12 = hour % 12 or 12
+    return f"{h12}:{minute:02d} {suffix}"
+
+
+def _describe(preset: str, hour: int, minute: int, day_of_week: str) -> str:
+    """Human-readable description of a schedule, e.g. 'Weekly on Wednesday at 6:00 AM'."""
+    if preset == 'hourly':
+        return 'Hourly (on the hour)'
+    when = _format_time(hour, minute)
+    if preset == 'daily':
+        return f"Daily at {when}"
+    if preset == 'weekly':
+        return f"Weekly on {DAY_NAMES.get(day_of_week, 'Monday')} at {when}"
+    if preset == 'biweekly':
+        return f"Bi-weekly (1st & 15th) at {when}"
+    if preset == 'monthly':
+        return f"Monthly (1st) at {when}"
+    return SCHEDULE_FREQUENCIES.get(preset, '')
 
 
 class ScheduleService:
@@ -38,10 +87,10 @@ class ScheduleService:
         cfg = self._load_config()
         movie = cfg.get('movie', {})
         tv = cfg.get('tv', {})
-        if movie.get('enabled') and movie.get('preset') in SCHEDULE_PRESETS:
-            self._add_job(MOVIE_JOB_ID, movie['preset'], self._run_movie_scan_job)
-        if tv.get('enabled') and tv.get('preset') in SCHEDULE_PRESETS:
-            self._add_job(TV_JOB_ID, tv['preset'], self._run_tv_scan_job)
+        if movie.get('enabled') and movie.get('preset') in SCHEDULE_FREQUENCIES:
+            self._add_job(MOVIE_JOB_ID, movie, self._run_movie_scan_job)
+        if tv.get('enabled') and tv.get('preset') in SCHEDULE_FREQUENCIES:
+            self._add_job(TV_JOB_ID, tv, self._run_tv_scan_job)
 
     # -- Config (nested movie/tv shape, migrated from the old flat format) --
 
@@ -63,12 +112,7 @@ class ScheduleService:
         return migrated
 
     def _get_media_service(self, source: str):
-        if source == 'jellyfin':
-            return self._app.jellyfin_service
-        elif source == 'emby':
-            return self._app.emby_service
-        else:
-            return self._app.plex_service
+        return media_service_for(self._app, source)
 
     # -- Job wrappers --
 
@@ -134,6 +178,7 @@ class ScheduleService:
                 return
 
             missing = [g for g in (gaps or []) if not g.get('owned')]
+            missing = scan_history.actionable_missing('movie', missing)
             collections = len(set(g['collectionName'] for g in missing)) if missing else 0
             logger.info(
                 "Scheduled movie scan complete for '%s': %d missing across %d collections",
@@ -195,6 +240,7 @@ class ScheduleService:
                 logger.warning("Failed to persist last_tv_scan: %s", e)
 
             missing = [g for g in (gaps or []) if not g.get('owned')]
+            missing = scan_history.actionable_missing('tv', missing)
             franchises = len(set(g['franchiseName'] for g in missing)) if missing else 0
             logger.info(
                 "Scheduled TV scan complete for '%s': %d missing across %d franchises",
@@ -268,29 +314,54 @@ class ScheduleService:
 
     # -- Job management --
 
-    def _add_job(self, job_id: str, preset: str, func) -> None:
-        self._scheduler.add_job(
-            func,
-            trigger=SCHEDULE_PRESETS[preset]['trigger'],
-            id=job_id,
-            replace_existing=True,
+    def _add_job(self, job_id: str, block: dict, func) -> None:
+        trigger = _build_trigger(
+            block.get('preset', ''),
+            int(block.get('hour', DEFAULT_HOUR)),
+            int(block.get('minute', DEFAULT_MINUTE)),
+            block.get('dayOfWeek', DEFAULT_DOW),
         )
+        if trigger is None:
+            return
+        self._scheduler.add_job(func, trigger=trigger, id=job_id, replace_existing=True)
 
-    def set_schedule(self, media_type: str, preset: str, library: str, source: str = 'plex') -> bool:
-        """Enable a per-media-type schedule with its own cadence."""
-        if preset not in SCHEDULE_PRESETS:
+    def set_schedule(
+        self,
+        media_type: str,
+        preset: str,
+        library: str,
+        source: str = 'plex',
+        hour: int = DEFAULT_HOUR,
+        minute: int = DEFAULT_MINUTE,
+        day_of_week: str = DEFAULT_DOW,
+    ) -> bool:
+        """Enable a per-media-type schedule with its own cadence and time."""
+        if preset not in SCHEDULE_FREQUENCIES:
             return False
+        try:
+            hour = int(hour)
+            minute = int(minute)
+        except (TypeError, ValueError):
+            return False
+        if not (0 <= hour <= 23 and 0 <= minute <= 59):
+            return False
+        if day_of_week not in DAY_NAMES:
+            day_of_week = DEFAULT_DOW
+
         key = 'tv' if media_type == 'tv' else 'movie'
         cfg = self._load_config()
         cfg['source'] = source
         cfg.setdefault('movie', {})
         cfg.setdefault('tv', {})
-        cfg[key] = {'enabled': True, 'preset': preset, 'library': library}
+        cfg[key] = {
+            'enabled': True, 'preset': preset, 'library': library,
+            'hour': hour, 'minute': minute, 'dayOfWeek': day_of_week,
+        }
         config_store.put('schedule', cfg)
 
         job_id = TV_JOB_ID if key == 'tv' else MOVIE_JOB_ID
         func = self._run_tv_scan_job if key == 'tv' else self._run_movie_scan_job
-        self._add_job(job_id, preset, func)
+        self._add_job(job_id, cfg[key], func)
         return True
 
     def disable_schedule(self, media_type: str) -> None:
@@ -313,22 +384,13 @@ class ScheduleService:
         tv_job = self._scheduler.get_job(TV_JOB_ID)
         history = ScheduleService._load_history()
 
-        movie_block = {
-            'enabled': movie.get('enabled', False),
-            'preset': movie.get('preset', ''),
-            'library': movie.get('library', ''),
-            'next_run': str(movie_job.next_run_time) if movie_job else None,
-        }
-        tv_block = {
-            'enabled': tv.get('enabled', False),
-            'preset': tv.get('preset', ''),
-            'library': tv.get('library', ''),
-            'next_run': str(tv_job.next_run_time) if tv_job else None,
-        }
+        movie_block = self._block_view(movie, movie_job)
+        tv_block = self._block_view(tv, tv_job)
 
         # Earliest upcoming run across both, for the dashboard summary.
         next_runs = [b['next_run'] for b in (movie_block, tv_block) if b['next_run']]
         next_run = min(next_runs) if next_runs else None
+        active = movie_block if movie_block['enabled'] else tv_block
 
         return {
             'source': cfg.get('source', 'plex'),
@@ -336,9 +398,30 @@ class ScheduleService:
             'tv': tv_block,
             'last_run': history[0] if history else None,
             'run_history': history,
-            'presets': {k: v['label'] for k, v in SCHEDULE_PRESETS.items()},
+            'presets': dict(SCHEDULE_FREQUENCIES),
+            'days': dict(DAY_NAMES),
             # Convenience fields for the dashboard (either schedule active).
             'enabled': movie_block['enabled'] or tv_block['enabled'],
             'preset': movie_block['preset'] or tv_block['preset'],
+            'description': active['description'],
             'next_run': next_run,
+        }
+
+    @staticmethod
+    def _block_view(block: dict, job) -> dict:
+        """Shape a stored schedule block for the API, adding the resolved time
+        fields and a human-readable description."""
+        preset = block.get('preset', '')
+        hour = int(block.get('hour', DEFAULT_HOUR))
+        minute = int(block.get('minute', DEFAULT_MINUTE))
+        day_of_week = block.get('dayOfWeek', DEFAULT_DOW)
+        return {
+            'enabled': block.get('enabled', False),
+            'preset': preset,
+            'library': block.get('library', ''),
+            'hour': hour,
+            'minute': minute,
+            'dayOfWeek': day_of_week,
+            'description': _describe(preset, hour, minute, day_of_week) if preset else '',
+            'next_run': str(job.next_run_time) if job else None,
         }

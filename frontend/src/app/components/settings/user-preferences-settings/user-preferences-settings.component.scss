@@ -10,6 +10,61 @@
   }
 }
 
+/* Collapsible grouping headers that separate related preferences. */
+.pref-section {
+  margin-top: 28px;
+  margin-bottom: 12px;
+  padding: 4px 4px 6px;
+  border-bottom: 1px solid #3a3a3a;
+  cursor: pointer;
+  user-select: none;
+  border-radius: 6px 6px 0 0;
+  transition: background-color 0.15s ease;
+
+  /* First section sits right under the page heading — no extra gap needed. */
+  &:first-of-type {
+    margin-top: 0;
+  }
+
+  &:hover {
+    background-color: rgba(255, 255, 255, 0.03);
+  }
+
+  &:focus-visible {
+    outline: 2px solid #00bc8c;
+    outline-offset: 2px;
+  }
+}
+
+.pref-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.pref-section-title {
+  color: #00bc8c;
+  font-size: 17px;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.pref-section-chevron {
+  color: #00bc8c;
+  font-size: 14px;
+  transition: transform 0.2s ease;
+
+  &.collapsed {
+    transform: rotate(-90deg);
+  }
+}
+
+.pref-section-desc {
+  color: #888;
+  font-size: 13px;
+  margin-bottom: 0;
+}
+
 /* .dark-input and .dark-select are shared globally in src/styles.scss */
 
 .toggle-label {

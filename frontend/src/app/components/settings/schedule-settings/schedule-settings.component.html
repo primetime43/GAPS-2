@@ -29,7 +29,7 @@
         <h5 class="mb-2">Movies</h5>
         <div class="status-indicator mb-2">
           <span *ngIf="schedule?.movie?.enabled" class="status-ok">
-            ✓ Scheduled: {{ schedule?.presets?.[schedule?.movie?.preset ?? ''] }}
+            ✓ Scheduled: {{ schedule?.movie?.description }}
           </span>
           <span *ngIf="!schedule?.movie?.enabled" class="status-missing">✗ Not scheduled</span>
         </div>
@@ -51,6 +51,18 @@
             <option *ngFor="let key of presetKeys" [value]="key">{{ schedule?.presets?.[key] }}</option>
           </select>
         </div>
+        <div class="row g-2 mb-3" *ngIf="showTime(moviePreset) || showDayOfWeek(moviePreset)">
+          <div class="col-auto" *ngIf="showDayOfWeek(moviePreset)">
+            <label class="form-label">Day of week</label>
+            <select class="form-select dark-select" [(ngModel)]="movieDayOfWeek">
+              <option *ngFor="let key of dayKeys" [value]="key">{{ days[key] }}</option>
+            </select>
+          </div>
+          <div class="col-auto" *ngIf="showTime(moviePreset)">
+            <label class="form-label">Time</label>
+            <input type="time" class="form-control dark-input schedule-time" [(ngModel)]="movieTime">
+          </div>
+        </div>
         <div class="d-flex gap-2">
           <button class="btn btn-primary" (click)="save('movie')"
                   [disabled]="saving.movie || !moviePreset || !movieLibrary">
@@ -68,7 +80,7 @@
         <h5 class="mb-2">TV Shows</h5>
         <div class="status-indicator mb-2">
           <span *ngIf="schedule?.tv?.enabled" class="status-ok">
-            ✓ Scheduled: {{ schedule?.presets?.[schedule?.tv?.preset ?? ''] }}
+            ✓ Scheduled: {{ schedule?.tv?.description }}
           </span>
           <span *ngIf="!schedule?.tv?.enabled" class="status-missing">✗ Not scheduled</span>
         </div>
@@ -89,6 +101,18 @@
             <option value="" disabled hidden>Select frequency...</option>
             <option *ngFor="let key of presetKeys" [value]="key">{{ schedule?.presets?.[key] }}</option>
           </select>
+        </div>
+        <div class="row g-2 mb-3" *ngIf="showTime(tvPreset) || showDayOfWeek(tvPreset)">
+          <div class="col-auto" *ngIf="showDayOfWeek(tvPreset)">
+            <label class="form-label">Day of week</label>
+            <select class="form-select dark-select" [(ngModel)]="tvDayOfWeek">
+              <option *ngFor="let key of dayKeys" [value]="key">{{ days[key] }}</option>
+            </select>
+          </div>
+          <div class="col-auto" *ngIf="showTime(tvPreset)">
+            <label class="form-label">Time</label>
+            <input type="time" class="form-control dark-input schedule-time" [(ngModel)]="tvTime">
+          </div>
         </div>
         <div class="text-muted mb-2" style="font-size: 12px;">
           TV scans require <a [routerLink]="['/settings/tvdb']" class="activeLink">TheTVDB</a> to be configured.

@@ -15,15 +15,20 @@ def set_schedule():
     preset = data.get('preset', '')
     library = data.get('library', '')
     source = data.get('source', 'plex')
+    hour = data.get('hour', 4)
+    minute = data.get('minute', 0)
+    day_of_week = data.get('dayOfWeek', 'mon')
 
     if media_type not in ('movie', 'tv'):
         return jsonify(error='mediaType must be "movie" or "tv"'), 400
     if not preset or not library:
         return jsonify(error='preset and library are required'), 400
 
-    success = current_app.schedule_service.set_schedule(media_type, preset, library, source)
+    success = current_app.schedule_service.set_schedule(
+        media_type, preset, library, source, hour, minute, day_of_week,
+    )
     if not success:
-        return jsonify(error='Invalid preset'), 400
+        return jsonify(error='Invalid preset or time'), 400
 
     return jsonify(current_app.schedule_service.get_schedule())
 

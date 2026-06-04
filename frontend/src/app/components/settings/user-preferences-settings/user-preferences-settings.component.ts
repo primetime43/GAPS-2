@@ -1,11 +1,7 @@
 import { Component, OnInit } from '@angular/core';
-import { forkJoin, of } from 'rxjs';
-import { catchError } from 'rxjs/operators';
-import { PreferencesService, UserPreferences } from '../../../services/preferences.service';
-import { PlexService } from '../../../services/plex.service';
-import { JellyfinService } from '../../../services/jellyfin.service';
-import { EmbyService } from '../../../services/emby.service';
-import { MediaLibrary, ActiveServerResponse } from '../../../models/media-server.model';
+import { PreferencesService, UserPreferences, DEFAULT_PREFERENCES } from '../../../services/preferences.service';
+import { ActiveServerService } from '../../../services/active-server.service';
+import { MediaLibrary } from '../../../models/media-server.model';
 
 @Component({
     selector: 'app-user-preferences-settings',
@@ -14,18 +10,7 @@ import { MediaLibrary, ActiveServerResponse } from '../../../models/media-server
     standalone: false
 })
 export class UserPreferencesSettingsComponent implements OnInit {
-  prefs: UserPreferences = {
-    defaultLibrary: '',
-    moviesPerPage: 50,
-    hideOwnedByDefault: false,
-    hideFutureReleasesByDefault: false,
-    language: 'en',
-    port: 4277,
-    autoOpenBrowser: true,
-    posterPrefetch: false,
-    imageCacheEnabled: false,
-    mediaServerTimeout: 30,
-  };
+  prefs: UserPreferences = { ...DEFAULT_PREFERENCES };
 
   libraries: MediaLibrary[] = [];
   saving = false;
@@ -52,11 +37,44 @@ export class UserPreferencesSettingsComponent implements OnInit {
 
   pageSizeOptions = [25, 50, 100, 200];
 
+  // Collapsible preference sections; all expanded by default. Persisted to
+  // localStorage (pure UI state — not worth a round-trip to the backend prefs).
+  private static readonly COLLAPSED_KEY = 'gaps2.prefSectionsCollapsed';
+  collapsedSections: Record<string, boolean> = this.loadCollapsedSections();
+
+  toggleSection(key: string): void {
+    this.collapsedSections[key] = !this.collapsedSections[key];
+    this.saveCollapsedSections();
+  }
+
+  isCollapsed(key: string): boolean {
+    return !!this.collapsedSections[key];
+  }
+
+  private loadCollapsedSections(): Record<string, boolean> {
+    try {
+      const raw = localStorage.getItem(UserPreferencesSettingsComponent.COLLAPSED_KEY);
+      const parsed = raw ? JSON.parse(raw) : null;
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+
+  private saveCollapsedSections(): void {
+    try {
+      localStorage.setItem(
+        UserPreferencesSettingsComponent.COLLAPSED_KEY,
+        JSON.stringify(this.collapsedSections),
+      );
+    } catch {
+      // Ignore storage failures (private mode / quota) — collapse is non-critical.
+    }
+  }
+
   constructor(
     private preferencesService: PreferencesService,
-    private plexService: PlexService,
-    private jellyfinService: JellyfinService,
-    private embyService: EmbyService,
+    private activeServerService: ActiveServerService,
   ) {}
 
   ngOnInit(): void {
@@ -70,24 +88,10 @@ export class UserPreferencesSettingsComponent implements OnInit {
       }
     });
 
-    // Check all media servers for libraries
-    forkJoin({
-      plex: this.plexService.getActiveServer().pipe(catchError(() => of(null))),
-      jellyfin: this.jellyfinService.getActiveServer().pipe(catchError(() => of(null))),
-      emby: this.embyService.getActiveServer().pipe(catchError(() => of(null))),
-    }).subscribe((servers) => {
-      let res: ActiveServerResponse | null = null;
-
-      if (servers.plex && (servers.plex as any).server) {
-        res = servers.plex as ActiveServerResponse;
-      } else if (servers.jellyfin && (servers.jellyfin as any).server) {
-        res = servers.jellyfin as ActiveServerResponse;
-      } else if (servers.emby && (servers.emby as any).server) {
-        res = servers.emby as ActiveServerResponse;
-      }
-
-      if (res && res.libraries) {
-        this.libraries = res.libraries.filter((lib: MediaLibrary) => lib.type === 'movie');
+    // Check the active media server for movie libraries
+    this.activeServerService.getActive().subscribe((active) => {
+      if (active) {
+        this.libraries = active.libraries.filter((lib: MediaLibrary) => lib.type === 'movie');
       }
     });
   }
