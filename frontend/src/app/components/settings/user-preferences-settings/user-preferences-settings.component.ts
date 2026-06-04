@@ -25,6 +25,9 @@ export class UserPreferencesSettingsComponent implements OnInit {
     posterPrefetch: false,
     imageCacheEnabled: false,
     mediaServerTimeout: 30,
+    qualityFilterEnabled: false,
+    minRating: 0,
+    minVoteCount: 0,
   };
 
   libraries: MediaLibrary[] = [];

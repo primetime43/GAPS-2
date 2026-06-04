@@ -81,10 +81,12 @@ describe('RecommendedComponent', () => {
     tvdbService.getIgnored.and.returnValue(of([]));
     radarrService.getConfig.and.returnValue(of(null as any));
     sonarrService.getConfig.and.returnValue(of(null as any));
+    preferencesService.save.and.returnValue(of({} as any));
     preferencesService.load.and.returnValue(of({
       defaultLibrary: '', moviesPerPage: 50, hideOwnedByDefault: false,
       hideFutureReleasesByDefault: false, language: 'en', port: 4277, autoOpenBrowser: true,
       posterPrefetch: false, imageCacheEnabled: false, mediaServerTimeout: 30,
+      qualityFilterEnabled: false, minRating: 0, minVoteCount: 0,
     }));
 
     await TestBed.configureTestingModule({
@@ -159,6 +161,7 @@ describe('RecommendedComponent', () => {
       defaultLibrary: 'Movies', moviesPerPage: 25, hideOwnedByDefault: true,
       hideFutureReleasesByDefault: false, language: 'en', port: 4277, autoOpenBrowser: true,
       posterPrefetch: false, imageCacheEnabled: false, mediaServerTimeout: 30,
+      qualityFilterEnabled: false, minRating: 0, minVoteCount: 0,
     }));
     plexService.getActiveServer.and.returnValue(of({
       server: 'Plex', token: 'tok', libraries: [{ title: 'Movies', type: 'movie' }],
@@ -319,6 +322,27 @@ describe('RecommendedComponent', () => {
     component.scanLibrary(true);
     expect(component.showFreshScanConfirm).toBeTrue();
   });
+
+  it('movie scan should persist the quality filter before starting', fakeAsync(() => {
+    component.mediaType = 'movie';
+    component.activeSource = 'plex';
+    component.selectedLibrary = 'Movies';
+    component.selectedLibraries = ['Movies'];
+    component.qualityFilter = true;
+    component.minRating = 6.5;
+    component.minVoteCount = 200;
+
+    libraryService.getMovies.and.returnValue(of({ movies: [{ name: 'X', year: 2000, tmdbId: 1 }] } as any));
+    recommendationService.startScan.and.returnValue(of({ status: 'started', total: 1 } as any));
+
+    component.scanLibrary(false);
+    tick();
+
+    expect(preferencesService.save).toHaveBeenCalledWith(
+      jasmine.objectContaining({ qualityFilterEnabled: true, minRating: 6.5, minVoteCount: 200 })
+    );
+    expect(recommendationService.startScan).toHaveBeenCalled();
+  }));
 
   it('onFreshScanCancel should dismiss the confirmation', () => {
     component.showFreshScanConfirm = true;

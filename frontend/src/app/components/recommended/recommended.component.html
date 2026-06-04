@@ -97,6 +97,48 @@
           Fresh Scan
         </button>
       </div>
+
+      <!-- Quality filter (movies) — applied at scan time, so excluded gaps never appear -->
+      <div class="col-12 mt-3" *ngIf="mediaType === 'movie'">
+        <div class="pref-card p-3">
+          <div class="form-check">
+            <input
+              class="form-check-input"
+              type="checkbox"
+              id="qualityFilter"
+              [(ngModel)]="qualityFilter"
+              (ngModelChange)="onQualityFilterChange()"
+            >
+            <label class="form-check-label text-muted" for="qualityFilter">
+              Exclude low-rated movies from the scan
+            </label>
+          </div>
+          <div *ngIf="qualityFilter" class="quality-thresholds d-flex align-items-center flex-wrap gap-2 mt-2">
+            <span class="text-muted small">Exclude movies rated below</span>
+            <input
+              type="number"
+              class="form-control form-control-sm dark-input quality-input"
+              min="0" max="10" step="0.1"
+              [(ngModel)]="minRating"
+              (change)="onQualityFilterChange()"
+              title="TMDB rating, 0–10. Set to 0 to ignore rating."
+            >
+            <span class="text-muted small">or with fewer than</span>
+            <input
+              type="number"
+              class="form-control form-control-sm dark-input quality-input"
+              min="0" step="10"
+              [(ngModel)]="minVoteCount"
+              (change)="onQualityFilterChange()"
+              title="Number of TMDB votes. Set to 0 to ignore vote count."
+            >
+            <span class="text-muted small">votes</span>
+          </div>
+          <p class="text-muted small mb-0 mt-2">
+            Applies to this scan and scheduled scans. Only affects already-released movies — unreleased titles are kept.
+          </p>
+        </div>
+      </div>
     </div>
 
     <!-- Loading items -->

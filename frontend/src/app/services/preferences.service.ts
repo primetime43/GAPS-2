@@ -14,6 +14,9 @@ export interface UserPreferences {
   posterPrefetch: boolean;
   imageCacheEnabled: boolean;
   mediaServerTimeout: number;
+  qualityFilterEnabled: boolean;
+  minRating: number;
+  minVoteCount: number;
 }
 
 @Injectable({

@@ -57,6 +57,12 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   itemFilter = '';
   showOwned = false;
   hideFutureReleases = false;
+  // Quality filter (movies only) — exclude low-tier gaps by TMDB rating / vote
+  // count. Set before scanning; applied server-side so the gaps are excluded
+  // from the scan (and from scheduled scans, which share the same setting).
+  qualityFilter = false;
+  minRating = 0;
+  minVoteCount = 0;
   itemsPerPage = 50;
   currentPage = 1;
   searchFilter = '';
@@ -204,6 +210,9 @@ export class RecommendedComponent implements OnInit, OnDestroy {
         this.showOwned = !prefs.hideOwnedByDefault;
         this.hideFutureReleases = prefs.hideFutureReleasesByDefault || false;
         this.posterPrefetch = prefs.posterPrefetch || false;
+        this.qualityFilter = prefs.qualityFilterEnabled || false;
+        this.minRating = prefs.minRating || 0;
+        this.minVoteCount = prefs.minVoteCount || 0;
       }
       this.detectActiveServer(prefs, autoSelectLibrary);
     });
@@ -432,24 +441,29 @@ export class RecommendedComponent implements OnInit, OnDestroy {
       return;
     }
 
-    // Movies: pre-load movies for all selected libraries so the backend has them cached.
-    const loadRequests = scanLibraries.map(lib =>
-      this.libraryService.getMovies(lib, this.activeSource).pipe(catchError(() => of({ movies: [] })))
-    );
-    forkJoin(loadRequests).subscribe({
-      next: () => {
-        this.recommendationService.startScan(scanLibraries, true, freshScan, this.activeSource).subscribe({
-          next: () => this.startPolling(scanLibraries),
-          error: (err) => {
-            this.errorMessage = err.error?.error || 'Failed to start scan.';
-            this.loadingGaps = false;
-          }
-        });
-      },
-      error: () => {
-        this.errorMessage = 'Failed to load movies from selected libraries.';
-        this.loadingGaps = false;
-      }
+    // Persist the quality filter first so the backend (which filters at scan
+    // time) excludes low-tier movies from this scan. Proceed even if the save
+    // fails — the scan should still run.
+    this.saveQualityPrefs().pipe(catchError(() => of(null))).subscribe(() => {
+      // Movies: pre-load movies for all selected libraries so the backend has them cached.
+      const loadRequests = scanLibraries.map(lib =>
+        this.libraryService.getMovies(lib, this.activeSource).pipe(catchError(() => of({ movies: [] })))
+      );
+      forkJoin(loadRequests).subscribe({
+        next: () => {
+          this.recommendationService.startScan(scanLibraries, true, freshScan, this.activeSource).subscribe({
+            next: () => this.startPolling(scanLibraries),
+            error: (err) => {
+              this.errorMessage = err.error?.error || 'Failed to start scan.';
+              this.loadingGaps = false;
+            }
+          });
+        },
+        error: () => {
+          this.errorMessage = 'Failed to load movies from selected libraries.';
+          this.loadingGaps = false;
+        }
+      });
     });
   }
 
@@ -647,6 +661,24 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   onShowOwnedChange(): void { this.applyFilter(); }
   onHideFutureReleasesChange(): void { this.applyFilter(); }
   onShowIgnoredChange(): void { this.applyFilter(); }
+
+  /**
+   * Persist the quality-filter settings. This is a scan-time filter applied
+   * server-side, so saving it (which reloads the TMDB service) makes the next
+   * scan — manual or scheduled — exclude low-tier movies. Fire-and-forget on
+   * change so scheduled scans honor it even without a manual scan.
+   */
+  private saveQualityPrefs() {
+    return this.preferencesService.save({
+      qualityFilterEnabled: this.qualityFilter,
+      minRating: this.minRating || 0,
+      minVoteCount: this.minVoteCount || 0,
+    });
+  }
+
+  onQualityFilterChange(): void {
+    this.saveQualityPrefs().subscribe({ next: () => {}, error: () => {} });
+  }
 
   isFutureRelease(gap: Gap): boolean {
     const today = new Date().toISOString().slice(0, 10);

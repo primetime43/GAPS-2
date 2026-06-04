@@ -21,7 +21,13 @@ class TmdbService:
         self._base_url = base_url
         self._image_base_url = image_base_url
         self._api_key: str | None = config_store.get('tmdb_api_key')
-        self._language: str = config_store.get('preferences', {}).get('language', 'en')
+        # Preference-derived scan settings (language + quality filter). Loaded
+        # here and refreshed via reload_preferences() when the user saves.
+        self._language: str = 'en'
+        self._quality_filter_enabled: bool = False
+        self._min_rating: float = 0.0
+        self._min_vote_count: int = 0
+        self._apply_preferences()
 
         # In-memory caches to avoid redundant TMDB API calls
         self._id_cache: dict[str, int | None] = {}
@@ -81,8 +87,48 @@ class TmdbService:
         return self._api_key
 
     def reload_preferences(self) -> None:
-        """Reload language preference from config store."""
-        self._language = config_store.get('preferences', {}).get('language', 'en')
+        """Reload preference-derived scan settings from the config store."""
+        self._apply_preferences()
+
+    def _apply_preferences(self) -> None:
+        prefs = config_store.get('preferences', {})
+        self._language = prefs.get('language', 'en')
+        self._quality_filter_enabled = bool(prefs.get('qualityFilterEnabled', False))
+        try:
+            self._min_rating = float(prefs.get('minRating', 0) or 0)
+        except (TypeError, ValueError):
+            self._min_rating = 0.0
+        try:
+            self._min_vote_count = int(prefs.get('minVoteCount', 0) or 0)
+        except (TypeError, ValueError):
+            self._min_vote_count = 0
+
+    @staticmethod
+    def _is_released(release_date: str) -> bool:
+        """True if the movie has a release date on or before today.
+
+        The quality filter only applies to released titles — unreleased
+        movies have no meaningful vote_average/vote_count yet, and filtering
+        them here would duplicate (and fight with) the future-release toggle.
+        """
+        if not release_date or len(release_date) < 10:
+            return False
+        today = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+        return release_date[:10] <= today
+
+    def _passes_quality_filter(self, part: dict) -> bool:
+        """Whether a missing movie clears the configured rating/vote thresholds."""
+        if not self._quality_filter_enabled:
+            return True
+        if not self._is_released(part.get("release_date") or ""):
+            return True
+        vote_average = part.get("vote_average") or 0
+        vote_count = part.get("vote_count") or 0
+        if self._min_rating and vote_average < self._min_rating:
+            return False
+        if self._min_vote_count and vote_count < self._min_vote_count:
+            return False
+        return True
 
     def clear_cache(self) -> None:
         """Clear all TMDB response caches for a fresh scan."""
@@ -332,6 +378,11 @@ class TmdbService:
             part_id = part["id"]
             is_owned = part_id in owned_tmdb_ids
             if not show_existing and is_owned:
+                continue
+            # Drop low-tier missing movies at scan time (issue #47) so they're
+            # excluded from the results — and from scheduled scans, which share
+            # this path. Owned titles are never filtered; the user already has them.
+            if not is_owned and not self._passes_quality_filter(part):
                 continue
             poster = part.get("poster_path")
             release_date = part.get("release_date") or ""
