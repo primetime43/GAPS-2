@@ -1,11 +1,7 @@
 import { Component, OnInit } from '@angular/core';
-import { forkJoin, of } from 'rxjs';
-import { catchError } from 'rxjs/operators';
 import { PreferencesService, UserPreferences } from '../../../services/preferences.service';
-import { PlexService } from '../../../services/plex.service';
-import { JellyfinService } from '../../../services/jellyfin.service';
-import { EmbyService } from '../../../services/emby.service';
-import { MediaLibrary, ActiveServerResponse } from '../../../models/media-server.model';
+import { ActiveServerService } from '../../../services/active-server.service';
+import { MediaLibrary } from '../../../models/media-server.model';
 
 @Component({
     selector: 'app-user-preferences-settings',
@@ -57,9 +53,7 @@ export class UserPreferencesSettingsComponent implements OnInit {
 
   constructor(
     private preferencesService: PreferencesService,
-    private plexService: PlexService,
-    private jellyfinService: JellyfinService,
-    private embyService: EmbyService,
+    private activeServerService: ActiveServerService,
   ) {}
 
   ngOnInit(): void {
@@ -73,24 +67,10 @@ export class UserPreferencesSettingsComponent implements OnInit {
       }
     });
 
-    // Check all media servers for libraries
-    forkJoin({
-      plex: this.plexService.getActiveServer().pipe(catchError(() => of(null))),
-      jellyfin: this.jellyfinService.getActiveServer().pipe(catchError(() => of(null))),
-      emby: this.embyService.getActiveServer().pipe(catchError(() => of(null))),
-    }).subscribe((servers) => {
-      let res: ActiveServerResponse | null = null;
-
-      if (servers.plex && (servers.plex as any).server) {
-        res = servers.plex as ActiveServerResponse;
-      } else if (servers.jellyfin && (servers.jellyfin as any).server) {
-        res = servers.jellyfin as ActiveServerResponse;
-      } else if (servers.emby && (servers.emby as any).server) {
-        res = servers.emby as ActiveServerResponse;
-      }
-
-      if (res && res.libraries) {
-        this.libraries = res.libraries.filter((lib: MediaLibrary) => lib.type === 'movie');
+    // Check the active media server for movie libraries
+    this.activeServerService.getActive().subscribe((active) => {
+      if (active) {
+        this.libraries = active.libraries.filter((lib: MediaLibrary) => lib.type === 'movie');
       }
     });
   }

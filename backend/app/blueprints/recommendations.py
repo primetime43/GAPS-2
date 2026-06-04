@@ -1,17 +1,13 @@
 from flask import Blueprint, jsonify, request, current_app
 from app.services import config_store
+from app.services.media_servers import media_service_for
 
 recommendations_bp = Blueprint('recommendations', __name__)
 
 
 def _get_service(source: str):
     """Get the appropriate media server service."""
-    if source == 'jellyfin':
-        return current_app.jellyfin_service
-    elif source == 'emby':
-        return current_app.emby_service
-    else:
-        return current_app.plex_service
+    return media_service_for(current_app, source)
 
 
 def _get_movies_cache(source: str) -> dict:

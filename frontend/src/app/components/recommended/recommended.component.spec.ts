@@ -5,9 +5,8 @@ import { FormsModule } from '@angular/forms';
 import { Component, Input, Output, EventEmitter } from '@angular/core';
 import { of } from 'rxjs';
 import { RecommendedComponent } from './recommended.component';
-import { PlexService } from '../../services/plex.service';
-import { JellyfinService } from '../../services/jellyfin.service';
-import { EmbyService } from '../../services/emby.service';
+import { ActiveServerService, ActiveServer, MediaServerSource } from '../../services/active-server.service';
+import { MediaLibrary } from '../../models/media-server.model';
 import { LibraryService } from '../../services/library.service';
 import { RecommendationService } from '../../services/recommendation.service';
 import { TvdbService } from '../../services/tvdb.service';
@@ -36,13 +35,16 @@ function gap(p: Partial<Gap>): Gap {
   };
 }
 
+function activeServer(source: MediaServerSource, server: string, libraries: MediaLibrary[]): ActiveServer {
+  const typeLabel = ({ plex: 'Plex', jellyfin: 'Jellyfin', emby: 'Emby' } as const)[source];
+  return { source, typeLabel, server, libraries, response: { server, token: '', libraries } };
+}
+
 describe('RecommendedComponent', () => {
   let component: RecommendedComponent;
   let fixture: ComponentFixture<RecommendedComponent>;
 
-  let plexService: jasmine.SpyObj<PlexService>;
-  let jellyfinService: jasmine.SpyObj<JellyfinService>;
-  let embyService: jasmine.SpyObj<EmbyService>;
+  let activeServerService: jasmine.SpyObj<ActiveServerService>;
   let libraryService: jasmine.SpyObj<LibraryService>;
   let recommendationService: jasmine.SpyObj<RecommendationService>;
   let tvdbService: jasmine.SpyObj<TvdbService>;
@@ -52,9 +54,7 @@ describe('RecommendedComponent', () => {
   let sonarrService: jasmine.SpyObj<SonarrService>;
 
   beforeEach(async () => {
-    plexService = jasmine.createSpyObj('PlexService', ['getActiveServer']);
-    jellyfinService = jasmine.createSpyObj('JellyfinService', ['getActiveServer']);
-    embyService = jasmine.createSpyObj('EmbyService', ['getActiveServer']);
+    activeServerService = jasmine.createSpyObj('ActiveServerService', ['getActive']);
     libraryService = jasmine.createSpyObj('LibraryService', ['getMovies', 'getShows']);
     recommendationService = jasmine.createSpyObj('RecommendationService', [
       'getGapsForMovie', 'startScan', 'getScanProgress', 'cancelScan', 'getIgnored',
@@ -69,9 +69,7 @@ describe('RecommendedComponent', () => {
     radarrService = jasmine.createSpyObj('RadarrService', ['getConfig', 'getLibraryTmdbIds', 'addMovie']);
     sonarrService = jasmine.createSpyObj('SonarrService', ['getConfig', 'getLibraryTvdbIds', 'addSeries']);
 
-    plexService.getActiveServer.and.returnValue(of({} as any));
-    jellyfinService.getActiveServer.and.returnValue(of({} as any));
-    embyService.getActiveServer.and.returnValue(of({} as any));
+    activeServerService.getActive.and.returnValue(of(null));
     recommendationService.getIgnored.and.returnValue(of([]));
     recommendationService.getScanProgress.and.returnValue(of({
       status: 'idle', processed: 0, total: 0, current_movie: '', collections_found: 0,
@@ -93,9 +91,7 @@ describe('RecommendedComponent', () => {
       imports: [HttpClientTestingModule, FormsModule, RouterTestingModule],
       declarations: [RecommendedComponent, MockConfirmModalComponent],
       providers: [
-        { provide: PlexService, useValue: plexService },
-        { provide: JellyfinService, useValue: jellyfinService },
-        { provide: EmbyService, useValue: embyService },
+        { provide: ActiveServerService, useValue: activeServerService },
         { provide: LibraryService, useValue: libraryService },
         { provide: RecommendationService, useValue: recommendationService },
         { provide: TvdbService, useValue: tvdbService },
@@ -115,10 +111,8 @@ describe('RecommendedComponent', () => {
   });
 
   it('should detect Plex as active source and load movie libraries', fakeAsync(() => {
-    plexService.getActiveServer.and.returnValue(of({
-      server: 'My Plex', token: 'tok',
-      libraries: [{ title: 'Movies', type: 'movie' }, { title: 'TV', type: 'show' }],
-    }));
+    activeServerService.getActive.and.returnValue(of(activeServer('plex', 'My Plex',
+      [{ title: 'Movies', type: 'movie' }, { title: 'TV', type: 'show' }])));
     fixture.detectChanges();
     tick();
 
@@ -132,10 +126,8 @@ describe('RecommendedComponent', () => {
   }));
 
   it('should show TV libraries after switching media type', fakeAsync(() => {
-    plexService.getActiveServer.and.returnValue(of({
-      server: 'My Plex', token: 'tok',
-      libraries: [{ title: 'Movies', type: 'movie' }, { title: 'TV', type: 'show' }],
-    }));
+    activeServerService.getActive.and.returnValue(of(activeServer('plex', 'My Plex',
+      [{ title: 'Movies', type: 'movie' }, { title: 'TV', type: 'show' }])));
     fixture.detectChanges();
     tick();
 
@@ -146,9 +138,8 @@ describe('RecommendedComponent', () => {
   }));
 
   it('should detect Emby when Plex is not connected', fakeAsync(() => {
-    embyService.getActiveServer.and.returnValue(of({
-      server: 'My Emby', token: '', libraries: [{ title: 'Films', type: 'movie' }],
-    }));
+    activeServerService.getActive.and.returnValue(of(activeServer('emby', 'My Emby',
+      [{ title: 'Films', type: 'movie' }])));
     fixture.detectChanges();
     tick();
 
@@ -163,9 +154,8 @@ describe('RecommendedComponent', () => {
       posterPrefetch: false, imageCacheEnabled: false, mediaServerTimeout: 30,
       qualityFilterEnabled: false, minRating: 0, minVoteCount: 0,
     }));
-    plexService.getActiveServer.and.returnValue(of({
-      server: 'Plex', token: 'tok', libraries: [{ title: 'Movies', type: 'movie' }],
-    }));
+    activeServerService.getActive.and.returnValue(of(activeServer('plex', 'Plex',
+      [{ title: 'Movies', type: 'movie' }])));
     libraryService.getMovies.and.returnValue(of({ movies: [] }));
     fixture.detectChanges();
     tick();
@@ -176,9 +166,8 @@ describe('RecommendedComponent', () => {
   }));
 
   it('should load items when a library is selected', fakeAsync(() => {
-    plexService.getActiveServer.and.returnValue(of({
-      server: 'Plex', token: 'tok', libraries: [{ title: 'Movies', type: 'movie' }],
-    }));
+    activeServerService.getActive.and.returnValue(of(activeServer('plex', 'Plex',
+      [{ title: 'Movies', type: 'movie' }])));
     fixture.detectChanges();
     tick();
 

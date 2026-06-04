@@ -1,11 +1,7 @@
 import { Component, OnInit } from '@angular/core';
-import { forkJoin, of } from 'rxjs';
-import { catchError } from 'rxjs/operators';
 import { ScheduleService, ScheduleConfig } from '../../../services/schedule.service';
-import { PlexService } from '../../../services/plex.service';
-import { JellyfinService } from '../../../services/jellyfin.service';
-import { EmbyService } from '../../../services/emby.service';
-import { MediaLibrary, ActiveServerResponse } from '../../../models/media-server.model';
+import { ActiveServerService } from '../../../services/active-server.service';
+import { MediaLibrary } from '../../../models/media-server.model';
 
 type MediaType = 'movie' | 'tv';
 
@@ -44,33 +40,15 @@ export class ScheduleSettingsComponent implements OnInit {
 
   constructor(
     private scheduleService: ScheduleService,
-    private plexService: PlexService,
-    private jellyfinService: JellyfinService,
-    private embyService: EmbyService,
+    private activeServerService: ActiveServerService,
   ) {}
 
   ngOnInit(): void {
-    forkJoin({
-      plex: this.plexService.getActiveServer().pipe(catchError(() => of(null))),
-      jellyfin: this.jellyfinService.getActiveServer().pipe(catchError(() => of(null))),
-      emby: this.embyService.getActiveServer().pipe(catchError(() => of(null))),
-    }).subscribe((servers) => {
-      let res: ActiveServerResponse | null = null;
-
-      if (servers.plex && (servers.plex as any).server) {
-        res = servers.plex as ActiveServerResponse;
-        this.activeSource = 'plex';
-      } else if (servers.jellyfin && (servers.jellyfin as any).server) {
-        res = servers.jellyfin as ActiveServerResponse;
-        this.activeSource = 'jellyfin';
-      } else if (servers.emby && (servers.emby as any).server) {
-        res = servers.emby as ActiveServerResponse;
-        this.activeSource = 'emby';
-      }
-
-      if (res && res.libraries) {
-        this.activeServerName = res.server;
-        this.libraries = res.libraries.filter(
+    this.activeServerService.getActive().subscribe((active) => {
+      if (active) {
+        this.activeSource = active.source;
+        this.activeServerName = active.server;
+        this.libraries = active.libraries.filter(
           (lib: MediaLibrary) => lib.type === 'movie' || lib.type === 'show' || lib.type === 'tvshows'
         );
       }

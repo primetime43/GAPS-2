@@ -3,14 +3,12 @@ import { NavigationEnd, Router } from '@angular/router';
 import { forkJoin, Observable, Subject, Subscription, timer } from 'rxjs';
 import { catchError, filter, skip, switchMap, takeUntil } from 'rxjs/operators';
 import { of } from 'rxjs';
-import { PlexService } from '../../services/plex.service';
-import { JellyfinService } from '../../services/jellyfin.service';
-import { EmbyService } from '../../services/emby.service';
+import { ActiveServerService } from '../../services/active-server.service';
 import { LibraryService } from '../../services/library.service';
 import { RecommendationService } from '../../services/recommendation.service';
 import { TvdbService } from '../../services/tvdb.service';
 import { Gap } from '../../models/recommendation.model';
-import { ActiveServerResponse, MediaLibrary } from '../../models/media-server.model';
+import { MediaLibrary } from '../../models/media-server.model';
 import { PreferencesService } from '../../services/preferences.service';
 import { ExportService, ExportFormat } from '../../services/export.service';
 import { RadarrService } from '../../services/radarr.service';
@@ -127,9 +125,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   private destroy$ = new Subject<void>();
 
   constructor(
-    private plexService: PlexService,
-    private jellyfinService: JellyfinService,
-    private embyService: EmbyService,
+    private activeServerService: ActiveServerService,
     private libraryService: LibraryService,
     private recommendationService: RecommendationService,
     private tvdb: TvdbService,
@@ -226,30 +222,12 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   private allServerLibraries: MediaLibrary[] = [];
 
   private detectActiveServer(prefs: any, autoSelectLibrary: boolean): void {
-    forkJoin({
-      plex: this.plexService.getActiveServer().pipe(catchError(() => of(null))),
-      jellyfin: this.jellyfinService.getActiveServer().pipe(catchError(() => of(null))),
-      emby: this.embyService.getActiveServer().pipe(catchError(() => of(null))),
-    }).subscribe((servers) => {
-      let res: ActiveServerResponse | null = null;
-      let source: 'plex' | 'jellyfin' | 'emby' = this.activeSource;
-
-      if (servers.plex && (servers.plex as any).server) {
-        res = servers.plex as ActiveServerResponse;
-        source = 'plex';
-      } else if (servers.jellyfin && (servers.jellyfin as any).server) {
-        res = servers.jellyfin as ActiveServerResponse;
-        source = 'jellyfin';
-      } else if (servers.emby && (servers.emby as any).server) {
-        res = servers.emby as ActiveServerResponse;
-        source = 'emby';
-      }
-
-      if (res && res.server) {
+    this.activeServerService.getActive().subscribe((active) => {
+      if (active) {
         this.hasServer = true;
-        this.activeSource = source;
-        this.activeServerName = res.server;
-        this.allServerLibraries = Array.isArray(res.libraries) ? res.libraries : [];
+        this.activeSource = active.source;
+        this.activeServerName = active.server;
+        this.allServerLibraries = active.libraries;
         this.applyLibraryFilter();
         this.finishInitialization(prefs, autoSelectLibrary);
       } else {

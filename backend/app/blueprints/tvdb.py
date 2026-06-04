@@ -1,6 +1,7 @@
 import logging
 from flask import Blueprint, jsonify, request, current_app
 from app.services import config_store
+from app.services.media_servers import media_service_for
 
 logger = logging.getLogger(__name__)
 
@@ -11,11 +12,7 @@ _MASK = '••••••'
 
 def _get_service(source: str):
     """Get the appropriate media server service."""
-    if source == 'jellyfin':
-        return current_app.jellyfin_service
-    if source == 'emby':
-        return current_app.emby_service
-    return current_app.plex_service
+    return media_service_for(current_app, source)
 
 
 def _stored_secret(field: str) -> str:

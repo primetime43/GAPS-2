@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from app.services import config_store, scan_history
+from app.services.media_servers import media_service_for
 
 logger = logging.getLogger(__name__)
 
@@ -63,12 +64,7 @@ class ScheduleService:
         return migrated
 
     def _get_media_service(self, source: str):
-        if source == 'jellyfin':
-            return self._app.jellyfin_service
-        elif source == 'emby':
-            return self._app.emby_service
-        else:
-            return self._app.plex_service
+        return media_service_for(self._app, source)
 
     # -- Job wrappers --
 

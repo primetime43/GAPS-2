@@ -1,11 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
-import { forkJoin, of } from 'rxjs';
-import { catchError } from 'rxjs/operators';
 import { TmdbService } from '../services/tmdb/tmdb.service';
-import { PlexService } from '../services/plex.service';
-import { JellyfinService } from '../services/jellyfin.service';
-import { EmbyService } from '../services/emby.service';
+import { ActiveServerService } from '../services/active-server.service';
 import { ScheduleService, ScheduleConfig, ScheduleLastRun } from '../services/schedule.service';
 import { ScanHistoryEntry, ScanHistoryService } from '../services/scan-history.service';
 
@@ -32,9 +28,7 @@ export class IndexComponent implements OnInit {
 
   constructor(
     private tmdbService: TmdbService,
-    private plexService: PlexService,
-    private jellyfinService: JellyfinService,
-    private embyService: EmbyService,
+    private activeServerService: ActiveServerService,
     private scheduleService: ScheduleService,
     private scanHistoryService: ScanHistoryService,
     private router: Router,
@@ -46,23 +40,11 @@ export class IndexComponent implements OnInit {
       error: () => {}
     });
 
-    forkJoin({
-      plex: this.plexService.getActiveServer().pipe(catchError(() => of(null))),
-      jellyfin: this.jellyfinService.getActiveServer().pipe(catchError(() => of(null))),
-      emby: this.embyService.getActiveServer().pipe(catchError(() => of(null))),
-    }).subscribe((servers) => {
-      if (servers.plex && (servers.plex as any).server) {
+    this.activeServerService.getActive().subscribe((active) => {
+      if (active) {
         this.mediaServerConnected = true;
-        this.mediaServerName = (servers.plex as any).server;
-        this.mediaServerType = 'Plex';
-      } else if (servers.jellyfin && (servers.jellyfin as any).server) {
-        this.mediaServerConnected = true;
-        this.mediaServerName = (servers.jellyfin as any).server;
-        this.mediaServerType = 'Jellyfin';
-      } else if (servers.emby && (servers.emby as any).server) {
-        this.mediaServerConnected = true;
-        this.mediaServerName = (servers.emby as any).server;
-        this.mediaServerType = 'Emby';
+        this.mediaServerName = active.server;
+        this.mediaServerType = active.typeLabel;
       }
       this.loading = false;
     });
