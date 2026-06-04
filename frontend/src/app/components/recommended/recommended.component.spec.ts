@@ -10,7 +10,7 @@ import { MediaLibrary } from '../../models/media-server.model';
 import { LibraryService } from '../../services/library.service';
 import { RecommendationService } from '../../services/recommendation.service';
 import { TvdbService } from '../../services/tvdb.service';
-import { PreferencesService } from '../../services/preferences.service';
+import { PreferencesService, DEFAULT_PREFERENCES } from '../../services/preferences.service';
 import { ExportService } from '../../services/export.service';
 import { RadarrService } from '../../services/radarr.service';
 import { SonarrService } from '../../services/sonarr.service';
@@ -80,12 +80,7 @@ describe('RecommendedComponent', () => {
     radarrService.getConfig.and.returnValue(of(null as any));
     sonarrService.getConfig.and.returnValue(of(null as any));
     preferencesService.save.and.returnValue(of({} as any));
-    preferencesService.load.and.returnValue(of({
-      defaultLibrary: '', moviesPerPage: 50, hideOwnedByDefault: false,
-      hideFutureReleasesByDefault: false, language: 'en', port: 4277, autoOpenBrowser: true,
-      posterPrefetch: false, imageCacheEnabled: false, mediaServerTimeout: 30,
-      qualityFilterEnabled: false, minRating: 0, minVoteCount: 0,
-    }));
+    preferencesService.load.and.returnValue(of({ ...DEFAULT_PREFERENCES }));
 
     await TestBed.configureTestingModule({
       imports: [HttpClientTestingModule, FormsModule, RouterTestingModule],
@@ -149,10 +144,7 @@ describe('RecommendedComponent', () => {
 
   it('should auto-select default library from preferences', fakeAsync(() => {
     preferencesService.load.and.returnValue(of({
-      defaultLibrary: 'Movies', moviesPerPage: 25, hideOwnedByDefault: true,
-      hideFutureReleasesByDefault: false, language: 'en', port: 4277, autoOpenBrowser: true,
-      posterPrefetch: false, imageCacheEnabled: false, mediaServerTimeout: 30,
-      qualityFilterEnabled: false, minRating: 0, minVoteCount: 0,
+      ...DEFAULT_PREFERENCES, defaultLibrary: 'Movies', moviesPerPage: 25, hideOwnedByDefault: true,
     }));
     activeServerService.getActive.and.returnValue(of(activeServer('plex', 'Plex',
       [{ title: 'Movies', type: 'movie' }])));

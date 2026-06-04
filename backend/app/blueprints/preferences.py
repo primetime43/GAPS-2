@@ -3,6 +3,9 @@ from app.services import config_store
 
 preferences_bp = Blueprint('preferences', __name__)
 
+# Mirrored on the frontend by DEFAULT_PREFERENCES in
+# frontend/src/app/services/preferences.service.ts — keep the two in sync when
+# adding a preference.
 DEFAULTS = {
     'defaultLibrary': '',
     'moviesPerPage': 50,

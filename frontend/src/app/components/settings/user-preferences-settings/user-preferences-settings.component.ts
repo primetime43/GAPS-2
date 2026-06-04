@@ -1,5 +1,5 @@
 import { Component, OnInit } from '@angular/core';
-import { PreferencesService, UserPreferences } from '../../../services/preferences.service';
+import { PreferencesService, UserPreferences, DEFAULT_PREFERENCES } from '../../../services/preferences.service';
 import { ActiveServerService } from '../../../services/active-server.service';
 import { MediaLibrary } from '../../../models/media-server.model';
 
@@ -10,21 +10,7 @@ import { MediaLibrary } from '../../../models/media-server.model';
     standalone: false
 })
 export class UserPreferencesSettingsComponent implements OnInit {
-  prefs: UserPreferences = {
-    defaultLibrary: '',
-    moviesPerPage: 50,
-    hideOwnedByDefault: false,
-    hideFutureReleasesByDefault: false,
-    language: 'en',
-    port: 4277,
-    autoOpenBrowser: true,
-    posterPrefetch: false,
-    imageCacheEnabled: false,
-    mediaServerTimeout: 30,
-    qualityFilterEnabled: false,
-    minRating: 0,
-    minVoteCount: 0,
-  };
+  prefs: UserPreferences = { ...DEFAULT_PREFERENCES };
 
   libraries: MediaLibrary[] = [];
   saving = false;

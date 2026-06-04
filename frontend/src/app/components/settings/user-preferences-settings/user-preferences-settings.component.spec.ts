@@ -2,6 +2,7 @@ import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testin
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 import { FormsModule } from '@angular/forms';
 import { UserPreferencesSettingsComponent } from './user-preferences-settings.component';
+import { DEFAULT_PREFERENCES } from '../../../services/preferences.service';
 import { environment } from '../../../../environments/environment';
 
 describe('UserPreferencesSettingsComponent', () => {
@@ -9,18 +10,7 @@ describe('UserPreferencesSettingsComponent', () => {
   let fixture: ComponentFixture<UserPreferencesSettingsComponent>;
   let httpMock: HttpTestingController;
 
-  const defaultPrefs = {
-    defaultLibrary: '',
-    moviesPerPage: 50,
-    hideOwnedByDefault: false,
-    hideFutureReleasesByDefault: false,
-    language: 'en',
-    port: 4277,
-    autoOpenBrowser: true,
-    posterPrefetch: false,
-    imageCacheEnabled: false,
-    mediaServerTimeout: 30,
-  };
+  const defaultPrefs = { ...DEFAULT_PREFERENCES };
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
