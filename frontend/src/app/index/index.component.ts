@@ -52,7 +52,7 @@ export class IndexComponent implements OnInit {
     this.scheduleService.getSchedule().subscribe({
       next: (config: ScheduleConfig) => {
         this.scheduleEnabled = config.enabled;
-        this.schedulePreset = config.preset;
+        this.schedulePreset = config.description || config.preset;
         this.nextRun = config.next_run;
         this.scheduleLastRun = config.last_run;
       },
