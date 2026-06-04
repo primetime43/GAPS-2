@@ -24,6 +24,48 @@ MAX_HISTORY = 50
 _RECORD_LOCK = threading.Lock()
 
 
+def _is_future_release(gap: dict, is_movie: bool, today: str, current_year: int) -> bool:
+    """Mirror the dashboard's future-release check (recommended.component).
+
+    Prefer an exact date (movie release / TV first-aired); a movie with no date
+    is treated as unannounced/future, while TV falls back to the year.
+    """
+    release_date = gap.get('releaseDate') or ''
+    if release_date:
+        return release_date[:10] > today
+    if is_movie:
+        return True
+    try:
+        year = int(str(gap.get('year'))[:4])
+    except (TypeError, ValueError):
+        return False
+    return year > current_year
+
+
+def actionable_missing(media_type: str, gaps: list[dict]) -> list[dict]:
+    """Filter a not-owned 'missing' list down to the gaps a user would act on,
+    the same way the dashboard does — so manual and scheduled scans report
+    identical counts (issue #47 follow-up):
+
+    - the ignore list (`ignored_movies`/`ignored_shows`) is always applied;
+    - future releases are dropped when `hideFutureReleasesByDefault` is set.
+
+    Quality filtering already happened at scan time, so it isn't repeated here.
+    """
+    is_movie = media_type != 'tv'
+    id_key = 'tmdbId' if is_movie else 'tvdbId'
+    ignored_key = 'ignored_movies' if is_movie else 'ignored_shows'
+    ignored = set(config_store.get(ignored_key, []) or [])
+    result = [g for g in gaps if g.get(id_key) not in ignored]
+
+    prefs = config_store.get('preferences', {}) or {}
+    if prefs.get('hideFutureReleasesByDefault'):
+        now = datetime.now(timezone.utc)
+        today = now.strftime('%Y-%m-%d')
+        result = [g for g in result if not _is_future_release(g, is_movie, today, now.year)]
+    return result
+
+
 def _strip_gap(media_type: str, gap: dict) -> dict:
     """Keep only the fields the export needs, so the persisted blob stays small."""
     if media_type == 'tv':
@@ -54,8 +96,17 @@ def record(
     completed_at: str | None = None,
     gaps: list[dict] | None = None,
 ) -> None:
-    """Append a scan record to the persistent history (capped at MAX_HISTORY)."""
+    """Append a scan record to the persistent history (capped at MAX_HISTORY).
+
+    When a gap list is provided it's reduced to actionable gaps (see
+    `actionable_missing`) and the missing count is derived from it, so every
+    recorded scan — manual or scheduled — reports the same figure the user
+    sees on the dashboard.
+    """
     mt = 'tv' if media_type == 'tv' else 'movie'
+    if gaps is not None:
+        gaps = actionable_missing(mt, gaps)
+        missing = len(gaps)
     entry = {
         'id': uuid.uuid4().hex,
         'timestamp': completed_at or datetime.now(timezone.utc).isoformat(),

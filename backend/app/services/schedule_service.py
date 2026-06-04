@@ -24,42 +24,6 @@ MOVIE_JOB_ID = 'scheduled_movie_scan'
 TV_JOB_ID = 'scheduled_tv_scan'
 
 
-def _is_future_release(gap: dict, is_movie: bool, today: str, current_year: int) -> bool:
-    """Mirror the dashboard's future-release check (recommended.component).
-
-    Prefer an exact date (movie release / TV first-aired); a movie with no date
-    is treated as unannounced/future, while TV falls back to the year.
-    """
-    release_date = gap.get('releaseDate') or ''
-    if release_date:
-        return release_date[:10] > today
-    if is_movie:
-        return True
-    try:
-        year = int(str(gap.get('year'))[:4])
-    except (TypeError, ValueError):
-        return False
-    return year > current_year
-
-
-def _actionable_missing(missing: list[dict], *, is_movie: bool) -> list[dict]:
-    """Apply the same gap-policy filters the dashboard uses so scheduled
-    notifications/counts match what the user would actually act on:
-    drop ignored items, and (when the user's default is set) future releases.
-    Quality filtering already happened at scan time (issue #47)."""
-    id_key = 'tmdbId' if is_movie else 'tvdbId'
-    ignored_key = 'ignored_movies' if is_movie else 'ignored_shows'
-    ignored = set(config_store.get(ignored_key, []) or [])
-    result = [g for g in missing if g.get(id_key) not in ignored]
-
-    prefs = config_store.get('preferences', {}) or {}
-    if prefs.get('hideFutureReleasesByDefault'):
-        now = datetime.now(timezone.utc)
-        today = now.strftime('%Y-%m-%d')
-        result = [g for g in result if not _is_future_release(g, is_movie, today, now.year)]
-    return result
-
-
 class ScheduleService:
     """Two independent scheduled scans — movies and TV — each with its own cadence."""
 
@@ -170,7 +134,7 @@ class ScheduleService:
                 return
 
             missing = [g for g in (gaps or []) if not g.get('owned')]
-            missing = _actionable_missing(missing, is_movie=True)
+            missing = scan_history.actionable_missing('movie', missing)
             collections = len(set(g['collectionName'] for g in missing)) if missing else 0
             logger.info(
                 "Scheduled movie scan complete for '%s': %d missing across %d collections",
@@ -232,7 +196,7 @@ class ScheduleService:
                 logger.warning("Failed to persist last_tv_scan: %s", e)
 
             missing = [g for g in (gaps or []) if not g.get('owned')]
-            missing = _actionable_missing(missing, is_movie=False)
+            missing = scan_history.actionable_missing('tv', missing)
             franchises = len(set(g['franchiseName'] for g in missing)) if missing else 0
             logger.info(
                 "Scheduled TV scan complete for '%s': %d missing across %d franchises",
