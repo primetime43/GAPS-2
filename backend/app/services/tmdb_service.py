@@ -6,6 +6,7 @@ import time
 from datetime import datetime, timezone
 import requests
 from app.services import config_store, scan_history
+from app.services.scan_progress import ScanProgressTracker
 
 logger = logging.getLogger(__name__)
 
@@ -52,35 +53,10 @@ class TmdbService:
         # Scan progress tracking (shared between request thread and scan thread).
         # Seeded from the last persisted scan so the "Last Scan" card and gaps
         # list survive a backend restart.
-        self._scan_progress_lock = threading.Lock()
-        self._scan_progress: dict = self._initial_scan_progress()
-        # Monotonic scan token (guarded by _scan_progress_lock). Starting a new
-        # scan or cancelling bumps it; the running worker stops the moment it
-        # sees the token change, preventing the stop-then-restart race.
-        self._scan_generation = 0
-
-    @staticmethod
-    def _initial_scan_progress() -> dict:
-        progress = {
-            'status': 'idle',    # idle | scanning | done | error
-            'processed': 0,
-            'total': 0,
-            'current_movie': '',
-            'collections_found': 0,
-            'gaps': [],
-            'total_owned': 0,
-            'libraries': [],
-            'completed_at': None,
-            'error': None,
-        }
-        last = config_store.get('last_scan')
-        if last:
-            progress['status'] = 'done'
-            progress['gaps'] = last.get('gaps', [])
-            progress['total_owned'] = last.get('total_owned', 0)
-            progress['libraries'] = last.get('libraries', [])
-            progress['completed_at'] = last.get('completed_at')
-        return progress
+        self._scan = ScanProgressTracker(
+            extra_fields={'current_movie': '', 'collections_found': 0},
+            seed_key='last_scan',
+        )
 
     @property
     def api_key(self) -> str | None:
@@ -400,8 +376,7 @@ class TmdbService:
 
     @property
     def scan_progress(self) -> dict:
-        with self._scan_progress_lock:
-            return dict(self._scan_progress)
+        return self._scan.snapshot
 
     def start_scan(
         self,
@@ -413,24 +388,11 @@ class TmdbService:
     ) -> None:
         """Start a library scan in a background thread."""
         libraries = list(library_names or [])
-        with self._scan_progress_lock:
-            # Bump the token first so any still-winding-down previous scan stops
-            # and its results are ignored; this scan owns the new token.
-            self._scan_generation += 1
-            generation = self._scan_generation
-            self._scan_progress = {
-                'status': 'scanning',
-                'processed': 0,
-                'total': len(owned_movies),
-                'current_movie': '',
-                'collections_found': 0,
-                'gaps': [],
-                'total_owned': len(owned_tmdb_ids),
-                'libraries': libraries,
-                'completed_at': None,
-                'error': None,
-            }
-
+        generation = self._scan.begin(
+            total=len(owned_movies),
+            total_owned=len(owned_tmdb_ids),
+            libraries=libraries,
+        )
         thread = threading.Thread(
             target=self._run_scan,
             args=(api_key, owned_movies, owned_tmdb_ids, show_existing, libraries, generation),
@@ -440,24 +402,7 @@ class TmdbService:
 
     def cancel_scan(self) -> bool:
         """Stop the running scan. Returns True if a scan was running."""
-        with self._scan_progress_lock:
-            if self._scan_progress['status'] != 'scanning':
-                return False
-            # Bumping the token makes the worker stop and discard its results.
-            self._scan_generation += 1
-            self._scan_progress = {
-                'status': 'cancelled',
-                'processed': 0,
-                'total': 0,
-                'current_movie': '',
-                'collections_found': 0,
-                'gaps': [],
-                'total_owned': 0,
-                'libraries': [],
-                'completed_at': None,
-                'error': None,
-            }
-        return True
+        return self._scan.cancel()
 
     def _run_scan(
         self,
@@ -473,14 +418,10 @@ class TmdbService:
             gaps, _ = self.find_collection_gaps(api_key, owned_movies, owned_tmdb_ids, show_existing, generation)
             completed_at = datetime.now(timezone.utc).isoformat()
             final_gaps = gaps or []
-            with self._scan_progress_lock:
-                # A newer scan or a cancel superseded us — leave their state alone.
-                if self._scan_generation != generation:
-                    return
-                self._scan_progress['gaps'] = final_gaps
-                self._scan_progress['total_owned'] = len(owned_tmdb_ids)
-                self._scan_progress['completed_at'] = completed_at
-                self._scan_progress['status'] = 'done'
+            # A newer scan or a cancel superseded us — leave their state alone.
+            if not self._scan.finish(generation, gaps=final_gaps,
+                                     total_owned=len(owned_tmdb_ids), completed_at=completed_at):
+                return
             try:
                 config_store.put('last_scan', {
                     'gaps': final_gaps,
@@ -502,10 +443,7 @@ class TmdbService:
                 gaps=missing_gaps,
             )
         except Exception as e:
-            with self._scan_progress_lock:
-                if self._scan_generation == generation:
-                    self._scan_progress['error'] = str(e)
-                    self._scan_progress['status'] = 'error'
+            self._scan.fail(generation, str(e))
             scan_history.record(
                 media_type='movie',
                 libraries=libraries,
@@ -535,12 +473,9 @@ class TmdbService:
         total = len(owned_movies)
 
         for i, movie in enumerate(owned_movies):
-            if generation is not None and self._scan_generation != generation:
+            if not self._scan.is_current(generation):
                 break
-            # Update progress
-            with self._scan_progress_lock:
-                self._scan_progress['processed'] = i + 1
-                self._scan_progress['current_movie'] = movie.get('name', '')
+            self._scan.update(generation, processed=i + 1, current_movie=movie.get('name', ''))
 
             tmdb_id = self.resolve_tmdb_id(
                 api_key,
@@ -558,8 +493,7 @@ class TmdbService:
             if not collection_id or collection_id in seen_collections:
                 continue
             seen_collections.add(collection_id)
-            with self._scan_progress_lock:
-                self._scan_progress['collections_found'] = len(seen_collections)
+            self._scan.update(generation, collections_found=len(seen_collections))
 
             coll_data = self._get_collection(api_key, collection_id)
             if not coll_data:
