@@ -1,23 +1,38 @@
 # GAPS 2
 
-GAPS 2 is a rewrite of the original [GAPS](https://github.com/JasonHHouse/gaps) project. GAPS (Gaps A Plex Server) finds **movies and TV shows you're missing** in your media server:
+**Find the movies and TV shows missing from your media library — and fill the gaps in one click.**
 
-- **Movies** — based on movie collections from The Movie Database (TMDB). For example, if you own *Alien (1979)*, GAPS recommends *Aliens (1986)* and *Alien³ (1992)* to complete the collection.
-- **TV shows** — based on official franchise lists from [TheTVDB](https://thetvdb.com). For example, if you own *Yellowstone*, GAPS surfaces *1883* and *1923* from the same franchise.
+GAPS 2 connects to your Plex, Jellyfin, or Emby server, looks at what you own, and tells you what's missing from each collection or franchise. Own *Alien (1979)*? It flags *Aliens (1986)* and *Alien³ (1992)*. Own *Yellowstone*? It surfaces *1883* and *1923*. Then it can hand those titles straight to Radarr or Sonarr to download.
+
+> A modern, full-stack rewrite of the original [GAPS](https://github.com/JasonHHouse/gaps) (Gaps A Plex Server) — Python/Flask backend, Angular 19 frontend.
+
+## Why GAPS 2
+
+- **Discover gaps automatically** — point it at a library and it finds every incomplete collection (movies) and franchise (TV) for you
+- **Act on them instantly** — send missing titles to Radarr/Sonarr to download, without leaving the app
+- **Set it and forget it** — scheduled scans keep watch and notify you (Discord, Telegram, Email) when new gaps appear
+- **Runs anywhere** — one-click Windows .exe, a single Docker container, or local dev — all from one port
 
 ## Features
 
+**Find what's missing**
 - **Multi-server support** — Plex (OAuth), Jellyfin, and Emby
+- **Find missing movies** from TMDB collections, and **missing TV shows** from TheTVDB's official franchise lists
 - **Unified "Missing" view** with a Movies / TV Shows toggle — browse a library, scan it for gaps, or click a single title to check just its collection/franchise
-- **Find missing movies** based on TMDB collections and recommendations
-- **Find missing TV shows** based on TheTVDB's official franchise lists
-- **Send to Radarr / Sonarr** — add missing movies to Radarr (by TMDB id) and missing shows to Sonarr (by TheTVDB id) directly from the results
-- Filter results: show/hide owned, hide future (unreleased) titles, ignore individual titles or whole collections, and export to CSV/Excel
+
+**Act on the results**
+- **Send to Radarr / Sonarr** — add missing movies (by TMDB id) and shows (by TheTVDB id) directly from the results
+- **Filter & refine** — show/hide owned, hide future (unreleased) titles, ignore individual titles or whole collections
+- **Export** gap lists to CSV/Excel
+
+**Automate & stay informed**
 - **Independent scheduled scans** for movies and TV, each with its own cadence
-- Notifications via Discord, Telegram, and Email
-- User preferences (default library, items per page, language, hide owned, etc.)
-- Responsive dark-themed UI built with Angular 19 and Bootstrap 5
-- Dockerized deployment with persistent configuration
+- **Notifications** via Discord, Telegram, and Email
+- **User preferences** — default library, items per page, language, hide owned, and more
+
+**Deploy your way**
+- Responsive dark-themed UI (Angular 19 + Bootstrap 5)
+- Dockerized deployment with persistent, encrypted configuration
 - Windows standalone executable (single .exe via PyInstaller)
 - Automated releases via GitHub Actions (Windows exe + Docker Hub)
 
