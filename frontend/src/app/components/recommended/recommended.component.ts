@@ -658,6 +658,9 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     this.saveQualityPrefs().subscribe({ next: () => {}, error: () => {} });
   }
 
+  // NOTE: mirrored on the backend by `_is_future_release` in
+  // backend/app/services/scan_history.py (used so scheduled scans count gaps
+  // the same way). Keep the two in sync if this logic changes.
   isFutureRelease(gap: Gap): boolean {
     const today = new Date().toISOString().slice(0, 10);
     // Prefer an exact date (movie release date or TV first-aired date).

@@ -25,8 +25,11 @@ _RECORD_LOCK = threading.Lock()
 
 
 def _is_future_release(gap: dict, is_movie: bool, today: str, current_year: int) -> bool:
-    """Mirror the dashboard's future-release check (recommended.component).
+    """Whether a gap is an unreleased/future title.
 
+    Mirror of `isFutureRelease` in
+    frontend/src/app/components/recommended/recommended.component.ts — kept in
+    sync so scheduled scans count gaps the same way the dashboard displays them.
     Prefer an exact date (movie release / TV first-aired); a movie with no date
     is treated as unannounced/future, while TV falls back to the year.
     """
