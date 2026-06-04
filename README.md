@@ -1,6 +1,6 @@
 # GAPS 2
 
-**Find the movies and TV shows missing from your media library — and fill the gaps in one click.** (GAPS 2 is a rewrite of the original [GAPS](https://github.com/JasonHHouse/gaps) project.)
+**Find the movies and TV shows missing from your media library — and fill the gaps in one click.**
 
 GAPS 2 connects to your Plex, Jellyfin, or Emby server, looks at what you own, and tells you what's missing from each collection or franchise. Own *Alien (1979)*? It flags *Aliens (1986)* and *Alien³ (1992)*. Own *Yellowstone*? It surfaces *1883* and *1923*. Then it can hand those titles straight to Radarr or Sonarr to download.
 
