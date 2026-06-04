@@ -373,22 +373,13 @@
               </a>
               <div class="rec-year">{{ gap.year }}</div>
               <button
-                *ngIf="radarrEnabled && gap.radarrEligible && !gap.owned && !isIgnored(gap)"
+                *ngIf="canSendToDownloader(gap)"
                 class="btn btn-sm radarr-btn mt-2"
-                [ngClass]="radarrButtonClass(gap.id)"
-                [disabled]="radarrStatus.get(gap.id) === 'sending' || radarrStatus.get(gap.id) === 'sent'"
-                [title]="radarrErrors.get(gap.id) || 'Add this movie to Radarr'"
-                (click)="sendToRadarr(gap, $event)">
-                {{ radarrButtonLabel(gap.id) }}
-              </button>
-              <button
-                *ngIf="sonarrEnabled && gap.sonarrEligible && !gap.owned && !isIgnored(gap)"
-                class="btn btn-sm radarr-btn mt-2"
-                [ngClass]="sonarrButtonClass(gap.id)"
-                [disabled]="sonarrStatus.get(gap.id) === 'sending' || sonarrStatus.get(gap.id) === 'sent'"
-                [title]="sonarrErrors.get(gap.id) || 'Add this show to Sonarr'"
-                (click)="sendToSonarr(gap, $event)">
-                {{ sonarrButtonLabel(gap.id) }}
+                [ngClass]="downloaderButtonClass(gap.id)"
+                [disabled]="downloaderStatusOf(gap.id) === 'sending' || downloaderStatusOf(gap.id) === 'sent'"
+                [title]="downloaderErrorOf(gap.id) || downloaderAddHint"
+                (click)="sendToDownloader(gap, $event)">
+                {{ downloaderButtonLabel(gap.id) }}
               </button>
             </div>
           </div>
