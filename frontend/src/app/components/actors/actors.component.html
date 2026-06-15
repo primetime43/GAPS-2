@@ -103,10 +103,58 @@
       <div *ngIf="!loadingGaps && selectedActor && collectionGroups.length > 0">
         <div class="d-flex align-items-center mb-3 flex-wrap gap-2">
           <button class="btn btn-sm btn-outline-light me-2" (click)="clearActor()">&larr; Back</button>
-          <h5 class="regular-text mb-0">
-            {{ selectedActor.name }} — {{ ownedCount }} owned, {{ missingCount }} missing
-          </h5>
-          <div class="d-flex ms-auto gap-3 flex-wrap align-items-center">
+          <h5 class="regular-text mb-0">{{ selectedActor.name }}</h5>
+          <div class="d-flex ms-auto gap-2 flex-wrap align-items-center">
+            <!-- Primary: owned / missing view -->
+            <div class="btn-group btn-group-sm view-toggle" role="group" aria-label="Owned or missing">
+              <button type="button" class="btn"
+                      [class.btn-primary]="view === 'all'"
+                      [class.btn-outline-secondary]="view !== 'all'"
+                      (click)="setView('all')">All</button>
+              <button type="button" class="btn"
+                      [class.btn-primary]="view === 'owned'"
+                      [class.btn-outline-secondary]="view !== 'owned'"
+                      (click)="setView('owned')">Owned ({{ ownedCount }})</button>
+              <button type="button" class="btn"
+                      [class.btn-primary]="view === 'missing'"
+                      [class.btn-outline-secondary]="view !== 'missing'"
+                      (click)="setView('missing')">Missing ({{ missingCount }})</button>
+            </div>
+
+            <!-- Secondary: refinements -->
+            <div class="dropdown">
+              <button class="btn btn-sm btn-outline-light dropdown-toggle" type="button"
+                      data-bs-toggle="dropdown" data-bs-auto-close="outside">
+                Filters
+              </button>
+              <ul class="dropdown-menu dropdown-menu-dark dropdown-menu-end p-2 filter-menu">
+                <li>
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="actorShowFuture"
+                           [(ngModel)]="showFuture" (ngModelChange)="onFilterChange()">
+                    <label class="form-check-label" for="actorShowFuture"
+                           title="Include titles that haven't been released yet">Future releases</label>
+                  </div>
+                </li>
+                <li>
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="actorShowMinor"
+                           [(ngModel)]="showMinor" (ngModelChange)="onShowMinorChange()">
+                    <label class="form-check-label" for="actorShowMinor"
+                           title="Include featurettes, making-of docs, 'as themselves' appearances, and undated/in-development titles">Extras</label>
+                  </div>
+                </li>
+                <li *ngIf="ignoredIds.size > 0">
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="actorShowIgnored"
+                           [(ngModel)]="showIgnored" (ngModelChange)="onFilterChange()">
+                    <label class="form-check-label" for="actorShowIgnored">Ignored ({{ ignoredIds.size }})</label>
+                  </div>
+                </li>
+              </ul>
+            </div>
+
+            <!-- Export -->
             <div class="dropdown">
               <button class="btn btn-sm btn-outline-info dropdown-toggle" type="button" data-bs-toggle="dropdown">
                 Export
@@ -115,33 +163,6 @@
                 <li><a class="dropdown-item" (click)="exportResults('csv')">Export as CSV</a></li>
                 <li><a class="dropdown-item" (click)="exportResults('xlsx')">Export as Excel</a></li>
               </ul>
-            </div>
-            <div class="form-check">
-              <input class="form-check-input" type="checkbox" id="actorShowOwned"
-                     [(ngModel)]="showOwned" (ngModelChange)="onFilterChange()">
-              <label class="form-check-label text-muted" for="actorShowOwned">Show owned</label>
-            </div>
-            <div class="form-check">
-              <input class="form-check-input" type="checkbox" id="actorHideFuture"
-                     [(ngModel)]="hideFutureReleases" (ngModelChange)="onFilterChange()">
-              <label class="form-check-label text-muted" for="actorHideFuture" title="Hide unreleased titles">
-                Hide future releases
-              </label>
-            </div>
-            <div class="form-check">
-              <input class="form-check-input" type="checkbox" id="actorShowMinor"
-                     [(ngModel)]="showMinor" (ngModelChange)="onShowMinorChange()">
-              <label class="form-check-label text-muted" for="actorShowMinor"
-                     title="Include featurettes, making-of docs, 'as themselves' appearances, and undated/in-development titles">
-                Show extras
-              </label>
-            </div>
-            <div class="form-check" *ngIf="ignoredIds.size > 0">
-              <input class="form-check-input" type="checkbox" id="actorShowIgnored"
-                     [(ngModel)]="showIgnored" (ngModelChange)="onFilterChange()">
-              <label class="form-check-label text-muted" for="actorShowIgnored">
-                Show ignored ({{ ignoredIds.size }})
-              </label>
             </div>
           </div>
         </div>

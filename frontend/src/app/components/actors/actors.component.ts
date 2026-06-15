@@ -52,12 +52,13 @@ export class ActorsComponent implements OnInit, OnDestroy {
   filteredGroups: GapGroup[] = [];
   ignoredIds: Set<number> = new Set();
 
-  // Show owned by default — the whole point is seeing what you have *and* miss.
-  showOwned = true;
-  hideFutureReleases = false;
+  // Primary owned/missing selector — the whole point of the page.
+  view: 'all' | 'owned' | 'missing' = 'all';
+  // Secondary "Filters" menu toggles (checked = include that category).
+  showFuture = true;
   showIgnored = false;
-  // Bonus content (featurettes, making-of, "as themselves") is hidden by
-  // default; toggling this re-fetches with everything included.
+  // Bonus content (featurettes, making-of, "as themselves", undated) is hidden
+  // by default; toggling this re-fetches with everything included.
   showMinor = false;
   resultFilter = '';
   missingCount = 0;
@@ -87,7 +88,7 @@ export class ActorsComponent implements OnInit, OnDestroy {
 
     this.preferencesService.load().pipe(catchError(() => of(null))).subscribe((prefs) => {
       if (prefs) {
-        this.hideFutureReleases = prefs.hideFutureReleasesByDefault || false;
+        this.showFuture = !prefs.hideFutureReleasesByDefault;
       }
       this.detectActiveServer(prefs);
     });
@@ -225,6 +226,11 @@ export class ActorsComponent implements OnInit, OnDestroy {
 
   onFilterChange(): void { this.applyFilter(); }
 
+  setView(view: 'all' | 'owned' | 'missing'): void {
+    this.view = view;
+    this.applyFilter();
+  }
+
   // Including bonus content changes what the backend returns, so re-fetch.
   onShowMinorChange(): void {
     if (this.selectedActor) this.selectActor(this.selectedActor);
@@ -242,12 +248,17 @@ export class ActorsComponent implements OnInit, OnDestroy {
   }
 
   applyFilter(): void {
-    let filtered = this.showOwned ? this.allGaps : this.allGaps.filter(g => !g.owned);
+    let filtered = this.allGaps;
+    if (this.view === 'owned') {
+      filtered = filtered.filter(g => g.owned);
+    } else if (this.view === 'missing') {
+      filtered = filtered.filter(g => !g.owned);
+    }
 
     if (!this.showIgnored) {
       filtered = filtered.filter(g => !this.ignoredIds.has(g.id));
     }
-    if (this.hideFutureReleases) {
+    if (!this.showFuture) {
       filtered = filtered.filter(g => g.owned || !this.isFutureRelease(g));
     }
 
@@ -255,7 +266,7 @@ export class ActorsComponent implements OnInit, OnDestroy {
     this.missingCount = this.allGaps.filter(g =>
       !g.owned
       && !this.ignoredIds.has(g.id)
-      && (!this.hideFutureReleases || !this.isFutureRelease(g))
+      && (this.showFuture || !this.isFutureRelease(g))
     ).length;
 
     const groups = new Map<string, Gap[]>();

@@ -1,6 +1,7 @@
-/* .dark-input and the gap-card family (.rec-grid, .rec-card, owned/missing/
-   ignored badges, .collection-group, etc.) are shared globally in
-   src/styles.scss. Only the actor-search result list is specific to this view. */
+/* .dark-input, the gap-card family (.rec-grid, .rec-card, owned/missing/ignored
+   badges, .collection-group, etc.) and the .filter-menu dropdown are shared
+   globally in src/styles.scss. Only the actor-search result list is specific
+   to this view. */
 
 .actor-results {
   display: grid;

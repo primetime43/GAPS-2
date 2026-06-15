@@ -154,7 +154,7 @@ describe('RecommendedComponent', () => {
 
     expect(component.selectedLibrary).toBe('Movies');
     expect(component.itemsPerPage).toBe(25);
-    expect(component.showOwned).toBeFalse();
+    expect(component.view).toBe('missing');
   }));
 
   it('should load items when a library is selected', fakeAsync(() => {
@@ -208,7 +208,7 @@ describe('RecommendedComponent', () => {
       gap({ id: 2, name: 'Aliens', groupName: 'Alien Collection', owned: false }),
       gap({ id: 3, name: 'Matrix', groupName: 'Matrix Collection', owned: false }),
     ];
-    component.showOwned = false;
+    component.view = 'missing';
     component.showIgnored = false;
     component.ignoredIds = new Set();
 
@@ -216,7 +216,7 @@ describe('RecommendedComponent', () => {
     expect(component.collectionGroups.length).toBe(2);
     expect(component.missingCount).toBe(2);
 
-    component.showOwned = true;
+    component.view = 'all';
     component.applyFilter();
     const alienGroup = component.collectionGroups.find(g => g.name === 'Alien Collection');
     expect(alienGroup?.gaps.length).toBe(2);
@@ -228,7 +228,7 @@ describe('RecommendedComponent', () => {
       gap({ id: 2, name: 'Movie B', groupName: 'Coll', owned: false }),
     ];
     component.ignoredIds = new Set([1]);
-    component.showOwned = true;
+    component.view = 'all';
     component.showIgnored = false;
 
     component.applyFilter();
@@ -237,7 +237,7 @@ describe('RecommendedComponent', () => {
     expect(component.filteredGroups[0].gaps[0].id).toBe(2);
   });
 
-  it('applyFilter should hide future releases when hideFutureReleases is true', () => {
+  it('applyFilter should hide future releases when showFuture is false', () => {
     const future = '2099-12-31';
     const past = '1999-01-01';
     component.allGaps = [
@@ -247,9 +247,9 @@ describe('RecommendedComponent', () => {
       gap({ id: 4, name: 'Owned future', year: '2099', releaseDate: future, groupName: 'C', owned: true }),
     ];
     component.ignoredIds = new Set();
-    component.showOwned = true;
+    component.view = 'all';
     component.showIgnored = true;
-    component.hideFutureReleases = true;
+    component.showFuture = false;
 
     component.applyFilter();
     const titles = component.filteredGroups.flatMap(g => g.gaps.map(x => x.name));
@@ -336,7 +336,7 @@ describe('RecommendedComponent', () => {
       gap({ id: 1, name: 'Alien', groupName: 'Alien Collection', owned: false }),
       gap({ id: 2, name: 'The Matrix', groupName: 'Matrix Collection', owned: false }),
     ];
-    component.showOwned = true;
+    component.view = 'all';
     component.showIgnored = true;
     component.ignoredIds = new Set();
 

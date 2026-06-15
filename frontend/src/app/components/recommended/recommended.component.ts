@@ -67,8 +67,10 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   selectedLibraries: string[] = [];
   items: BrowseItem[] = [];
   itemFilter = '';
-  showOwned = false;
-  hideFutureReleases = false;
+  // Primary owned/missing selector + secondary "show future" toggle — the same
+  // filter bar the Actors view uses.
+  view: 'all' | 'owned' | 'missing' = 'all';
+  showFuture = true;
   // Quality filter (movies only) — exclude low-tier gaps by TMDB rating / vote
   // count. Set before scanning; applied server-side so the gaps are excluded
   // from the scan (and from scheduled scans, which share the same setting).
@@ -119,6 +121,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   hasServer = false;
   errorMessage = '';
   totalOwned = 0;
+  ownedCount = 0;
   missingCount = 0;
 
   // Scan progress (normalized across movie/TV scans)
@@ -219,8 +222,8 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     ).subscribe((prefs) => {
       if (prefs) {
         this.itemsPerPage = prefs.moviesPerPage || 50;
-        this.showOwned = !prefs.hideOwnedByDefault;
-        this.hideFutureReleases = prefs.hideFutureReleasesByDefault || false;
+        this.view = prefs.hideOwnedByDefault ? 'missing' : 'all';
+        this.showFuture = !prefs.hideFutureReleasesByDefault;
         this.posterPrefetch = prefs.posterPrefetch || false;
         this.qualityFilter = prefs.qualityFilterEnabled || false;
         this.minRating = prefs.minRating || 0;
@@ -584,7 +587,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
       this.tvdb.getGapsForShow(tvdbId, libs, true, this.activeSource).subscribe({
         next: (gaps) => {
           this.allGaps = this.normalizeGaps(gaps);
-          if (this.allGaps.length > 0 && this.allGaps.every(g => g.owned)) this.showOwned = true;
+          if (this.allGaps.length > 0 && this.allGaps.every(g => g.owned)) this.view = 'all';
           this.applyFilter();
           this.loadingGaps = false;
         },
@@ -605,7 +608,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     ).subscribe({
       next: (gaps) => {
         this.allGaps = this.normalizeGaps(gaps);
-        if (this.allGaps.length > 0 && this.allGaps.every(g => g.owned)) this.showOwned = true;
+        if (this.allGaps.length > 0 && this.allGaps.every(g => g.owned)) this.view = 'all';
         this.applyFilter();
         this.loadingGaps = false;
       },
@@ -652,9 +655,12 @@ export class RecommendedComponent implements OnInit, OnDestroy {
 
   // -- Filters --
 
-  onShowOwnedChange(): void { this.applyFilter(); }
-  onHideFutureReleasesChange(): void { this.applyFilter(); }
-  onShowIgnoredChange(): void { this.applyFilter(); }
+  onFilterChange(): void { this.applyFilter(); }
+
+  setView(view: 'all' | 'owned' | 'missing'): void {
+    this.view = view;
+    this.applyFilter();
+  }
 
   /**
    * Persist the quality-filter settings. This is a scan-time filter applied
@@ -791,20 +797,26 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   }
 
   applyFilter(): void {
-    let filtered = this.showOwned ? this.allGaps : this.allGaps.filter(g => !g.owned);
+    let filtered = this.allGaps;
+    if (this.view === 'owned') {
+      filtered = filtered.filter(g => g.owned);
+    } else if (this.view === 'missing') {
+      filtered = filtered.filter(g => !g.owned);
+    }
 
     if (!this.showIgnored) {
       filtered = filtered.filter(g => !this.ignoredIds.has(g.id));
     }
 
-    if (this.hideFutureReleases) {
+    if (!this.showFuture) {
       filtered = filtered.filter(g => g.owned || !this.isFutureRelease(g));
     }
 
+    this.ownedCount = this.allGaps.filter(g => g.owned).length;
     this.missingCount = this.allGaps.filter(g =>
       !g.owned
       && !this.ignoredIds.has(g.id)
-      && (!this.hideFutureReleases || !this.isFutureRelease(g))
+      && (this.showFuture || !this.isFutureRelease(g))
     ).length;
 
     const groups = new Map<string, Gap[]>();

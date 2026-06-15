@@ -309,6 +309,27 @@ hr.thin {
   width: 100%;
 }
 
+/* "Filters" dropdown menu — checkbox list of view refinements, shared by the
+   Missing and Actors result headers. Keeps each toggle on its own line and
+   readable on the dark dropdown background. */
+.filter-menu {
+  min-width: 200px;
+
+  .form-check {
+    margin-bottom: 4px;
+    white-space: nowrap;
+
+    &:last-child {
+      margin-bottom: 0;
+    }
+  }
+
+  .form-check-label {
+    color: #dee2e6;
+    cursor: pointer;
+  }
+}
+
 /* Connection/status indicators (✓ configured / ✗ not configured) */
 .status-indicator {
   font-size: 14px;
