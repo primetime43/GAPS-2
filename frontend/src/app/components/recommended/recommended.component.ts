@@ -77,6 +77,8 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   qualityFilter = false;
   minRating = 0;
   minVoteCount = 0;
+  // "Advanced" disclosure for the quality filter — collapsed by default.
+  showAdvanced = false;
   itemsPerPage = 50;
   currentPage = 1;
   searchFilter = '';

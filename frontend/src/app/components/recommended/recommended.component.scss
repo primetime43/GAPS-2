@@ -102,3 +102,30 @@
 .quality-input {
   width: 80px;
 }
+
+/* Compact scan-setup toolbar */
+.scan-library {
+  flex: 0 1 320px;
+  min-width: 220px;
+}
+
+.advanced-toggle {
+  color: #999;
+  text-decoration: none;
+  font-size: 14px;
+
+  &:hover,
+  &:focus {
+    color: #00bc8c;
+    text-decoration: none;
+  }
+}
+
+.advanced-caret {
+  display: inline-block;
+  transition: transform 0.15s ease;
+
+  &.open {
+    transform: rotate(90deg);
+  }
+}

@@ -85,7 +85,10 @@ def get_active_server():
         result = current_app.plex_service.get_active_server()
         if result:
             return jsonify(**result)
-        return jsonify(error='No active server found'), 404
+        # No server configured is a normal state, not an error — return 200 with
+        # a null server so callers (the active-server probe, settings) don't log
+        # a 404.
+        return jsonify(server=None)
     except Exception as e:
         return jsonify(error=str(e)), 500
 

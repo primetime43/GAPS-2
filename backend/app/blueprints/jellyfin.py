@@ -74,7 +74,9 @@ def get_active_server():
     result = current_app.jellyfin_service.get_active_server()
     if result:
         return jsonify(**result)
-    return jsonify(error='No active Jellyfin server'), 404
+    # No server configured is a normal state, not an error — return 200 with a
+    # null server so callers (the active-server probe, settings) don't log a 404.
+    return jsonify(server=None)
 
 
 @jellyfin_bp.route('/active-server', methods=['DELETE'])
