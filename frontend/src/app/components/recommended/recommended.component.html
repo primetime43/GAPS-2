@@ -56,51 +56,60 @@
       No TV libraries found on <strong>{{ activeServerName }}</strong>.
     </div>
 
-    <!-- Library selector + controls -->
-    <div *ngIf="(mediaType === 'movie' || tvdbEnabled) && libraries.length > 0" class="row mb-3">
-      <div class="col-md-5">
-        <label class="text-muted mb-1">Select a Library</label>
-        <select class="form-select dark-select" [(ngModel)]="selectedLibrary" (ngModelChange)="onLibrarySelect()">
-          <option value="" disabled hidden>Choose a library...</option>
-          <option *ngFor="let lib of libraries" [value]="lib.title">{{ lib.title }}</option>
-        </select>
-        <div *ngIf="libraries.length > 1 && selectedLibrary" class="mt-2">
-          <label class="text-muted mb-1" style="font-size: 13px;">Include in scan:</label>
-          <div class="d-flex flex-wrap gap-2">
-            <div *ngFor="let lib of libraries" class="form-check form-check-inline">
-              <input
-                class="form-check-input"
-                type="checkbox"
-                [id]="'lib-' + lib.title"
-                [checked]="isLibrarySelected(lib.title)"
-                (change)="toggleLibrarySelection(lib.title)"
-              >
-              <label class="form-check-label text-muted" [for]="'lib-' + lib.title" style="font-size: 13px;">
-                {{ lib.title }}
-              </label>
-            </div>
+    <!-- Scan setup -->
+    <div *ngIf="(mediaType === 'movie' || tvdbEnabled) && libraries.length > 0" class="scan-setup mb-3">
+      <!-- Compact toolbar: library + include + actions -->
+      <div class="d-flex flex-wrap align-items-center gap-3">
+        <div class="scan-library">
+          <select class="form-select dark-select" aria-label="Select a library"
+                  [(ngModel)]="selectedLibrary" (ngModelChange)="onLibrarySelect()">
+            <option value="" disabled hidden>Choose a library...</option>
+            <option *ngFor="let lib of libraries" [value]="lib.title">{{ lib.title }}</option>
+          </select>
+        </div>
+
+        <div *ngIf="libraries.length > 1 && selectedLibrary" class="d-flex align-items-center flex-wrap gap-2">
+          <span class="text-muted small">Include:</span>
+          <div *ngFor="let lib of libraries" class="form-check form-check-inline m-0">
+            <input
+              class="form-check-input"
+              type="checkbox"
+              [id]="'lib-' + lib.title"
+              [checked]="isLibrarySelected(lib.title)"
+              (change)="toggleLibrarySelection(lib.title)"
+            >
+            <label class="form-check-label text-muted small" [for]="'lib-' + lib.title">{{ lib.title }}</label>
           </div>
         </div>
-      </div>
-      <div class="col-md-4 d-flex align-items-end gap-3">
-        <button
-          class="btn btn-primary"
-          [disabled]="!selectedLibrary || loadingItems || loadingGaps || items.length === 0"
-          (click)="scanLibrary(false)">
-          Scan for Gaps
-        </button>
-        <button
-          class="btn btn-outline-secondary"
-          [disabled]="!selectedLibrary || loadingItems || loadingGaps || items.length === 0"
-          (click)="scanLibrary(true)"
-          title="Clear cached data and re-fetch from scratch">
-          Fresh Scan
-        </button>
+
+        <div class="d-flex gap-2 ms-auto">
+          <button
+            class="btn btn-primary"
+            [disabled]="!selectedLibrary || loadingItems || loadingGaps || items.length === 0"
+            (click)="scanLibrary(false)">
+            Scan for Gaps
+          </button>
+          <button
+            class="btn btn-outline-secondary"
+            [disabled]="!selectedLibrary || loadingItems || loadingGaps || items.length === 0"
+            (click)="scanLibrary(true)"
+            title="Clear cached data and re-fetch from scratch">
+            Fresh Scan
+          </button>
+        </div>
       </div>
 
-      <!-- Quality filter (movies) — applied at scan time, so excluded gaps never appear -->
-      <div class="col-12 mt-3" *ngIf="mediaType === 'movie'">
-        <div class="pref-card p-3">
+      <!-- Advanced (movies only): quality filter, collapsed by default -->
+      <div *ngIf="mediaType === 'movie'" class="mt-2">
+        <button type="button" class="btn btn-link btn-sm advanced-toggle p-0"
+                (click)="showAdvanced = !showAdvanced"
+                [attr.aria-expanded]="showAdvanced">
+          <span class="advanced-caret" [class.open]="showAdvanced">▸</span>
+          Advanced
+          <span *ngIf="qualityFilter" class="badge bg-secondary ms-1" title="Quality filter is on">Quality filter on</span>
+        </button>
+
+        <div *ngIf="showAdvanced" class="pref-card p-3 mt-2">
           <div class="form-check">
             <input
               class="form-check-input"
@@ -241,7 +250,49 @@
         <h5 class="regular-text mb-0" *ngIf="selectedItem">
           {{ mediaType === 'tv' ? 'Franchise' : 'Collection' }} for: {{ selectedItem.name }} ({{ selectedItem.year }})
         </h5>
-        <div class="d-flex ms-auto gap-3">
+        <div class="d-flex ms-auto gap-2 flex-wrap align-items-center">
+          <!-- Primary: owned / missing view -->
+          <div class="btn-group btn-group-sm view-toggle" role="group" aria-label="Owned or missing">
+            <button type="button" class="btn"
+                    [class.btn-primary]="view === 'all'"
+                    [class.btn-outline-secondary]="view !== 'all'"
+                    (click)="setView('all')">All</button>
+            <button type="button" class="btn"
+                    [class.btn-primary]="view === 'owned'"
+                    [class.btn-outline-secondary]="view !== 'owned'"
+                    (click)="setView('owned')">Owned ({{ ownedCount }})</button>
+            <button type="button" class="btn"
+                    [class.btn-primary]="view === 'missing'"
+                    [class.btn-outline-secondary]="view !== 'missing'"
+                    (click)="setView('missing')">Missing ({{ missingCount }})</button>
+          </div>
+
+          <!-- Secondary: refinements -->
+          <div class="dropdown">
+            <button class="btn btn-sm btn-outline-light dropdown-toggle" type="button"
+                    data-bs-toggle="dropdown" data-bs-auto-close="outside">
+              Filters
+            </button>
+            <ul class="dropdown-menu dropdown-menu-dark dropdown-menu-end p-2 filter-menu">
+              <li>
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" id="recShowFuture"
+                         [(ngModel)]="showFuture" (ngModelChange)="onFilterChange()">
+                  <label class="form-check-label" for="recShowFuture"
+                         title="Include titles that haven't been released yet">Future releases</label>
+                </div>
+              </li>
+              <li *ngIf="ignoredIds.size > 0">
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" id="recShowIgnored"
+                         [(ngModel)]="showIgnored" (ngModelChange)="onFilterChange()">
+                  <label class="form-check-label" for="recShowIgnored">Ignored ({{ ignoredIds.size }})</label>
+                </div>
+              </li>
+            </ul>
+          </div>
+
+          <!-- Export -->
           <div class="dropdown">
             <button class="btn btn-sm btn-outline-info dropdown-toggle" type="button" data-bs-toggle="dropdown">
               Export
@@ -250,40 +301,6 @@
               <li><a class="dropdown-item" (click)="exportResults('csv')">Export as CSV</a></li>
               <li><a class="dropdown-item" (click)="exportResults('xlsx')">Export as Excel</a></li>
             </ul>
-          </div>
-          <div class="form-check" *ngIf="missingCount > 0">
-            <input
-              class="form-check-input"
-              type="checkbox"
-              id="showOwned"
-              [(ngModel)]="showOwned"
-              (ngModelChange)="onShowOwnedChange()"
-            >
-            <label class="form-check-label text-muted" for="showOwned">Show owned</label>
-          </div>
-          <div class="form-check">
-            <input
-              class="form-check-input"
-              type="checkbox"
-              id="hideFutureReleases"
-              [(ngModel)]="hideFutureReleases"
-              (ngModelChange)="onHideFutureReleasesChange()"
-            >
-            <label class="form-check-label text-muted" for="hideFutureReleases" title="Hide unreleased titles">
-              Hide future releases
-            </label>
-          </div>
-          <div class="form-check" *ngIf="ignoredIds.size > 0">
-            <input
-              class="form-check-input"
-              type="checkbox"
-              id="showIgnored"
-              [(ngModel)]="showIgnored"
-              (ngModelChange)="onShowIgnoredChange()"
-            >
-            <label class="form-check-label text-muted" for="showIgnored">
-              Show ignored ({{ ignoredIds.size }})
-            </label>
           </div>
         </div>
       </div>

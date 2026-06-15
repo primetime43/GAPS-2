@@ -19,6 +19,7 @@ GAPS 2 connects to your Plex, Jellyfin, or Emby server, looks at what you own, a
 - **Multi-server support** — Plex (OAuth), Jellyfin, and Emby
 - **Find missing movies** from TMDB collections, and **missing TV shows** from TheTVDB's official franchise lists
 - **Unified "Missing" view** with a Movies / TV Shows toggle — browse a library, scan it for gaps, or click a single title to check just its collection/franchise
+- **Find gaps by actor/actress** — search a performer (e.g. *Will Smith*) on the **Actors** page and see their full filmography split into what you own and what you're missing
 
 **Act on the results**
 - **Send to Radarr / Sonarr** — add missing movies (by TMDB id) and shows (by TheTVDB id) directly from the results
@@ -114,8 +115,9 @@ The Angular dev server starts at `http://localhost:4200` and proxies API request
 2. *(Optional, for TV)* Go to **Settings > TheTVDB** and enter your free TheTVDB API key
 3. Go to **Settings > Plex/Jellyfin/Emby** and connect your media server
 4. Go to **Missing**, choose **Movies** or **TV Shows**, pick a library, and click **Scan for Gaps** — or click a single title to check just its collection/franchise
-5. *(Optional)* Configure **Radarr** and/or **Sonarr** in Settings to send missing titles straight to your downloaders
-6. *(Optional)* Configure **scheduled scans** (separate cadences for movies and TV) and **notifications** in Settings
+5. Go to **Actors**, search an actor or actress, and see which of their movies you own vs. are missing
+6. *(Optional)* Configure **Radarr** and/or **Sonarr** in Settings to send missing titles straight to your downloaders
+7. *(Optional)* Configure **scheduled scans** (separate cadences for movies and TV) and **notifications** in Settings
 
 > **TheTVDB API key:** create a free key on your [TheTVDB dashboard](https://thetvdb.com/dashboard/account/apikey). Some keys are tied to the *User Subscription* funding model and require your subscriber PIN; if so, GAPS will tell you, and you can enter the PIN on the TheTVDB settings page.
 

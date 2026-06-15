@@ -2,6 +2,7 @@ import { NgModule } from '@angular/core';
 import { RouterModule, Routes } from '@angular/router';
 
 import { RecommendedComponent } from './components/recommended/recommended.component';
+import { ActorsComponent } from './components/actors/actors.component';
 import { AboutComponent } from './components/about/about.component';
 import { LogsComponent } from './components/logs/logs.component';
 import { ScanHistoryComponent } from './components/scan-history/scan-history.component';
@@ -23,6 +24,7 @@ import { SettingsComponent } from './components/settings/settings.component';
 const routes: Routes = [
   { path: '', component: IndexComponent },
   { path: 'recommended', component: RecommendedComponent, data: { reuse: true } },
+  { path: 'actors', component: ActorsComponent, data: { reuse: true } },
   { path: 'about', component: AboutComponent },
   { path: 'logs', component: LogsComponent },
   { path: 'scan-history', component: ScanHistoryComponent },

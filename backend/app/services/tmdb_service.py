@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import re
 import threading
 import time
 from datetime import datetime, timezone
@@ -11,6 +12,16 @@ from app.services.scan_progress import ScanProgressTracker
 logger = logging.getLogger(__name__)
 
 _CACHE_FILE_NAME = 'tmdb_cache.json'
+
+# Heuristics for decluttering an actor's filmography (issue #49): TMDB's
+# movie_credits cast list mixes real acting roles with DVD extras, featurettes,
+# "making-of" docs, and "as themselves" tribute/talk-show appearances. These
+# signals flag the latter so they're hidden by default (revealable via a toggle).
+_DOCUMENTARY_GENRE_ID = 99
+_MINOR_VOTE_THRESHOLD = 10
+# Word-boundary match so "Self/Himself/Herself" credits are caught without
+# nuking real characters that merely contain the letters (e.g. "Selfridge").
+_SELF_APPEARANCE_RE = re.compile(r"\b(self|himself|herself|themselves)\b", re.IGNORECASE)
 # Collection memberships rarely change but new movies can be added to existing
 # collections (sequels, reissues), so re-fetch weekly to balance freshness vs.
 # TMDB rate limits.
@@ -34,6 +45,9 @@ class TmdbService:
         self._id_cache: dict[str, int | None] = {}
         self._movie_collection_cache: dict[int, int | None] = {}
         self._collection_cache: dict[int, dict] = {}
+        # Actor filmography lookups (issue #49). Not persisted — credits change as
+        # actors make new films, and these are cheap single calls to regenerate.
+        self._person_credits_cache: dict[int, dict] = {}
 
         # Persistent cache for the collection lookups (the expensive ones).
         # _id_cache is intentionally not persisted — its search-key entries are
@@ -531,3 +545,197 @@ class TmdbService:
         results = self._build_gap_entries(coll_data, owned_tmdb_ids, show_existing)
         results.sort(key=lambda r: r["year"])
         return results, None
+
+    # -- Actor / actress gaps (issue #49) --
+    # Unlike collection gaps (a background scan of the whole library), an actor
+    # lookup is search-driven and synchronous: search a person, fetch their
+    # filmography, cross-reference owned movies. Mirrors find_gaps_for_movie.
+
+    def search_people(self, query: str) -> list[dict]:
+        """Search TMDB for people (actors/actresses) by name."""
+        if not self._api_key or not query:
+            return []
+        try:
+            resp = requests.get(
+                f"{self._base_url}/search/person",
+                params={
+                    "api_key": self._api_key,
+                    "query": query,
+                    "language": self._language,
+                    "include_adult": "false",
+                },
+                timeout=10,
+            )
+            if resp.status_code != 200:
+                return []
+            results = resp.json().get("results", [])
+        except Exception as e:
+            logger.warning("TMDB person search failed for '%s': %s", query, e)
+            return []
+
+        people = []
+        for person in results[:10]:
+            known_for = [
+                kf.get("title") or kf.get("name")
+                for kf in (person.get("known_for") or [])
+                if kf.get("title") or kf.get("name")
+            ]
+            profile = person.get("profile_path")
+            people.append({
+                "id": person["id"],
+                "name": person.get("name", "Unknown"),
+                "profileUrl": f"{self._image_base_url}{profile}" if profile else None,
+                "knownFor": ", ".join(known_for[:3]),
+            })
+        return people
+
+    def _get_person_movie_credits(self, person_id: int) -> dict | None:
+        """Fetch a person's name + movie cast credits in one call, using cache."""
+        with self._cache_lock:
+            if person_id in self._person_credits_cache:
+                return self._person_credits_cache[person_id]
+
+        try:
+            resp = requests.get(
+                f"{self._base_url}/person/{person_id}",
+                params={
+                    "api_key": self._api_key,
+                    "language": self._language,
+                    "append_to_response": "movie_credits",
+                },
+                timeout=10,
+            )
+            if resp.status_code != 200:
+                return None
+            data = resp.json()
+        except Exception as e:
+            logger.warning("Failed to fetch person %s credits: %s", person_id, e)
+            return None
+
+        credits = {
+            "actor_name": data.get("name", "Unknown"),
+            "cast": (data.get("movie_credits") or {}).get("cast", []),
+        }
+        with self._cache_lock:
+            self._person_credits_cache[person_id] = credits
+        return credits
+
+    def _is_minor_credit(self, credit: dict, release_date: str) -> bool:
+        """Whether a credit is bonus content rather than a real acting role.
+
+        Featurettes, DVD extras, "making-of" docs, and "as themselves" tribute /
+        talk-show appearances pollute TMDB's movie_credits cast list. We hide
+        these by default so an actor's filmography reads as actual films.
+        """
+        # Undated credits (no release date at all) are unconfirmed /
+        # in-development / rumored projects — not a dated upcoming film.
+        if not release_date:
+            return True
+        if credit.get("video"):
+            return True
+        character = (credit.get("character") or "")
+        if "uncredited" in character.lower() or _SELF_APPEARANCE_RE.search(character):
+            return True
+        if _DOCUMENTARY_GENRE_ID in (credit.get("genre_ids") or []):
+            return True
+        # Obscure, already-released titles with almost no votes are typically
+        # extras; unreleased real films (0 votes yet) are exempt.
+        if self._is_released(release_date) and (credit.get("vote_count") or 0) < _MINOR_VOTE_THRESHOLD:
+            return True
+        return False
+
+    def _build_actor_gap_entries(
+        self,
+        cast: list[dict],
+        actor_name: str,
+        owned_tmdb_ids: set[int],
+        owned_title_year: set[str],
+        show_existing: bool,
+        include_minor: bool = False,
+    ) -> list[dict]:
+        """Build gap entries from an actor's cast credits (one per movie).
+
+        Mirrors `_build_gap_entries`, using the actor's name as the group
+        (`collectionName`) so the frontend Gap normalization, export, and Radarr
+        all work unchanged. No rating quality filter — a filmography is bounded;
+        owned/future/ignore are client-side toggles. Bonus content (featurettes,
+        making-of, "as themselves") is dropped unless `include_minor` is set, and
+        owned titles are always kept regardless.
+        """
+        entries = []
+        seen: set[int] = set()
+        for credit in cast:
+            movie_id = credit.get("id")
+            if not movie_id or movie_id in seen:
+                continue
+            if credit.get("adult"):
+                continue
+            title = credit.get("title") or credit.get("original_title")
+            if not title:
+                continue
+            seen.add(movie_id)
+
+            release_date = credit.get("release_date") or ""
+            year = release_date[:4] if release_date else "N/A"
+            # Cheap fallback for owned movies that lack a TMDB guid.
+            name_key = f"{title.strip().lower()}|{year if year != 'N/A' else ''}"
+            is_owned = movie_id in owned_tmdb_ids or name_key in owned_title_year
+
+            # Hide bonus content by default, but never hide something you own.
+            if not is_owned and not include_minor and self._is_minor_credit(credit, release_date):
+                continue
+            if not show_existing and is_owned:
+                continue
+
+            poster = credit.get("poster_path")
+            entries.append({
+                "tmdbId": movie_id,
+                "name": title,
+                "year": year,
+                "releaseDate": release_date,
+                "posterUrl": f"{self._image_base_url}{poster}" if poster else None,
+                "overview": credit.get("overview", ""),
+                "collectionName": actor_name,
+                "owned": is_owned,
+            })
+        return entries
+
+    def get_actor_gaps(
+        self,
+        person_id: int,
+        owned_tmdb_ids: set[int],
+        owned_movies: list[dict] | None = None,
+        show_existing: bool = True,
+        include_minor: bool = False,
+    ) -> tuple[list[dict] | None, str | None]:
+        """Find owned/missing movies for an actor's cast filmography.
+
+        By default, bonus content (featurettes, making-of docs, "as themselves"
+        appearances) is excluded; pass include_minor=True to include it.
+        """
+        if not self._api_key:
+            return None, "No TMDB API key configured"
+
+        credits = self._get_person_movie_credits(person_id)
+        if credits is None:
+            return None, "Failed to fetch the actor's filmography"
+
+        # Cheap title|year index so owned movies lacking a TMDB guid still match.
+        owned_title_year: set[str] = set()
+        for movie in owned_movies or []:
+            name = (movie.get("name") or "").strip().lower()
+            year = str(movie.get("year") or "")[:4]
+            if name:
+                owned_title_year.add(f"{name}|{year}")
+
+        entries = self._build_actor_gap_entries(
+            credits.get("cast", []),
+            credits.get("actor_name", "Unknown"),
+            owned_tmdb_ids,
+            owned_title_year,
+            show_existing,
+            include_minor,
+        )
+        # Chronological, with undated titles last.
+        entries.sort(key=lambda e: (e["year"] == "N/A", e["year"]))
+        return entries, None
