@@ -1,0 +1,222 @@
+<div class="container top-margin pb-5">
+  <!-- Loading -->
+  <div *ngIf="loading" class="text-center mt-4">
+    <div class="spinner"></div>
+    <p class="text-muted mt-2">Loading...</p>
+  </div>
+
+  <!-- No server -->
+  <div *ngIf="!loading && !hasServer" class="text-center mt-4">
+    <h4 class="text-muted">No Active Server</h4>
+    <p class="text-muted">
+      Configure a media server first.
+      <a [routerLink]="['/settings']" class="activeLink">Go to Settings</a>
+    </p>
+  </div>
+
+  <!-- Main content -->
+  <div *ngIf="!loading && hasServer">
+    <h3 class="regular-text">Find Movies by Actor</h3>
+    <p class="text-muted">
+      Search for an actor or actress to see which of their movies you own and which you're missing.
+    </p>
+
+    <!-- No movie libraries -->
+    <div *ngIf="libraries.length === 0" class="alert alert-info">
+      No movie libraries found on <strong>{{ activeServerName }}</strong>.
+    </div>
+
+    <div *ngIf="libraries.length > 0">
+      <!-- Search box -->
+      <div class="row mb-3">
+        <div class="col-md-6">
+          <label class="text-muted mb-1">Search for an actor or actress</label>
+          <input
+            class="form-control dark-input"
+            type="text"
+            placeholder="e.g. Will Smith"
+            [(ngModel)]="query"
+            (ngModelChange)="onQueryChange()"
+            autocomplete="off"
+          >
+        </div>
+
+        <!-- Library cross-check selector -->
+        <div class="col-md-6" *ngIf="libraries.length > 1">
+          <label class="text-muted mb-1">Count as owned if in:</label>
+          <div class="d-flex flex-wrap gap-2">
+            <div *ngFor="let lib of libraries" class="form-check form-check-inline">
+              <input
+                class="form-check-input"
+                type="checkbox"
+                [id]="'actor-lib-' + lib.title"
+                [checked]="isLibrarySelected(lib.title)"
+                (change)="toggleLibrarySelection(lib.title)"
+              >
+              <label class="form-check-label text-muted" [for]="'actor-lib-' + lib.title" style="font-size: 13px;">
+                {{ lib.title }}
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Searching spinner -->
+      <div *ngIf="searching" class="text-center mt-3">
+        <div class="spinner"></div>
+        <p class="text-muted mt-2">Searching...</p>
+      </div>
+
+      <!-- Search results -->
+      <div *ngIf="!searching && searchResults.length > 0 && !selectedActor" class="actor-results mb-4">
+        <div *ngFor="let person of searchResults" class="actor-card clickable" (click)="selectActor(person)">
+          <img
+            *ngIf="person.profileUrl"
+            [src]="person.profileUrl"
+            [alt]="person.name"
+            class="actor-photo"
+            loading="lazy"
+          >
+          <div *ngIf="!person.profileUrl" class="actor-photo-placeholder">No Photo</div>
+          <div class="actor-info">
+            <div class="actor-name">{{ person.name }}</div>
+            <div class="actor-known-for" *ngIf="person.knownFor">{{ person.knownFor }}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- No search results -->
+      <div *ngIf="!searching && searchPerformed && searchResults.length === 0 && !selectedActor" class="text-muted mt-3">
+        No people found for "{{ query }}".
+      </div>
+
+      <!-- Loading gaps -->
+      <div *ngIf="loadingGaps" class="text-center mt-4">
+        <div class="spinner"></div>
+        <p class="text-muted mt-2">Finding {{ selectedActor?.name }}'s filmography...</p>
+      </div>
+
+      <!-- Error -->
+      <div *ngIf="errorMessage" class="alert alert-danger mt-3">{{ errorMessage }}</div>
+
+      <!-- Results -->
+      <div *ngIf="!loadingGaps && selectedActor && collectionGroups.length > 0">
+        <div class="d-flex align-items-center mb-3 flex-wrap gap-2">
+          <button class="btn btn-sm btn-outline-light me-2" (click)="clearActor()">&larr; Back</button>
+          <h5 class="regular-text mb-0">
+            {{ selectedActor.name }} — {{ ownedCount }} owned, {{ missingCount }} missing
+          </h5>
+          <div class="d-flex ms-auto gap-3 flex-wrap align-items-center">
+            <div class="dropdown">
+              <button class="btn btn-sm btn-outline-info dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                Export
+              </button>
+              <ul class="dropdown-menu dropdown-menu-dark dropdown-menu-end">
+                <li><a class="dropdown-item" (click)="exportResults('csv')">Export as CSV</a></li>
+                <li><a class="dropdown-item" (click)="exportResults('xlsx')">Export as Excel</a></li>
+              </ul>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" id="actorShowOwned"
+                     [(ngModel)]="showOwned" (ngModelChange)="onFilterChange()">
+              <label class="form-check-label text-muted" for="actorShowOwned">Show owned</label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" id="actorHideFuture"
+                     [(ngModel)]="hideFutureReleases" (ngModelChange)="onFilterChange()">
+              <label class="form-check-label text-muted" for="actorHideFuture" title="Hide unreleased titles">
+                Hide future releases
+              </label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" id="actorShowMinor"
+                     [(ngModel)]="showMinor" (ngModelChange)="onShowMinorChange()">
+              <label class="form-check-label text-muted" for="actorShowMinor"
+                     title="Include featurettes, making-of docs, 'as themselves' appearances, and undated/in-development titles">
+                Show extras
+              </label>
+            </div>
+            <div class="form-check" *ngIf="ignoredIds.size > 0">
+              <input class="form-check-input" type="checkbox" id="actorShowIgnored"
+                     [(ngModel)]="showIgnored" (ngModelChange)="onFilterChange()">
+              <label class="form-check-label text-muted" for="actorShowIgnored">
+                Show ignored ({{ ignoredIds.size }})
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Result filter -->
+        <input
+          class="form-control dark-input mb-3"
+          type="text"
+          placeholder="Filter results by title..."
+          [(ngModel)]="resultFilter"
+          (ngModelChange)="applyFilter()"
+        >
+
+        <!-- Groups (one per actor) -->
+        <div *ngFor="let group of filteredGroups" class="collection-group mb-4">
+          <div class="d-flex align-items-center mb-2">
+            <h6 class="collection-name mb-0">{{ group.name }}</h6>
+            <button
+              *ngIf="hasUnignoredGaps(group)"
+              class="btn btn-sm btn-outline-warning ms-2 collection-ignore-btn"
+              title="Ignore all missing titles"
+              (click)="ignoreAll(group, $event)">
+              Ignore All
+            </button>
+            <button
+              *ngIf="showIgnored && !hasUnignoredGaps(group)"
+              class="btn btn-sm btn-outline-secondary ms-2 collection-ignore-btn"
+              title="Unignore all titles"
+              (click)="unignoreAll(group, $event)">
+              Unignore All
+            </button>
+          </div>
+          <div class="rec-grid">
+            <div *ngFor="let gap of group.gaps" class="rec-card" [class.owned]="gap.owned" [class.ignored]="isIgnored(gap)">
+              <div class="owned-badge" *ngIf="gap.owned">Owned</div>
+              <div class="ignored-badge" *ngIf="isIgnored(gap)">Ignored</div>
+              <div class="missing-badge" *ngIf="!gap.owned && !isIgnored(gap)">Missing</div>
+              <button
+                *ngIf="!gap.owned"
+                class="ignore-btn"
+                [title]="isIgnored(gap) ? 'Unignore' : 'Ignore'"
+                (click)="toggleIgnore(gap, $event)">
+                {{ isIgnored(gap) ? '✓' : '✕' }}
+              </button>
+              <a [href]="gap.externalUrl" target="_blank" rel="noopener noreferrer">
+                <img *ngIf="gap.posterUrl" [src]="gap.posterUrl" [alt]="gap.name" class="rec-poster" loading="lazy">
+                <div *ngIf="!gap.posterUrl" class="rec-poster-placeholder">No Image</div>
+              </a>
+              <div class="rec-info">
+                <a [href]="gap.externalUrl" target="_blank" rel="noopener noreferrer" class="rec-title-link">
+                  {{ gap.name }}
+                </a>
+                <div class="rec-year">{{ gap.year }}</div>
+                <button
+                  *ngIf="canSendToRadarr(gap)"
+                  class="btn btn-sm radarr-btn mt-2"
+                  [ngClass]="radarrButtonClass(gap.id)"
+                  [disabled]="radarrStatusOf(gap.id) === 'sending' || radarrStatusOf(gap.id) === 'sent'"
+                  [title]="radarrErrorOf(gap.id) || 'Add this movie to Radarr'"
+                  (click)="sendToRadarr(gap, $event)">
+                  {{ radarrButtonLabel(gap.id) }}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- No results after filtering -->
+      <div *ngIf="!loadingGaps && selectedActor && collectionGroups.length === 0 && !errorMessage" class="mt-3">
+        <button class="btn btn-sm btn-outline-light mb-2" (click)="clearActor()">&larr; Back</button>
+        <p class="text-muted">
+          No movies to show for {{ selectedActor.name }} with the current filters.
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
