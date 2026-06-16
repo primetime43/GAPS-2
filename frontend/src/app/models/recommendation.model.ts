@@ -27,4 +27,5 @@ export interface Gap {
   sonarrEligible: boolean; // shows → Sonarr
   imdbRating?: number;     // IMDb aggregate rating (movies, when enabled)
   imdbVotes?: number;      // IMDb vote count
+  tmdbRating?: number;     // TMDB vote average (movies)
 }

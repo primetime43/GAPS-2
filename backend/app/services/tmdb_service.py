@@ -421,6 +421,7 @@ class TmdbService:
                 "overview": part.get("overview", ""),
                 "collectionName": collection_name,
                 "owned": is_owned,
+                "voteAverage": part.get("vote_average") or 0,
             })
         return entries
 
@@ -733,6 +734,7 @@ class TmdbService:
                 "overview": credit.get("overview", ""),
                 "collectionName": actor_name,
                 "owned": is_owned,
+                "voteAverage": credit.get("vote_average") or 0,
             })
         return entries
 

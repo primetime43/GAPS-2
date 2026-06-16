@@ -232,6 +232,7 @@ export class ActorsComponent implements OnInit, OnDestroy {
       externalUrl: this.movieExternalUrl(g.tmdbId),
       radarrEligible: !!g.tmdbId,
       sonarrEligible: false,
+      tmdbRating: g.voteAverage > 0 ? g.voteAverage : undefined,
     }));
   }
 

@@ -225,12 +225,17 @@
                   {{ gap.name }}
                 </a>
                 <div class="rec-year">{{ gap.year }}</div>
-                <div *ngIf="gap.imdbRating" class="imdb-rating" [title]="(gap.imdbVotes | number) + ' votes on IMDb'">
-                  <span class="imdb-badge">IMDb</span> {{ gap.imdbRating | number:'1.1-1' }}
+                <div class="card-ratings" *ngIf="gap.imdbRating || gap.tmdbRating">
+                  <span *ngIf="gap.imdbRating" class="rating-chip imdb" [title]="(gap.imdbVotes | number) + ' votes on IMDb'">
+                    <span class="rating-badge imdb-badge">IMDb</span> {{ gap.imdbRating | number:'1.1-1' }}
+                  </span>
+                  <span *ngIf="gap.tmdbRating" class="rating-chip tmdb" title="TMDB rating">
+                    <span class="rating-badge tmdb-badge">TMDB</span> {{ gap.tmdbRating | number:'1.1-1' }}
+                  </span>
                 </div>
                 <button
                   *ngIf="canSendToRadarr(gap)"
-                  class="btn btn-sm radarr-btn mt-2"
+                  class="btn btn-sm radarr-btn"
                   [ngClass]="radarrButtonClass(gap.id)"
                   [disabled]="radarrStatusOf(gap.id) === 'sending' || radarrStatusOf(gap.id) === 'sent'"
                   [title]="radarrErrorOf(gap.id) || 'Add this movie to Radarr'"
