@@ -66,7 +66,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   mediaType: MediaType = 'movie';
 
   libraries: MediaLibrary[] = [];
-  selectedLibrary = '';
+  // The libraries to browse + scan + count as owned (single source of truth).
   selectedLibraries: string[] = [];
   items: BrowseItem[] = [];
   itemFilter = '';
@@ -210,7 +210,6 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     }
     this.mediaType = type;
     this.stopPolling();
-    this.selectedLibrary = '';
     this.selectedLibraries = [];
     this.items = [];
     this.itemFilter = '';
@@ -323,9 +322,8 @@ export class RecommendedComponent implements OnInit, OnDestroy {
       const scanLibs = validScan ? (progress!.libraries || []) : [];
 
       if (scanLibs.length && this.libraries.some(l => scanLibs.includes(l.title))) {
-        this.selectedLibrary = scanLibs[0];
-        this.selectedLibraries = [...scanLibs];
-        this.onLibrarySelect();
+        this.selectedLibraries = scanLibs.filter((l: string) => this.libraries.some(x => x.title === l));
+        this.loadItems();
       } else {
         this.applyDefaultLibrary(prefs);
       }
@@ -344,19 +342,15 @@ export class RecommendedComponent implements OnInit, OnDestroy {
 
   private applyDefaultLibrary(prefs: any): void {
     if (prefs?.defaultLibrary && this.libraries.some(l => l.title === prefs.defaultLibrary)) {
-      this.selectedLibrary = prefs.defaultLibrary;
       this.selectedLibraries = [prefs.defaultLibrary];
-      this.onLibrarySelect();
+      this.loadItems();
     }
   }
 
   // -- Library selection / browse --
 
-  onLibrarySelect(): void {
-    if (!this.selectedLibrary) return;
-    if (!this.selectedLibraries.includes(this.selectedLibrary)) {
-      this.selectedLibraries = [this.selectedLibrary];
-    }
+  /** Load the browse list for the selected libraries, merged and de-duplicated. */
+  loadItems(): void {
     this.items = [];
     this.itemFilter = '';
     this.allGaps = [];
@@ -364,21 +358,28 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     this.selectedItem = null;
     this.scanMode = false;
     this.errorMessage = '';
+    this.currentPage = 1;
+
+    if (!this.selectedLibraries.length) {
+      this.loadingItems = false;
+      return;
+    }
 
     this.tryRestoreScanForCurrentSelection();
 
     this.loadingItems = !this.scanMode;
-    const load$: Observable<any> = this.mediaType === 'tv'
-      ? this.libraryService.getShows(this.selectedLibrary, this.activeSource)
-      : this.libraryService.getMovies(this.selectedLibrary, this.activeSource);
-    load$.subscribe({
-      next: (res: any) => {
-        if (res.error) {
-          this.errorMessage = this.friendlyError(res.error);
-          this.loadingItems = false;
-          return;
+    const loads = this.selectedLibraries.map(lib => this.mediaType === 'tv'
+      ? this.libraryService.getShows(lib, this.activeSource)
+      : this.libraryService.getMovies(lib, this.activeSource));
+    forkJoin(loads).subscribe({
+      next: (results: any[]) => {
+        const merged: BrowseItem[] = [];
+        for (const res of results) {
+          if (res?.error) continue;
+          const arr = Array.isArray(res) ? res : (res.movies || res.shows || []);
+          merged.push(...arr);
         }
-        this.items = Array.isArray(res) ? res : (res.movies || res.shows || []);
+        this.items = this.dedupeItems(merged);
         this.loadingItems = false;
         this.prefetchNextPage();
       },
@@ -387,6 +388,21 @@ export class RecommendedComponent implements OnInit, OnDestroy {
         this.loadingItems = false;
       }
     });
+  }
+
+  /** De-duplicate browse items that appear in more than one selected library. */
+  private dedupeItems(items: BrowseItem[]): BrowseItem[] {
+    const seen = new Set<string>();
+    const out: BrowseItem[] = [];
+    for (const it of items) {
+      const key = it.tmdbId ? `t:${it.tmdbId}`
+        : it.tvdbId ? `v:${it.tvdbId}`
+        : `n:${(it.name || '').toLowerCase()}|${it.year}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(it);
+    }
+    return out;
   }
 
   private tryRestoreScanForCurrentSelection(): void {
@@ -419,6 +435,8 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     } else {
       this.selectedLibraries.push(libTitle);
     }
+    // The browse list, scan set, and ownership all follow the selection.
+    this.loadItems();
   }
 
   isLibrarySelected(libTitle: string): boolean {
@@ -454,7 +472,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     this.scanProgress = null;
     this.errorMessage = '';
 
-    const scanLibraries = this.selectedLibraries.length > 0 ? this.selectedLibraries : [this.selectedLibrary];
+    const scanLibraries = [...this.selectedLibraries];
 
     if (this.mediaType === 'tv') {
       this.tvdb.startScan({
@@ -618,7 +636,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
         this.loadingGaps = false;
         return;
       }
-      const libs = this.selectedLibraries.length ? this.selectedLibraries : [this.selectedLibrary];
+      const libs = [...this.selectedLibraries];
       this.tvdb.getGapsForShow(tvdbId, libs, true, this.activeSource).subscribe({
         next: (gaps) => {
           this.allGaps = this.normalizeGaps(gaps);
@@ -634,12 +652,15 @@ export class RecommendedComponent implements OnInit, OnDestroy {
       return;
     }
 
+    // Owned set = the libraries selected in the toolbar plus any extra the user
+    // ticked in this single-movie view.
+    const owned = [...new Set([...this.selectedLibraries, ...this.crossCheckLibraries])];
     this.recommendationService.getGapsForMovie(
       this.selectedItem as any,
-      this.selectedLibrary,
+      owned[0] || '',
       true,
       this.activeSource,
-      this.crossCheckLibraries
+      owned.slice(1)
     ).subscribe({
       next: (gaps) => {
         this.allGaps = this.normalizeGaps(gaps);

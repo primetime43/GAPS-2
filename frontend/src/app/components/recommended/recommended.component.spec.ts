@@ -163,7 +163,7 @@ describe('RecommendedComponent', () => {
     fixture.detectChanges();
     tick();
 
-    expect(component.selectedLibrary).toBe('Movies');
+    expect(component.selectedLibraries).toContain('Movies');
     expect(component.itemsPerPage).toBe(25);
     expect(component.view).toBe('missing');
   }));
@@ -180,9 +180,8 @@ describe('RecommendedComponent', () => {
     ];
     libraryService.getMovies.and.returnValue(of({ movies: mockMovies } as any));
 
-    component.selectedLibrary = 'Movies';
     component.selectedLibraries = ['Movies'];
-    component.onLibrarySelect();
+    component.loadItems();
     tick();
 
     expect(component.items.length).toBe(2);
@@ -318,7 +317,6 @@ describe('RecommendedComponent', () => {
   it('movie scan should persist the quality filter before starting', fakeAsync(() => {
     component.mediaType = 'movie';
     component.activeSource = 'plex';
-    component.selectedLibrary = 'Movies';
     component.selectedLibraries = ['Movies'];
     component.qualityFilter = true;
     component.minRating = 6.5;
