@@ -153,6 +153,26 @@
                 </li>
                 <li><hr class="dropdown-divider"></li>
                 <li>
+                  <label class="form-label small mb-1 d-block">Sort by</label>
+                  <select class="form-select form-select-sm dark-select"
+                          [(ngModel)]="sortBy" (ngModelChange)="applyFilter()">
+                    <option value="default">Default</option>
+                    <option value="rating">Rating</option>
+                    <option value="popularity">Popularity</option>
+                    <option value="year">Year (newest)</option>
+                    <option value="name">Title (A–Z)</option>
+                  </select>
+                </li>
+                <li *ngIf="availableGenres.length">
+                  <label class="form-label small mb-1 mt-2 d-block">Genre</label>
+                  <select class="form-select form-select-sm dark-select"
+                          [(ngModel)]="genreFilter" (ngModelChange)="applyFilter()">
+                    <option [ngValue]="null">All genres</option>
+                    <option *ngFor="let gen of availableGenres" [ngValue]="gen.id">{{ gen.name }}</option>
+                  </select>
+                </li>
+                <li><hr class="dropdown-divider"></li>
+                <li>
                   <label class="form-label small mb-1 d-block">Open links in</label>
                   <select class="form-select form-select-sm dark-select"
                           [(ngModel)]="externalLinkProvider" (ngModelChange)="onLinkProviderChange()">
@@ -173,6 +193,22 @@
                 <li><a class="dropdown-item" (click)="exportResults('xlsx')">Export as Excel</a></li>
               </ul>
             </div>
+          </div>
+        </div>
+
+        <!-- Actor profile header -->
+        <div *ngIf="actorDetails" class="actor-profile mb-3">
+          <img *ngIf="actorDetails.profileUrl" [src]="actorDetails.profileUrl"
+               [alt]="actorDetails.name" class="actor-profile-photo" loading="lazy">
+          <div class="actor-profile-info">
+            <div class="actor-profile-meta">
+              <span *ngIf="actorDetails.knownForDepartment">{{ actorDetails.knownForDepartment }}</span>
+              <span *ngIf="actorDetails.birthday">Born {{ actorDetails.birthday }}<span *ngIf="actorDetails.placeOfBirth"> · {{ actorDetails.placeOfBirth }}</span></span>
+              <span *ngIf="actorDetails.deathday">Died {{ actorDetails.deathday }}</span>
+              <a *ngIf="actorDetails.imdbId" class="activeLink"
+                 [href]="'https://www.imdb.com/name/' + actorDetails.imdbId" target="_blank" rel="noopener noreferrer">IMDb</a>
+            </div>
+            <p *ngIf="actorDetails.biography" class="actor-profile-bio">{{ actorDetails.biography }}</p>
           </div>
         </div>
 
@@ -227,10 +263,10 @@
                 <div class="rec-year">{{ gap.year }}</div>
                 <div class="card-ratings" *ngIf="gap.imdbRating || gap.tmdbRating">
                   <span *ngIf="gap.imdbRating" class="rating-chip imdb" [title]="(gap.imdbVotes | number) + ' votes on IMDb'">
-                    <span class="rating-badge imdb-badge">IMDb</span> {{ gap.imdbRating | number:'1.1-1' }}
+                    <img class="rating-logo" src="assets/images/imdb-logo.svg" alt="IMDb"> {{ gap.imdbRating | number:'1.1-1' }}
                   </span>
-                  <span *ngIf="gap.tmdbRating" class="rating-chip tmdb" title="TMDB rating">
-                    <span class="rating-badge tmdb-badge">TMDB</span> {{ gap.tmdbRating | number:'1.1-1' }}
+                  <span *ngIf="gap.tmdbRating" class="rating-chip tmdb" [title]="(gap.tmdbVotes | number) + ' votes on TMDB'">
+                    <img class="rating-logo" src="assets/images/tmdb-logo.svg" alt="TMDB"> {{ gap.tmdbRating | number:'1.1-1' }}
                   </span>
                 </div>
                 <button

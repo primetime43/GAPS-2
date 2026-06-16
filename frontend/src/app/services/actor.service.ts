@@ -4,7 +4,7 @@ import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { environment } from '../../environments/environment';
 import { CollectionGap } from '../models/recommendation.model';
-import { PersonResult } from '../models/actor.model';
+import { PersonResult, PersonDetails } from '../models/actor.model';
 
 /**
  * Actor/actress gap finding (issue #49). Unlike the movie/TV scans this is a
@@ -29,7 +29,7 @@ export class ActorService {
     source: string = 'plex',
     showExisting: boolean = true,
     includeMinor: boolean = false,
-  ): Observable<CollectionGap[]> {
+  ): Observable<{ gaps: CollectionGap[]; actor: PersonDetails | null }> {
     let params = new HttpParams()
       .set('source', source)
       .set('showExisting', showExisting.toString())
@@ -37,8 +37,8 @@ export class ActorService {
     for (const lib of libraryNames) {
       params = params.append('libraryNames', lib);
     }
-    return this.http.get<{ gaps: CollectionGap[] }>(
+    return this.http.get<{ gaps: CollectionGap[]; actor: PersonDetails | null }>(
       `${environment.apiUrl}/actors/${personId}/gaps`, { params }
-    ).pipe(map(res => res.gaps));
+    );
   }
 }

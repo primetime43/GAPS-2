@@ -51,6 +51,8 @@ class TmdbService:
         # Movie -> IMDb ID lookups for external links. Not persisted — IMDb IDs
         # are stable and resolved lazily via a single TMDB call.
         self._imdb_id_cache: dict[int, str | None] = {}
+        # TMDB movie genre id→name list (small, static); fetched once on demand.
+        self._genre_cache: list[dict] | None = None
 
         # Persistent cache for the collection lookups (the expensive ones).
         # _id_cache is intentionally not persisted — its search-key entries are
@@ -422,6 +424,9 @@ class TmdbService:
                 "collectionName": collection_name,
                 "owned": is_owned,
                 "voteAverage": part.get("vote_average") or 0,
+                "voteCount": part.get("vote_count") or 0,
+                "genreIds": part.get("genre_ids") or [],
+                "popularity": part.get("popularity") or 0,
             })
         return entries
 
@@ -627,7 +632,12 @@ class TmdbService:
         return people
 
     def _get_person_movie_credits(self, person_id: int) -> dict | None:
-        """Fetch a person's name + movie cast credits in one call, using cache."""
+        """Fetch a person's profile + movie cast credits in one call, using cache.
+
+        The single /person call already returns bio/profile fields, so we keep a
+        `details` dict alongside the cast for the Actors page header — no extra
+        API call needed.
+        """
         with self._cache_lock:
             if person_id in self._person_credits_cache:
                 return self._person_credits_cache[person_id]
@@ -649,13 +659,53 @@ class TmdbService:
             logger.warning("Failed to fetch person %s credits: %s", person_id, e)
             return None
 
+        profile = data.get("profile_path")
         credits = {
             "actor_name": data.get("name", "Unknown"),
             "cast": (data.get("movie_credits") or {}).get("cast", []),
+            "details": {
+                "id": person_id,
+                "name": data.get("name", "Unknown"),
+                "profileUrl": f"{self._image_base_url}{profile}" if profile else None,
+                "biography": data.get("biography") or "",
+                "birthday": data.get("birthday"),
+                "deathday": data.get("deathday"),
+                "placeOfBirth": data.get("place_of_birth"),
+                "knownForDepartment": data.get("known_for_department"),
+                "imdbId": data.get("imdb_id"),
+            },
         }
         with self._cache_lock:
             self._person_credits_cache[person_id] = credits
         return credits
+
+    def get_person_details(self, person_id: int) -> dict | None:
+        """Profile info (photo, bio, born) for the Actors page header, cached."""
+        credits = self._get_person_movie_credits(person_id)
+        return credits.get("details") if credits else None
+
+    def get_movie_genres(self) -> list[dict]:
+        """TMDB's movie genre id→name list, cached in-memory (small, static)."""
+        with self._cache_lock:
+            if self._genre_cache is not None:
+                return self._genre_cache
+        if not self._api_key:
+            return []
+        genres: list[dict] = []
+        try:
+            resp = requests.get(
+                f"{self._base_url}/genre/movie/list",
+                params={"api_key": self._api_key, "language": self._language},
+                timeout=10,
+            )
+            if resp.status_code == 200:
+                genres = resp.json().get("genres", [])
+        except Exception as e:
+            logger.warning("Failed to fetch TMDB genres: %s", e)
+            return []
+        with self._cache_lock:
+            self._genre_cache = genres
+        return genres
 
     def _is_minor_credit(self, credit: dict, release_date: str) -> bool:
         """Whether a credit is bonus content rather than a real acting role.
@@ -735,6 +785,9 @@ class TmdbService:
                 "collectionName": actor_name,
                 "owned": is_owned,
                 "voteAverage": credit.get("vote_average") or 0,
+                "voteCount": credit.get("vote_count") or 0,
+                "genreIds": credit.get("genre_ids") or [],
+                "popularity": credit.get("popularity") or 0,
             })
         return entries
 

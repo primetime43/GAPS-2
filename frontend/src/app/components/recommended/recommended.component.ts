@@ -14,6 +14,7 @@ import { ExportService, ExportFormat } from '../../services/export.service';
 import { RadarrService } from '../../services/radarr.service';
 import { SonarrService } from '../../services/sonarr.service';
 import { ImdbService } from '../../services/imdb.service';
+import { TmdbService, TmdbGenre } from '../../services/tmdb/tmdb.service';
 import { environment } from '../../../environments/environment';
 
 type MediaType = 'movie' | 'tv';
@@ -90,6 +91,12 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   // which resolves the IMDb ID lazily. TV always links to TheTVDB.
   externalLinkProvider: 'tmdb' | 'imdb' = 'tmdb';
 
+  // Results sort + genre filter (reuse fields already on each gap).
+  sortBy: 'default' | 'rating' | 'popularity' | 'year' | 'name' = 'default';
+  genreFilter: number | null = null;
+  genres: TmdbGenre[] = [];
+  availableGenres: TmdbGenre[] = [];
+
   get filteredItems(): BrowseItem[] {
     const query = this.itemFilter.trim().toLowerCase();
     return query ? this.items.filter(m => m.name.toLowerCase().includes(query)) : this.items;
@@ -161,10 +168,15 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     private radarrService: RadarrService,
     private sonarrService: SonarrService,
     private imdbService: ImdbService,
+    private tmdbService: TmdbService,
     private router: Router,
   ) {}
 
   ngOnInit(): void {
+    this.tmdbService.getGenres().pipe(catchError(() => of([] as TmdbGenre[]))).subscribe(g => {
+      this.genres = g;
+      this.updateAvailableGenres();
+    });
     this.loadContext(true);
 
     this.router.events.pipe(
@@ -208,6 +220,9 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     this.loadingItems = false;
     this.searchFilter = '';
     this.errorMessage = '';
+    // The genre filter is movie-only; clear it so it can't hide all TV results.
+    this.genreFilter = null;
+    this.availableGenres = [];
     this.loadIgnored();
     this.applyLibraryFilter();
   }
@@ -665,6 +680,9 @@ export class RecommendedComponent implements OnInit, OnDestroy {
       radarrEligible: !!g.tmdbId,
       sonarrEligible: false,
       tmdbRating: g.voteAverage > 0 ? g.voteAverage : undefined,
+      tmdbVotes: g.voteCount || undefined,
+      genreIds: g.genreIds || [],
+      popularity: g.popularity || 0,
     }));
   }
 
@@ -714,6 +732,32 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   // -- Filters --
 
   onFilterChange(): void { this.applyFilter(); }
+
+  /** Sort a gap list by the selected key, leaving the source array untouched. */
+  private sortGaps(list: Gap[]): Gap[] {
+    switch (this.sortBy) {
+      case 'rating': return [...list].sort((a, b) => (b.tmdbRating || 0) - (a.tmdbRating || 0));
+      case 'popularity': return [...list].sort((a, b) => (b.popularity || 0) - (a.popularity || 0));
+      case 'year': return [...list].sort((a, b) => this.yearNum(b) - this.yearNum(a));
+      case 'name': return [...list].sort((a, b) => String(a.name).localeCompare(String(b.name)));
+      default: return list;
+    }
+  }
+
+  private yearNum(g: Gap): number {
+    const y = parseInt(String(g.year), 10);
+    return isNaN(y) ? 0 : y;
+  }
+
+  /** Genres actually present in the current results, for the filter dropdown. */
+  private updateAvailableGenres(): void {
+    if (!this.genres.length || !this.allGaps.length) { this.availableGenres = []; return; }
+    const present = new Set<number>();
+    for (const g of this.allGaps) (g.genreIds || []).forEach(id => present.add(id));
+    this.availableGenres = this.genres
+      .filter(gen => present.has(gen.id))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
 
   setView(view: 'all' | 'owned' | 'missing'): void {
     this.view = view;
@@ -877,12 +921,18 @@ export class RecommendedComponent implements OnInit, OnDestroy {
       && (this.showFuture || !this.isFutureRelease(g))
     ).length;
 
+    if (this.genreFilter != null) {
+      filtered = filtered.filter(g => (g.genreIds || []).includes(this.genreFilter as number));
+    }
+    filtered = this.sortGaps(filtered);
+
     const groups = new Map<string, Gap[]>();
     for (const gap of filtered) {
       if (!groups.has(gap.groupName)) groups.set(gap.groupName, []);
       groups.get(gap.groupName)!.push(gap);
     }
     this.collectionGroups = Array.from(groups.entries()).map(([name, gaps]) => ({ name, gaps }));
+    this.updateAvailableGenres();
 
     const query = this.searchFilter.trim().toLowerCase();
     if (!query) {

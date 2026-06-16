@@ -30,6 +30,7 @@ import { TvdbSettingsComponent } from './components/settings/tvdb-settings/tvdb-
 import { ConfirmModalComponent } from './components/confirm-modal/confirm-modal.component';
 import { ScanHistoryComponent } from './components/scan-history/scan-history.component';
 import { LogsComponent } from './components/logs/logs.component';
+import { CompactNumberPipe } from './pipes/compact-number.pipe';
 
 @NgModule({ declarations: [
         AppComponent,
@@ -52,7 +53,8 @@ import { LogsComponent } from './components/logs/logs.component';
         SonarrSettingsComponent,
         TvdbSettingsComponent,
         SettingsComponent,
-        LogsComponent
+        LogsComponent,
+        CompactNumberPipe
     ],
     bootstrap: [AppComponent], imports: [BrowserModule,
         AppRoutingModule,

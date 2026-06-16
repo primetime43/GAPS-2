@@ -15,6 +15,7 @@ import { ExportService } from '../../services/export.service';
 import { RadarrService } from '../../services/radarr.service';
 import { SonarrService } from '../../services/sonarr.service';
 import { ImdbService } from '../../services/imdb.service';
+import { TmdbService } from '../../services/tmdb/tmdb.service';
 import { Gap } from '../../models/recommendation.model';
 
 @Component({ selector: 'app-confirm-modal', template: '', standalone: false })
@@ -54,6 +55,7 @@ describe('RecommendedComponent', () => {
   let radarrService: jasmine.SpyObj<RadarrService>;
   let sonarrService: jasmine.SpyObj<SonarrService>;
   let imdbService: jasmine.SpyObj<ImdbService>;
+  let tmdbService: jasmine.SpyObj<TmdbService>;
 
   beforeEach(async () => {
     activeServerService = jasmine.createSpyObj('ActiveServerService', ['getActive']);
@@ -86,6 +88,8 @@ describe('RecommendedComponent', () => {
     preferencesService.load.and.returnValue(of({ ...DEFAULT_PREFERENCES }));
     imdbService.getConfig.and.returnValue(of({ enabled: false, datasetUrl: '' }));
     imdbService.getRatings.and.returnValue(of({ ratings: {} }));
+    tmdbService = jasmine.createSpyObj('TmdbService', ['getGenres']);
+    tmdbService.getGenres.and.returnValue(of([]));
 
     await TestBed.configureTestingModule({
       imports: [HttpClientTestingModule, FormsModule, RouterTestingModule],
@@ -100,6 +104,7 @@ describe('RecommendedComponent', () => {
         { provide: RadarrService, useValue: radarrService },
         { provide: SonarrService, useValue: sonarrService },
         { provide: ImdbService, useValue: imdbService },
+        { provide: TmdbService, useValue: tmdbService },
       ],
     }).compileComponents();
 

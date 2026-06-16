@@ -330,22 +330,10 @@ hr.thin {
   &.tmdb { color: #01b4e4; }
 }
 
-.rating-badge {
-  font-size: 10px;
-  font-weight: 700;
-  padding: 1px 4px;
-  border-radius: 3px;
-  letter-spacing: 0.3px;
-}
-
-.imdb-badge {
-  background-color: #f5c518;
-  color: #000;
-}
-
-.tmdb-badge {
-  background-color: #01b4e4;
-  color: #042541;
+.rating-logo {
+  height: 15px;
+  width: auto;
+  display: block;
 }
 
 .radarr-btn {

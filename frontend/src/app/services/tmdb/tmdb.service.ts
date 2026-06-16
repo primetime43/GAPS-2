@@ -1,12 +1,18 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
+import { map } from 'rxjs/operators';
 import { environment } from '../../../environments/environment';
 import { ApiMessage } from '../../models/api-response.model';
 
 export interface TmdbStatus {
   hasKey: boolean;
   apiKey: string;
+}
+
+export interface TmdbGenre {
+  id: number;
+  name: string;
 }
 
 @Injectable({
@@ -26,5 +32,10 @@ export class TmdbService {
 
   saveApiKey(key: string): Observable<ApiMessage> {
     return this.http.post<ApiMessage>(`${environment.apiUrl}/tmdb/save-key`, { key });
+  }
+
+  getGenres(): Observable<TmdbGenre[]> {
+    return this.http.get<{ genres: TmdbGenre[] }>(`${environment.apiUrl}/tmdb/genres`)
+      .pipe(map(res => res.genres || []));
   }
 }

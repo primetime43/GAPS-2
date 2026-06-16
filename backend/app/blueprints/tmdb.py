@@ -17,6 +17,12 @@ def movie_imdb_redirect(tmdb_id):
     return redirect(f"https://www.themoviedb.org/movie/{tmdb_id}", code=302)
 
 
+@tmdb_bp.route('/genres', methods=['GET'])
+def get_genres():
+    """TMDB movie genre id→name list, for the results-page genre filter."""
+    return jsonify(genres=current_app.tmdb_service.get_movie_genres())
+
+
 @tmdb_bp.route('/status', methods=['GET'])
 def get_status():
     """Return whether a TMDB API key is configured and the key itself."""

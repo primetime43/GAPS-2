@@ -28,4 +28,7 @@ export interface Gap {
   imdbRating?: number;     // IMDb aggregate rating (movies, when enabled)
   imdbVotes?: number;      // IMDb vote count
   tmdbRating?: number;     // TMDB vote average (movies)
+  tmdbVotes?: number;      // TMDB vote count (movies)
+  genreIds?: number[];     // TMDB genre ids (movies) — used by the genre filter
+  popularity?: number;     // TMDB popularity — used by the sort control
 }

@@ -76,4 +76,5 @@ def actor_gaps(person_id):
     if error:
         return jsonify(error=error), 500
 
-    return jsonify(gaps=gaps)
+    actor = current_app.tmdb_service.get_person_details(person_id)
+    return jsonify(gaps=gaps, actor=actor)

@@ -289,6 +289,26 @@
                   <label class="form-check-label" for="recShowIgnored">Ignored ({{ ignoredIds.size }})</label>
                 </div>
               </li>
+              <li><hr class="dropdown-divider"></li>
+              <li>
+                <label class="form-label small mb-1 d-block">Sort by</label>
+                <select class="form-select form-select-sm dark-select"
+                        [(ngModel)]="sortBy" (ngModelChange)="applyFilter()">
+                  <option value="default">Default</option>
+                  <option value="rating">Rating</option>
+                  <option value="popularity">Popularity</option>
+                  <option value="year">Year (newest)</option>
+                  <option value="name">Title (A–Z)</option>
+                </select>
+              </li>
+              <li *ngIf="mediaType === 'movie' && availableGenres.length">
+                <label class="form-label small mb-1 mt-2 d-block">Genre</label>
+                <select class="form-select form-select-sm dark-select"
+                        [(ngModel)]="genreFilter" (ngModelChange)="applyFilter()">
+                  <option [ngValue]="null">All genres</option>
+                  <option *ngFor="let gen of availableGenres" [ngValue]="gen.id">{{ gen.name }}</option>
+                </select>
+              </li>
               <li *ngIf="mediaType === 'movie'"><hr class="dropdown-divider"></li>
               <li *ngIf="mediaType === 'movie'">
                 <label class="form-label small mb-1 d-block">Open links in</label>
@@ -400,10 +420,10 @@
               <div class="rec-year">{{ gap.year }}</div>
               <div class="card-ratings" *ngIf="gap.imdbRating || gap.tmdbRating">
                 <span *ngIf="gap.imdbRating" class="rating-chip imdb" [title]="(gap.imdbVotes | number) + ' votes on IMDb'">
-                  <span class="rating-badge imdb-badge">IMDb</span> {{ gap.imdbRating | number:'1.1-1' }}
+                  <img class="rating-logo" src="assets/images/imdb-logo.svg" alt="IMDb"> {{ gap.imdbRating | number:'1.1-1' }}
                 </span>
-                <span *ngIf="gap.tmdbRating" class="rating-chip tmdb" title="TMDB rating">
-                  <span class="rating-badge tmdb-badge">TMDB</span> {{ gap.tmdbRating | number:'1.1-1' }}
+                <span *ngIf="gap.tmdbRating" class="rating-chip tmdb" [title]="(gap.tmdbVotes | number) + ' votes on TMDB'">
+                  <img class="rating-logo" src="assets/images/tmdb-logo.svg" alt="TMDB"> {{ gap.tmdbRating | number:'1.1-1' }}
                 </span>
               </div>
               <button
