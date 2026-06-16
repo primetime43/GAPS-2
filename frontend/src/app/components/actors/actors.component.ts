@@ -203,6 +203,10 @@ export class ActorsComponent implements OnInit, OnDestroy {
     this.filteredGroups = [];
     this.resultFilter = '';
     this.errorMessage = '';
+    // Reset the search box so a fresh search starts clean (issue #52).
+    this.query = '';
+    this.searchResults = [];
+    this.searchPerformed = false;
   }
 
   private normalizeGaps(raw: any[]): Gap[] {
