@@ -19,19 +19,13 @@
       {{ message }}
     </div>
 
-    <!-- Integration -->
-    <h5 class="mb-2">IMDb ratings</h5>
-    <div class="status-indicator mb-3">
-      <span *ngIf="status.enabled" class="status-ok">&#10003; IMDb ratings enabled</span>
-      <span *ngIf="!status.enabled" class="status-missing">&#10007; IMDb ratings disabled</span>
-    </div>
-
-    <div class="form-group mb-3">
-      <label class="toggle-label">
-        <input type="checkbox" [(ngModel)]="status.enabled">
-        <span class="ms-2">Show IMDb ratings on movie cards</span>
-      </label>
-    </div>
+    <!-- Dataset management -->
+    <h5 class="mb-2">Ratings dataset</h5>
+    <p class="text-muted small mb-3">
+      Turn IMDb ratings on under
+      <a class="activeLink" routerLink="/settings/user-preferences">User Preferences</a>
+      (or the Filters menu on the Missing/Actors pages). This tab just manages the dataset itself.
+    </p>
 
     <div class="form-group mb-3">
       <label for="imdbDatasetUrl" class="form-label">Ratings dataset URL</label>
@@ -54,12 +48,6 @@
     <button class="btn btn-info me-2" type="button" (click)="refresh()" [disabled]="status.building">
       {{ status.building ? 'Downloading…' : 'Download / refresh now' }}
     </button>
-
-    <p class="text-muted small mt-3 mb-0">
-      Looking for the TMDB/IMDb link toggle? It now lives under
-      <a class="activeLink" routerLink="/settings/user-preferences">User Preferences</a> and the
-      Filters menu on the Missing and Actors pages.
-    </p>
 
     <div class="mt-4">
       <button class="btn btn-primary" type="button" (click)="save()" [disabled]="saving">

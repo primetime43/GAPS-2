@@ -153,6 +153,20 @@ hr.thin {
   padding: 16px 20px;
 }
 
+/* Inline checkbox + label, used by settings toggles. */
+.toggle-label {
+  display: flex;
+  align-items: center;
+  color: #ccc;
+  cursor: pointer;
+
+  input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: #00bc8c;
+  }
+}
+
 /* Gap / recommendation cards — shared by the Missing (recommended) and Actors
    views. Both render the same poster grid grouped by collection/franchise/actor,
    with owned / missing / ignored badges and a send-to-Radarr button. */

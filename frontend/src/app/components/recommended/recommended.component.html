@@ -291,10 +291,16 @@
               </li>
               <li>
                 <div class="form-check">
-                  <input class="form-check-input" type="checkbox" id="recShowRatings"
-                         [(ngModel)]="showRatings" (ngModelChange)="onShowRatingsChange()">
-                  <label class="form-check-label" for="recShowRatings"
-                         title="Show IMDb/TMDB rating badges on cards">Ratings</label>
+                  <input class="form-check-input" type="checkbox" id="recShowImdb"
+                         [(ngModel)]="showImdbRatings" (ngModelChange)="onRatingPrefsChange()">
+                  <label class="form-check-label" for="recShowImdb">IMDb ratings</label>
+                </div>
+              </li>
+              <li>
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" id="recShowTmdb"
+                         [(ngModel)]="showTmdbRatings" (ngModelChange)="onRatingPrefsChange()">
+                  <label class="form-check-label" for="recShowTmdb">TMDB ratings</label>
                 </div>
               </li>
               <li><hr class="dropdown-divider"></li>
@@ -426,11 +432,11 @@
                 {{ gap.name }}
               </a>
               <div class="rec-year">{{ gap.year }}</div>
-              <div class="card-ratings" *ngIf="showRatings && (gap.imdbRating || gap.tmdbRating)">
-                <span *ngIf="gap.imdbRating" class="rating-chip imdb" [title]="(gap.imdbVotes | number) + ' votes on IMDb'">
+              <div class="card-ratings" *ngIf="(showImdbRatings && gap.imdbRating) || (showTmdbRatings && gap.tmdbRating)">
+                <span *ngIf="showImdbRatings && gap.imdbRating" class="rating-chip imdb" [title]="(gap.imdbVotes | number) + ' votes on IMDb'">
                   <img class="rating-logo" src="assets/images/imdb-logo.svg" alt="IMDb"> {{ gap.imdbRating | number:'1.1-1' }}
                 </span>
-                <span *ngIf="gap.tmdbRating" class="rating-chip tmdb" [title]="(gap.tmdbVotes | number) + ' votes on TMDB'">
+                <span *ngIf="showTmdbRatings && gap.tmdbRating" class="rating-chip tmdb" [title]="(gap.tmdbVotes | number) + ' votes on TMDB'">
                   <img class="rating-logo" src="assets/images/tmdb-logo.svg" alt="TMDB"> {{ gap.tmdbRating | number:'1.1-1' }}
                 </span>
               </div>

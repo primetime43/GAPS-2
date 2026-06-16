@@ -27,14 +27,21 @@ DEFAULTS = {
     # links resolve lazily through the backend (TMDB list responses don't carry
     # IMDb IDs); TV titles always link to TheTVDB regardless of this setting.
     'externalLinkProvider': 'tmdb',
-    # Show IMDb/TMDB rating badges on movie cards.
-    'showRatings': True,
+    # Show rating badges on movie cards, per provider. TMDB ratings are free
+    # (captured at scan time); IMDb ratings require the local dataset, so they
+    # default off until the user opts in.
+    'showImdbRatings': False,
+    'showTmdbRatings': True,
 }
 
 
 @preferences_bp.route('', methods=['GET'])
 def get_preferences():
     saved = config_store.get('preferences', {})
+    # Migrate the legacy IMDb integration toggle (config_store 'imdb'.enabled),
+    # which now lives as the showImdbRatings preference.
+    if 'showImdbRatings' not in saved:
+        saved = {**saved, 'showImdbRatings': bool(config_store.get('imdb', {}).get('enabled', False))}
     prefs = {**DEFAULTS, **saved}
     return jsonify(prefs)
 

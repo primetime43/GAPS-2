@@ -1,5 +1,6 @@
 from concurrent.futures import ThreadPoolExecutor
 from flask import Blueprint, jsonify, request, current_app
+from app.services import config_store
 
 imdb_bp = Blueprint('imdb', __name__)
 
@@ -38,9 +39,9 @@ def ratings():
     and then batch-fetch ratings from imdbapi.dev. Returns
     {ratings: {tmdbId: {imdbId, aggregateRating, voteCount}}}.
     """
-    imdb_service = current_app.imdb_service
-    if not imdb_service.enabled:
+    if not config_store.get('preferences', {}).get('showImdbRatings', False):
         return jsonify(ratings={})
+    imdb_service = current_app.imdb_service
 
     raw_ids = (request.get_json() or {}).get('tmdbIds') or []
     tmdb_ids = []

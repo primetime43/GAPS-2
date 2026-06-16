@@ -72,8 +72,10 @@ export class ActorsComponent implements OnInit, OnDestroy {
   // resolves the IMDb ID lazily.
   externalLinkProvider: 'tmdb' | 'imdb' = 'tmdb';
 
-  // Show IMDb/TMDB rating badges on cards (default from prefs, live-toggleable).
-  showRatings = true;
+  // Show IMDb/TMDB rating badges on cards, per provider (default from prefs,
+  // live-toggleable from the Filters menu).
+  showImdbRatings = false;
+  showTmdbRatings = true;
 
   // Fuller profile for the selected actor, shown as a header above the results.
   actorDetails: PersonDetails | null = null;
@@ -116,7 +118,8 @@ export class ActorsComponent implements OnInit, OnDestroy {
       if (prefs) {
         this.showFuture = !prefs.hideFutureReleasesByDefault;
         this.externalLinkProvider = prefs.externalLinkProvider || 'tmdb';
-        this.showRatings = prefs.showRatings !== false;
+        this.showImdbRatings = !!prefs.showImdbRatings;
+        this.showTmdbRatings = prefs.showTmdbRatings !== false;
       }
       this.detectActiveServer(prefs);
     });
@@ -285,6 +288,7 @@ export class ActorsComponent implements OnInit, OnDestroy {
    * rather than caching an enabled flag (which would go stale under route reuse).
    */
   private loadImdbRatings(): void {
+    if (!this.showImdbRatings) return;
     const ids = this.allGaps.map(g => g.id).filter((id): id is number => !!id);
     if (!ids.length) return;
     this.imdbService.getRatings(ids).pipe(
@@ -305,10 +309,13 @@ export class ActorsComponent implements OnInit, OnDestroy {
 
   onFilterChange(): void { this.applyFilter(); }
 
-  /** Persist the show-ratings toggle so it sticks as the new default. */
-  onShowRatingsChange(): void {
-    this.preferencesService.save({ showRatings: this.showRatings })
-      .subscribe({ next: () => {}, error: () => {} });
+  /** Persist the per-provider rating toggles so they stick as the new default. */
+  onRatingPrefsChange(): void {
+    this.preferencesService.save({
+      showImdbRatings: this.showImdbRatings,
+      showTmdbRatings: this.showTmdbRatings,
+    }).subscribe({ next: () => {}, error: () => {} });
+    if (this.showImdbRatings) this.loadImdbRatings();
   }
 
   setView(view: 'all' | 'owned' | 'missing'): void {

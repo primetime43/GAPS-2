@@ -18,7 +18,7 @@ import { ImdbService, ImdbStatus } from '../../../services/imdb.service';
 })
 export class ImdbSettingsComponent implements OnInit, OnDestroy {
   status: ImdbStatus = {
-    enabled: false, datasetUrl: '', ready: false,
+    datasetUrl: '', ready: false,
     titleCount: 0, updatedAt: null, building: false, error: null,
   };
 
@@ -86,7 +86,7 @@ export class ImdbSettingsComponent implements OnInit, OnDestroy {
     this.saving = true;
     this.saved = false;
     this.clearMessage();
-    this.imdbService.saveConfig({ enabled: this.status.enabled, datasetUrl: this.status.datasetUrl }).subscribe({
+    this.imdbService.saveConfig({ datasetUrl: this.status.datasetUrl }).subscribe({
       next: () => {
         this.saving = false;
         this.saved = true;

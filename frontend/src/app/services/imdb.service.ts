@@ -4,7 +4,6 @@ import { Observable } from 'rxjs';
 import { environment } from '../../environments/environment';
 
 export interface ImdbConfig {
-  enabled: boolean;
   datasetUrl: string;
 }
 

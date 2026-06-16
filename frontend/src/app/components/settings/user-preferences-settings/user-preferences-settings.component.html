@@ -15,60 +15,84 @@
 
     <div class="pref-section-body" *ngIf="!isCollapsed('browsing')">
 
-    <!-- Default Library -->
-    <div class="pref-card mb-3">
-      <h5>Default Library</h5>
-      <p class="text-muted small">Auto-select this library on the Missing page.</p>
-      <select class="form-select dark-select" [(ngModel)]="prefs.defaultLibrary">
-        <option value="">None (always ask)</option>
-        <option *ngFor="let lib of libraries" [value]="lib.title">{{ lib.title }}</option>
-      </select>
-    </div>
+      <!-- Default Library -->
+      <div class="pref-row">
+        <div class="pref-row-text">
+          <h5>Default Library</h5>
+          <p class="small">Auto-select this library on the Missing page.</p>
+        </div>
+        <div class="pref-row-control">
+          <select class="form-select dark-select" [(ngModel)]="prefs.defaultLibrary">
+            <option value="">None (always ask)</option>
+            <option *ngFor="let lib of libraries" [value]="lib.title">{{ lib.title }}</option>
+          </select>
+        </div>
+      </div>
 
-    <!-- Movies Per Page -->
-    <div class="pref-card mb-3">
-      <h5>Movies Per Page</h5>
-      <p class="text-muted small">Number of movies to show in the grid.</p>
-      <select class="form-select dark-select" [(ngModel)]="prefs.moviesPerPage">
-        <option *ngFor="let size of pageSizeOptions" [ngValue]="size">{{ size }}</option>
-      </select>
-    </div>
+      <!-- Movies Per Page -->
+      <div class="pref-row">
+        <div class="pref-row-text">
+          <h5>Movies Per Page</h5>
+          <p class="small">Number of movies to show in the grid.</p>
+        </div>
+        <div class="pref-row-control">
+          <select class="form-select dark-select" [(ngModel)]="prefs.moviesPerPage">
+            <option *ngFor="let size of pageSizeOptions" [ngValue]="size">{{ size }}</option>
+          </select>
+        </div>
+      </div>
 
-    <!-- Language Filter -->
-    <div class="pref-card mb-3">
-      <h5>TMDB Language</h5>
-      <p class="text-muted small">Language for movie titles and descriptions from TMDB.</p>
-      <select class="form-select dark-select" [(ngModel)]="prefs.language">
-        <option *ngFor="let lang of languages" [value]="lang.code">{{ lang.name }}</option>
-      </select>
-    </div>
+      <!-- Language Filter -->
+      <div class="pref-row">
+        <div class="pref-row-text">
+          <h5>TMDB Language</h5>
+          <p class="small">Language for movie titles and descriptions from TMDB.</p>
+        </div>
+        <div class="pref-row-control">
+          <select class="form-select dark-select" [(ngModel)]="prefs.language">
+            <option *ngFor="let lang of languages" [value]="lang.code">{{ lang.name }}</option>
+          </select>
+        </div>
+      </div>
 
-    <!-- Show Ratings -->
-    <div class="pref-card mb-3">
-      <h5>Show Ratings on Cards</h5>
-      <p class="text-muted small">
-        Show IMDb and TMDB rating badges on movie cards. You can also toggle this live from the
-        Filters menu on the Missing and Actors pages.
-      </p>
-      <label class="toggle-label">
-        <input type="checkbox" [(ngModel)]="prefs.showRatings">
-        <span class="ms-2">{{ prefs.showRatings ? 'Enabled' : 'Disabled' }}</span>
-      </label>
-    </div>
+      <!-- Show Ratings -->
+      <div class="pref-row">
+        <div class="pref-row-text">
+          <h5>Ratings on Cards</h5>
+          <p class="small">
+            Show rating badges on movie cards — toggle each independently. TMDB ratings are free;
+            IMDb ratings use the <a class="activeLink" routerLink="/settings/imdb">IMDb dataset</a>.
+            Also toggleable live from the Filters menu on the Missing and Actors pages.
+          </p>
+        </div>
+        <div class="pref-row-control pref-checks">
+          <label class="toggle-label">
+            <input type="checkbox" [(ngModel)]="prefs.showImdbRatings">
+            <span class="ms-2">IMDb</span>
+          </label>
+          <label class="toggle-label">
+            <input type="checkbox" [(ngModel)]="prefs.showTmdbRatings">
+            <span class="ms-2">TMDB</span>
+          </label>
+        </div>
+      </div>
 
-    <!-- Movie Link Provider -->
-    <div class="pref-card mb-3">
-      <h5>Movie Link Provider</h5>
-      <p class="text-muted small">
-        Where clicking a movie poster or title opens. You can also switch this live from the
-        Filters menu on the Missing and Actors pages. IMDb links resolve through TMDB; TV titles
-        always link to TheTVDB.
-      </p>
-      <select class="form-select dark-select" [(ngModel)]="prefs.externalLinkProvider">
-        <option value="tmdb">TMDB</option>
-        <option value="imdb">IMDb</option>
-      </select>
-    </div>
+      <!-- Movie Link Provider -->
+      <div class="pref-row">
+        <div class="pref-row-text">
+          <h5>Movie Link Provider</h5>
+          <p class="small">
+            Where clicking a movie poster or title opens. Also switchable live from the Filters menu.
+            IMDb links resolve through TMDB; TV titles always link to TheTVDB.
+          </p>
+        </div>
+        <div class="pref-row-control">
+          <select class="form-select dark-select" [(ngModel)]="prefs.externalLinkProvider">
+            <option value="tmdb">TMDB</option>
+            <option value="imdb">IMDb</option>
+          </select>
+        </div>
+      </div>
 
     </div><!-- /Browsing & Display body -->
 
@@ -84,52 +108,55 @@
 
     <div class="pref-section-body" *ngIf="!isCollapsed('filters')">
 
-    <!-- Hide Owned by Default -->
-    <div class="pref-card mb-3">
-      <h5>Hide Owned Movies by Default</h5>
-      <p class="text-muted small">Gap results will hide movies you already own unless toggled.</p>
-      <label class="toggle-label">
-        <input type="checkbox" [(ngModel)]="prefs.hideOwnedByDefault">
-        <span class="ms-2">{{ prefs.hideOwnedByDefault ? 'Enabled' : 'Disabled' }}</span>
-      </label>
-    </div>
-
-    <!-- Hide Future Releases by Default -->
-    <div class="pref-card mb-3">
-      <h5>Hide Future Releases by Default</h5>
-      <p class="text-muted small">Gap results will hide unreleased movies (release date in the future) unless toggled.</p>
-      <label class="toggle-label">
-        <input type="checkbox" [(ngModel)]="prefs.hideFutureReleasesByDefault">
-        <span class="ms-2">{{ prefs.hideFutureReleasesByDefault ? 'Enabled' : 'Disabled' }}</span>
-      </label>
-    </div>
-
-    <!-- Quality Filter -->
-    <div class="pref-card mb-3">
-      <h5>Exclude Low-Rated Movies</h5>
-      <p class="text-muted small">
-        Exclude low-tier missing movies from scans, based on their TMDB rating and number of votes.
-        Applied at scan time, so excluded movies never appear — and it applies to scheduled scans too.
-        Only affects already-released movies; unreleased titles are kept.
-        You can also set this on the Missing page before scanning.
-      </p>
-      <label class="toggle-label">
-        <input type="checkbox" [(ngModel)]="prefs.qualityFilterEnabled">
-        <span class="ms-2">{{ prefs.qualityFilterEnabled ? 'Enabled' : 'Disabled' }}</span>
-      </label>
-
-      <div *ngIf="prefs.qualityFilterEnabled" class="mt-3">
-        <label class="form-label small mb-1">Minimum rating (0–10)</label>
-        <input type="number" class="form-control dark-input" [(ngModel)]="prefs.minRating"
-               min="0" max="10" step="0.1">
-        <p class="text-muted small mt-1 mb-3">Exclude movies rated below this. Set to 0 to ignore rating.</p>
-
-        <label class="form-label small mb-1">Minimum number of votes</label>
-        <input type="number" class="form-control dark-input" [(ngModel)]="prefs.minVoteCount"
-               min="0" step="10">
-        <p class="text-muted small mt-1 mb-0">Exclude movies with fewer ratings than this (e.g. 100). Set to 0 to ignore vote count.</p>
+      <!-- Hide Owned by Default -->
+      <div class="pref-row">
+        <div class="pref-row-text">
+          <h5>Hide Owned Movies by Default</h5>
+          <p class="small">Gap results will hide movies you already own unless toggled.</p>
+        </div>
+        <div class="pref-row-control">
+          <input type="checkbox" class="pref-toggle" [(ngModel)]="prefs.hideOwnedByDefault">
+        </div>
       </div>
-    </div>
+
+      <!-- Hide Future Releases by Default -->
+      <div class="pref-row">
+        <div class="pref-row-text">
+          <h5>Hide Future Releases by Default</h5>
+          <p class="small">Gap results will hide unreleased movies (release date in the future) unless toggled.</p>
+        </div>
+        <div class="pref-row-control">
+          <input type="checkbox" class="pref-toggle" [(ngModel)]="prefs.hideFutureReleasesByDefault">
+        </div>
+      </div>
+
+      <!-- Quality Filter -->
+      <div class="pref-row">
+        <div class="pref-row-text">
+          <h5>Exclude Low-Rated Movies</h5>
+          <p class="small">
+            Exclude low-tier missing movies from scans, based on their TMDB rating and number of votes.
+            Applied at scan time (including scheduled scans). Only affects already-released movies.
+          </p>
+        </div>
+        <div class="pref-row-control">
+          <input type="checkbox" class="pref-toggle" [(ngModel)]="prefs.qualityFilterEnabled">
+        </div>
+      </div>
+      <div *ngIf="prefs.qualityFilterEnabled" class="pref-subrow">
+        <div class="pref-subfield">
+          <label class="form-label small mb-1">Minimum rating (0–10)</label>
+          <input type="number" class="form-control dark-input" [(ngModel)]="prefs.minRating"
+                 min="0" max="10" step="0.1">
+          <p class="text-muted small mt-1 mb-0">Exclude movies rated below this. 0 = ignore.</p>
+        </div>
+        <div class="pref-subfield">
+          <label class="form-label small mb-1">Minimum number of votes</label>
+          <input type="number" class="form-control dark-input" [(ngModel)]="prefs.minVoteCount"
+                 min="0" step="10">
+          <p class="text-muted small mt-1 mb-0">Exclude movies with fewer ratings (e.g. 100). 0 = ignore.</p>
+        </div>
+      </div>
 
     </div><!-- /Gap Results Filters body -->
 
@@ -145,32 +172,38 @@
 
     <div class="pref-section-body" *ngIf="!isCollapsed('performance')">
 
-    <!-- Poster Prefetch -->
-    <div class="pref-card mb-3">
-      <h5>Poster Prefetch</h5>
-      <p class="text-muted small">Preload posters for the next page in the background so they display instantly when you navigate.</p>
-      <label class="toggle-label">
-        <input type="checkbox" [(ngModel)]="prefs.posterPrefetch">
-        <span class="ms-2">{{ prefs.posterPrefetch ? 'Enabled' : 'Disabled' }}</span>
-      </label>
-    </div>
+      <!-- Poster Prefetch -->
+      <div class="pref-row">
+        <div class="pref-row-text">
+          <h5>Poster Prefetch</h5>
+          <p class="small">Preload posters for the next page in the background so they display instantly when you navigate.</p>
+        </div>
+        <div class="pref-row-control">
+          <input type="checkbox" class="pref-toggle" [(ngModel)]="prefs.posterPrefetch">
+        </div>
+      </div>
 
-    <!-- Server Image Cache -->
-    <div class="pref-card mb-3">
-      <h5>Server Image Cache</h5>
-      <p class="text-muted small">Cache poster images on the server to reduce requests to your media server. Uses up to ~10 MB of memory.</p>
-      <label class="toggle-label">
-        <input type="checkbox" [(ngModel)]="prefs.imageCacheEnabled">
-        <span class="ms-2">{{ prefs.imageCacheEnabled ? 'Enabled' : 'Disabled' }}</span>
-      </label>
-    </div>
+      <!-- Server Image Cache -->
+      <div class="pref-row">
+        <div class="pref-row-text">
+          <h5>Server Image Cache</h5>
+          <p class="small">Cache poster images on the server to reduce requests to your media server. Uses up to ~10 MB of memory.</p>
+        </div>
+        <div class="pref-row-control">
+          <input type="checkbox" class="pref-toggle" [(ngModel)]="prefs.imageCacheEnabled">
+        </div>
+      </div>
 
-    <!-- Media Server Timeout -->
-    <div class="pref-card mb-3">
-      <h5>Media Server Timeout</h5>
-      <p class="text-muted small">Timeout in seconds for requests to Plex, Emby, and Jellyfin. Increase for large libraries (3000+ movies).</p>
-      <input type="number" class="form-control dark-input" [(ngModel)]="prefs.mediaServerTimeout" min="10" max="300">
-    </div>
+      <!-- Media Server Timeout -->
+      <div class="pref-row">
+        <div class="pref-row-text">
+          <h5>Media Server Timeout</h5>
+          <p class="small">Timeout in seconds for requests to Plex, Emby, and Jellyfin. Increase for large libraries (3000+ movies).</p>
+        </div>
+        <div class="pref-row-control">
+          <input type="number" class="form-control dark-input pref-num" [(ngModel)]="prefs.mediaServerTimeout" min="10" max="300">
+        </div>
+      </div>
 
     </div><!-- /Performance & Connections body -->
 
@@ -186,22 +219,27 @@
 
     <div class="pref-section-body" *ngIf="!isCollapsed('application')">
 
-    <!-- Port Number -->
-    <div class="pref-card mb-3">
-      <h5>Port Number</h5>
-      <p class="text-muted small">Server port for production/exe mode (requires restart to take effect). Does not apply during development.</p>
-      <input type="number" class="form-control dark-input" [(ngModel)]="prefs.port" min="1024" max="65535">
-    </div>
+      <!-- Port Number -->
+      <div class="pref-row">
+        <div class="pref-row-text">
+          <h5>Port Number</h5>
+          <p class="small">Server port for production/exe mode (requires restart to take effect). Does not apply during development.</p>
+        </div>
+        <div class="pref-row-control">
+          <input type="number" class="form-control dark-input pref-num" [(ngModel)]="prefs.port" min="1024" max="65535">
+        </div>
+      </div>
 
-    <!-- Auto-Open Browser -->
-    <div class="pref-card mb-3">
-      <h5>Auto-Open Browser</h5>
-      <p class="text-muted small">Automatically open the browser when launching the standalone exe.</p>
-      <label class="toggle-label">
-        <input type="checkbox" [(ngModel)]="prefs.autoOpenBrowser">
-        <span class="ms-2">{{ prefs.autoOpenBrowser ? 'Enabled' : 'Disabled' }}</span>
-      </label>
-    </div>
+      <!-- Auto-Open Browser -->
+      <div class="pref-row">
+        <div class="pref-row-text">
+          <h5>Auto-Open Browser</h5>
+          <p class="small">Automatically open the browser when launching the standalone exe.</p>
+        </div>
+        <div class="pref-row-control">
+          <input type="checkbox" class="pref-toggle" [(ngModel)]="prefs.autoOpenBrowser">
+        </div>
+      </div>
 
     </div><!-- /Application body -->
 

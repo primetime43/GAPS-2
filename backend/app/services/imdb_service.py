@@ -43,26 +43,15 @@ class ImdbService:
     def get_config(self) -> dict:
         saved = config_store.get(CONFIG_KEY, {}) or {}
         return {
-            'enabled': bool(saved.get('enabled', False)),
             'datasetUrl': saved.get('datasetUrl') or self._default_url,
         }
 
     def save_config(self, data: dict) -> dict:
         cleaned = {
-            'enabled': bool(data.get('enabled', False)),
             'datasetUrl': (data.get('datasetUrl') or '').strip() or self._default_url,
         }
         config_store.put(CONFIG_KEY, cleaned)
-        cfg = self.get_config()
-        # Enabling for the first time? Start fetching the dataset in the
-        # background so ratings are ready shortly after.
-        if cfg['enabled']:
-            self._maybe_refresh()
-        return cfg
-
-    @property
-    def enabled(self) -> bool:
-        return self.get_config()['enabled']
+        return self.get_config()
 
     def _dataset_url(self) -> str:
         return self.get_config()['datasetUrl']
@@ -93,9 +82,6 @@ class ImdbService:
     def status(self) -> dict:
         cfg = self.get_config()
         info = self._dataset_info()
-        # Opportunistically kick off a refresh if enabled and stale/missing.
-        if cfg['enabled']:
-            self._maybe_refresh(info)
         with self._lock:
             building = self._building
             error = self._last_error
@@ -190,16 +176,17 @@ class ImdbService:
     def get_ratings(self, imdb_ids: list[str]) -> dict[str, dict]:
         """Return {imdb_id: {'aggregateRating', 'voteCount'}} from the local DB.
 
-        Missing/unrated titles are simply absent. If the dataset isn't built yet
-        (and the integration is enabled), a background build is kicked off and an
-        empty result is returned for now.
+        Missing/unrated titles are simply absent. If the dataset isn't built
+        yet, a background build is kicked off and an empty result is returned
+        for now.
         """
         ids = [i for i in dict.fromkeys(imdb_ids) if i]
         if not ids:
             return {}
         if not self._dataset_ready():
-            if self.enabled:
-                self._maybe_refresh()
+            # The caller already decided IMDb ratings are wanted, so fetch the
+            # dataset now; this request returns empty until the build finishes.
+            self._maybe_refresh()
             return {}
 
         out: dict[str, dict] = {}

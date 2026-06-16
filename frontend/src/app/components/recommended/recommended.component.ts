@@ -91,8 +91,10 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   // which resolves the IMDb ID lazily. TV always links to TheTVDB.
   externalLinkProvider: 'tmdb' | 'imdb' = 'tmdb';
 
-  // Show IMDb/TMDB rating badges on cards (default from prefs, live-toggleable).
-  showRatings = true;
+  // Show IMDb/TMDB rating badges on cards, per provider (default from prefs,
+  // live-toggleable from the Filters menu).
+  showImdbRatings = false;
+  showTmdbRatings = true;
 
   // Results sort + genre filter (reuse fields already on each gap).
   sortBy: 'default' | 'rating' | 'popularity' | 'year' | 'name' = 'default';
@@ -256,7 +258,8 @@ export class RecommendedComponent implements OnInit, OnDestroy {
         this.minRating = prefs.minRating || 0;
         this.minVoteCount = prefs.minVoteCount || 0;
         this.externalLinkProvider = prefs.externalLinkProvider || 'tmdb';
-        this.showRatings = prefs.showRatings !== false;
+        this.showImdbRatings = !!prefs.showImdbRatings;
+        this.showTmdbRatings = prefs.showTmdbRatings !== false;
       }
       this.detectActiveServer(prefs, autoSelectLibrary);
     });
@@ -716,7 +719,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
    * rather than caching an enabled flag (which would go stale under route reuse).
    */
   private loadImdbRatings(): void {
-    if (this.mediaType !== 'movie') return;
+    if (this.mediaType !== 'movie' || !this.showImdbRatings) return;
     const ids = this.allGaps.map(g => g.id).filter((id): id is number => !!id);
     if (!ids.length) return;
     this.imdbService.getRatings(ids).pipe(
@@ -737,10 +740,14 @@ export class RecommendedComponent implements OnInit, OnDestroy {
 
   onFilterChange(): void { this.applyFilter(); }
 
-  /** Persist the show-ratings toggle so it sticks as the new default. */
-  onShowRatingsChange(): void {
-    this.preferencesService.save({ showRatings: this.showRatings })
-      .subscribe({ next: () => {}, error: () => {} });
+  /** Persist the per-provider rating toggles so they stick as the new default. */
+  onRatingPrefsChange(): void {
+    this.preferencesService.save({
+      showImdbRatings: this.showImdbRatings,
+      showTmdbRatings: this.showTmdbRatings,
+    }).subscribe({ next: () => {}, error: () => {} });
+    // Enabling IMDb may need ratings we haven't fetched for this result set yet.
+    if (this.showImdbRatings) this.loadImdbRatings();
   }
 
   /** Sort a gap list by the selected key, leaving the source array untouched. */

@@ -86,7 +86,7 @@ describe('RecommendedComponent', () => {
     sonarrService.getConfig.and.returnValue(of(null as any));
     preferencesService.save.and.returnValue(of({} as any));
     preferencesService.load.and.returnValue(of({ ...DEFAULT_PREFERENCES }));
-    imdbService.getConfig.and.returnValue(of({ enabled: false, datasetUrl: '' }));
+    imdbService.getConfig.and.returnValue(of({ datasetUrl: '' }));
     imdbService.getRatings.and.returnValue(of({ ratings: {} }));
     tmdbService = jasmine.createSpyObj('TmdbService', ['getGenres']);
     tmdbService.getGenres.and.returnValue(of([]));
