@@ -43,6 +43,20 @@
       </select>
     </div>
 
+    <!-- Movie Link Provider -->
+    <div class="pref-card mb-3">
+      <h5>Movie Link Provider</h5>
+      <p class="text-muted small">
+        Where clicking a movie poster or title opens. You can also switch this live from the
+        Filters menu on the Missing and Actors pages. IMDb links resolve through TMDB; TV titles
+        always link to TheTVDB.
+      </p>
+      <select class="form-select dark-select" [(ngModel)]="prefs.externalLinkProvider">
+        <option value="tmdb">TMDB</option>
+        <option value="imdb">IMDb</option>
+      </select>
+    </div>
+
     </div><!-- /Browsing & Display body -->
 
     <!-- ============ Gap Results Filters ============ -->

@@ -289,6 +289,15 @@
                   <label class="form-check-label" for="recShowIgnored">Ignored ({{ ignoredIds.size }})</label>
                 </div>
               </li>
+              <li *ngIf="mediaType === 'movie'"><hr class="dropdown-divider"></li>
+              <li *ngIf="mediaType === 'movie'">
+                <label class="form-label small mb-1 d-block">Open links in</label>
+                <select class="form-select form-select-sm dark-select"
+                        [(ngModel)]="externalLinkProvider" (ngModelChange)="onLinkProviderChange()">
+                  <option value="tmdb">TMDB</option>
+                  <option value="imdb">IMDb</option>
+                </select>
+              </li>
             </ul>
           </div>
 
@@ -389,6 +398,9 @@
                 {{ gap.name }}
               </a>
               <div class="rec-year">{{ gap.year }}</div>
+              <div *ngIf="gap.imdbRating" class="imdb-rating" [title]="(gap.imdbVotes | number) + ' votes on IMDb'">
+                <span class="imdb-badge">IMDb</span> {{ gap.imdbRating | number:'1.1-1' }}
+              </div>
               <button
                 *ngIf="canSendToDownloader(gap)"
                 class="btn btn-sm radarr-btn mt-2"

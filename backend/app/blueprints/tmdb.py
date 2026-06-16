@@ -1,6 +1,20 @@
-from flask import Blueprint, jsonify, request, current_app
+from flask import Blueprint, jsonify, request, current_app, redirect
 
 tmdb_bp = Blueprint('tmdb', __name__)
+
+
+@tmdb_bp.route('/movie/<int:tmdb_id>/imdb', methods=['GET'])
+def movie_imdb_redirect(tmdb_id):
+    """Resolve a TMDB movie ID to IMDb and redirect there.
+
+    Poster/title clicks hit this when the user prefers IMDb links. The IMDb ID
+    is resolved lazily (TMDB list responses don't include it) and we 302 to
+    IMDb, falling back to the TMDB movie page when no IMDb ID exists.
+    """
+    imdb_id = current_app.tmdb_service.get_imdb_id(tmdb_id)
+    if imdb_id:
+        return redirect(f"https://www.imdb.com/title/{imdb_id}/", code=302)
+    return redirect(f"https://www.themoviedb.org/movie/{tmdb_id}", code=302)
 
 
 @tmdb_bp.route('/status', methods=['GET'])

@@ -11,6 +11,7 @@ import { IndexComponent } from './index/index.component';
 //Settings
 import { EmbySettingsComponent } from './components/settings/emby-settings/emby-settings.component';
 import { TmdbSettingsComponent } from './components/settings/tmdb-settings/tmdb-settings.component';
+import { ImdbSettingsComponent } from './components/settings/imdb-settings/imdb-settings.component';
 import { PlexSettingsComponent } from './components/settings/plex-settings/plex-settings.component';
 import { JellyfinSettingsComponent } from './components/settings/jellyfin-settings/jellyfin-settings.component';
 import { UserPreferencesSettingsComponent } from './components/settings/user-preferences-settings/user-preferences-settings.component';
@@ -31,6 +32,7 @@ const routes: Routes = [
   { path: 'settings', component: SettingsComponent, children: [
     { path: '', redirectTo: 'tmdb', pathMatch: 'full' },
     { path: 'tmdb', component: TmdbSettingsComponent },
+    { path: 'imdb', component: ImdbSettingsComponent },
     { path: 'plex', component: PlexSettingsComponent },
     { path: 'jellyfin', component: JellyfinSettingsComponent },
     { path: 'emby', component: EmbySettingsComponent },

@@ -13,6 +13,8 @@ import { PreferencesService } from '../../services/preferences.service';
 import { ExportService, ExportFormat } from '../../services/export.service';
 import { RadarrService } from '../../services/radarr.service';
 import { SonarrService } from '../../services/sonarr.service';
+import { ImdbService } from '../../services/imdb.service';
+import { environment } from '../../../environments/environment';
 
 type MediaType = 'movie' | 'tv';
 // "Downloaders" — the *arr integration a gap can be sent to. Movies → Radarr,
@@ -84,6 +86,10 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   searchFilter = '';
   posterPrefetch = false;
 
+  // Where movie poster/title clicks go. IMDb links route through the backend,
+  // which resolves the IMDb ID lazily. TV always links to TheTVDB.
+  externalLinkProvider: 'tmdb' | 'imdb' = 'tmdb';
+
   get filteredItems(): BrowseItem[] {
     const query = this.itemFilter.trim().toLowerCase();
     return query ? this.items.filter(m => m.name.toLowerCase().includes(query)) : this.items;
@@ -154,6 +160,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     private exportService: ExportService,
     private radarrService: RadarrService,
     private sonarrService: SonarrService,
+    private imdbService: ImdbService,
     private router: Router,
   ) {}
 
@@ -230,6 +237,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
         this.qualityFilter = prefs.qualityFilterEnabled || false;
         this.minRating = prefs.minRating || 0;
         this.minVoteCount = prefs.minVoteCount || 0;
+        this.externalLinkProvider = prefs.externalLinkProvider || 'tmdb';
       }
       this.detectActiveServer(prefs, autoSelectLibrary);
     });
@@ -305,6 +313,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
         this.totalOwned = progress!.total_owned;
         this.scanMode = true;
         this.applyFilter();
+        this.loadImdbRatings();
         this.cacheCompletedScan(scanLibs, this.allGaps, progress!.total_owned);
       }
       this.loading = false;
@@ -367,6 +376,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     this.totalOwned = cached.totalOwned;
     this.scanMode = true;
     this.applyFilter();
+    this.loadImdbRatings();
   }
 
   private cacheCompletedScan(libraries: string[], gaps: Gap[], totalOwned: number): void {
@@ -482,6 +492,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
             this.allGaps = this.normalizeGaps(progress.gaps);
             this.totalOwned = progress.total_owned;
             this.applyFilter();
+            this.loadImdbRatings();
             this.loadingGaps = false;
             this.scanProgress = null;
             const scanLibs = progress.libraries?.length ? progress.libraries : [...scanLibraries];
@@ -612,6 +623,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
         this.allGaps = this.normalizeGaps(gaps);
         if (this.allGaps.length > 0 && this.allGaps.every(g => g.owned)) this.view = 'all';
         this.applyFilter();
+        this.loadImdbRatings();
         this.loadingGaps = false;
       },
       error: () => {
@@ -649,10 +661,53 @@ export class RecommendedComponent implements OnInit, OnDestroy {
       overview: g.overview || '',
       groupName: g.collectionName || 'Unknown Collection',
       owned: !!g.owned,
-      externalUrl: g.tmdbId ? `https://www.themoviedb.org/movie/${g.tmdbId}` : '',
+      externalUrl: this.movieExternalUrl(g.tmdbId),
       radarrEligible: !!g.tmdbId,
       sonarrEligible: false,
     }));
+  }
+
+  /** Build the poster/title link for a movie, honoring the IMDb preference. */
+  private movieExternalUrl(tmdbId: number | null | undefined): string {
+    if (!tmdbId) return '';
+    return this.externalLinkProvider === 'imdb'
+      ? `${environment.apiUrl}/tmdb/movie/${tmdbId}/imdb`
+      : `https://www.themoviedb.org/movie/${tmdbId}`;
+  }
+
+  /**
+   * Live results-page switch between TMDB/IMDb links. Recomputes movie links in
+   * place and persists the choice as the new default (mirrors the gap filters).
+   */
+  onLinkProviderChange(): void {
+    if (this.mediaType === 'movie') {
+      for (const gap of this.allGaps) gap.externalUrl = this.movieExternalUrl(gap.id);
+    }
+    this.preferencesService.save({ externalLinkProvider: this.externalLinkProvider })
+      .subscribe({ next: () => {}, error: () => {} });
+  }
+
+  /**
+   * Best-effort fetch of IMDb ratings for the current movie gaps. The backend
+   * returns nothing unless the IMDb integration is enabled, so we always ask
+   * rather than caching an enabled flag (which would go stale under route reuse).
+   */
+  private loadImdbRatings(): void {
+    if (this.mediaType !== 'movie') return;
+    const ids = this.allGaps.map(g => g.id).filter((id): id is number => !!id);
+    if (!ids.length) return;
+    this.imdbService.getRatings(ids).pipe(
+      catchError(() => of({ ratings: {} as Record<string, any> }))
+    ).subscribe(res => {
+      const ratings = res.ratings || {};
+      for (const gap of this.allGaps) {
+        const r = ratings[String(gap.id)];
+        if (r) {
+          gap.imdbRating = r.aggregateRating;
+          gap.imdbVotes = r.voteCount;
+        }
+      }
+    });
   }
 
   // -- Filters --

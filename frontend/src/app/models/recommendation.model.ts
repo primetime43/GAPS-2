@@ -25,4 +25,6 @@ export interface Gap {
   externalUrl: string;   // TMDB or TheTVDB page for the title
   radarrEligible: boolean; // movies → Radarr
   sonarrEligible: boolean; // shows → Sonarr
+  imdbRating?: number;     // IMDb aggregate rating (movies, when enabled)
+  imdbVotes?: number;      // IMDb vote count
 }

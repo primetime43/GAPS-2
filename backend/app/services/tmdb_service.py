@@ -48,6 +48,9 @@ class TmdbService:
         # Actor filmography lookups (issue #49). Not persisted — credits change as
         # actors make new films, and these are cheap single calls to regenerate.
         self._person_credits_cache: dict[int, dict] = {}
+        # Movie -> IMDb ID lookups for external links. Not persisted — IMDb IDs
+        # are stable and resolved lazily via a single TMDB call.
+        self._imdb_id_cache: dict[int, str | None] = {}
 
         # Persistent cache for the collection lookups (the expensive ones).
         # _id_cache is intentionally not persisted — its search-key entries are
@@ -126,6 +129,7 @@ class TmdbService:
             self._id_cache.clear()
             self._movie_collection_cache.clear()
             self._collection_cache.clear()
+            self._imdb_id_cache.clear()
             self._mc_cache_ts.clear()
             self._coll_cache_ts.clear()
         try:
@@ -308,6 +312,38 @@ class TmdbService:
                 return resolved
 
         return None
+
+    def get_imdb_id(self, tmdb_id: int) -> str | None:
+        """Resolve a TMDB movie ID to its IMDb ID (e.g. 'tt0133093'), cached.
+
+        Backs the external-link toggle: poster/title clicks can
+        point to IMDb instead of TMDB. TMDB's list/credit/collection responses
+        don't carry IMDb IDs, so we look them up lazily per movie on demand.
+        Cached in-memory only — IMDb IDs are stable and these are cheap single
+        calls to regenerate after a restart.
+        """
+        if not tmdb_id:
+            return None
+        with self._cache_lock:
+            if tmdb_id in self._imdb_id_cache:
+                return self._imdb_id_cache[tmdb_id]
+        if not self._api_key:
+            return None
+        imdb_id: str | None = None
+        try:
+            resp = requests.get(
+                f"{self._base_url}/movie/{tmdb_id}/external_ids",
+                params={"api_key": self._api_key},
+                timeout=10,
+            )
+            if resp.status_code == 200:
+                imdb_id = resp.json().get("imdb_id") or None
+        except Exception as e:
+            logger.warning("Failed to fetch IMDb ID for TMDB movie %s: %s", tmdb_id, e)
+            return None
+        with self._cache_lock:
+            self._imdb_id_cache[tmdb_id] = imdb_id
+        return imdb_id
 
     def _get_collection_id(self, api_key: str, tmdb_id: int) -> int | None:
         """Get the collection ID for a movie, using cache."""

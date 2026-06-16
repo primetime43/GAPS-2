@@ -14,6 +14,7 @@ import { PreferencesService, DEFAULT_PREFERENCES } from '../../services/preferen
 import { ExportService } from '../../services/export.service';
 import { RadarrService } from '../../services/radarr.service';
 import { SonarrService } from '../../services/sonarr.service';
+import { ImdbService } from '../../services/imdb.service';
 import { Gap } from '../../models/recommendation.model';
 
 @Component({ selector: 'app-confirm-modal', template: '', standalone: false })
@@ -52,6 +53,7 @@ describe('RecommendedComponent', () => {
   let exportService: jasmine.SpyObj<ExportService>;
   let radarrService: jasmine.SpyObj<RadarrService>;
   let sonarrService: jasmine.SpyObj<SonarrService>;
+  let imdbService: jasmine.SpyObj<ImdbService>;
 
   beforeEach(async () => {
     activeServerService = jasmine.createSpyObj('ActiveServerService', ['getActive']);
@@ -68,6 +70,7 @@ describe('RecommendedComponent', () => {
     exportService = jasmine.createSpyObj('ExportService', ['exportGaps']);
     radarrService = jasmine.createSpyObj('RadarrService', ['getConfig', 'getLibraryTmdbIds', 'addMovie']);
     sonarrService = jasmine.createSpyObj('SonarrService', ['getConfig', 'getLibraryTvdbIds', 'addSeries']);
+    imdbService = jasmine.createSpyObj('ImdbService', ['getConfig', 'getRatings']);
 
     activeServerService.getActive.and.returnValue(of(null));
     recommendationService.getIgnored.and.returnValue(of([]));
@@ -81,6 +84,8 @@ describe('RecommendedComponent', () => {
     sonarrService.getConfig.and.returnValue(of(null as any));
     preferencesService.save.and.returnValue(of({} as any));
     preferencesService.load.and.returnValue(of({ ...DEFAULT_PREFERENCES }));
+    imdbService.getConfig.and.returnValue(of({ enabled: false, datasetUrl: '' }));
+    imdbService.getRatings.and.returnValue(of({ ratings: {} }));
 
     await TestBed.configureTestingModule({
       imports: [HttpClientTestingModule, FormsModule, RouterTestingModule],
@@ -94,6 +99,7 @@ describe('RecommendedComponent', () => {
         { provide: ExportService, useValue: exportService },
         { provide: RadarrService, useValue: radarrService },
         { provide: SonarrService, useValue: sonarrService },
+        { provide: ImdbService, useValue: imdbService },
       ],
     }).compileComponents();
 

@@ -17,6 +17,11 @@ class BaseConfig:
     # returned by TVDB are already absolute URLs, so no image base is needed.
     TVDB_BASE_URL = "https://api4.thetvdb.com/v4"
 
+    # IMDb's free official ratings dataset (refreshed daily). Downloaded once
+    # into a local SQLite DB so movie cards can show IMDb ratings with no API
+    # key and no rate limits. Overridable per-install via the IMDb settings.
+    IMDB_DATASET_URL = "https://datasets.imdbws.com/title.ratings.tsv.gz"
+
     RESPONSE_MESSAGES = {
         "api_key_success": "API key is working!",
         "api_key_failure": "Failed to connect to API, status code: ",

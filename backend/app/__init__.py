@@ -32,6 +32,7 @@ def create_app(config_name=None):
     # Initialize services and store on app
     from app.services.plex_service import PlexService
     from app.services.tmdb_service import TmdbService
+    from app.services.imdb_service import ImdbService
     from app.services.tvdb_service import TvdbService
     from app.services.jellyfin_service import JellyfinService
     from app.services.emby_service import EmbyService
@@ -44,6 +45,7 @@ def create_app(config_name=None):
     app.jellyfin_service = JellyfinService()
     app.emby_service = EmbyService()
     app.tmdb_service = TmdbService(app.config['TMDB_BASE_URL'], app.config['TMDB_IMAGE_BASE_URL'])
+    app.imdb_service = ImdbService(app.config['IMDB_DATASET_URL'])
     app.tvdb_service = TvdbService(app.config['TVDB_BASE_URL'])
     app.notification_service = NotificationService()
     app.radarr_service = RadarrService()
@@ -54,6 +56,7 @@ def create_app(config_name=None):
     # Register blueprints under /api prefix
     from app.blueprints.plex import plex_bp
     from app.blueprints.tmdb import tmdb_bp
+    from app.blueprints.imdb import imdb_bp
     from app.blueprints.libraries import libraries_bp
     from app.blueprints.recommendations import recommendations_bp
     from app.blueprints.schedule import schedule_bp
@@ -73,6 +76,7 @@ def create_app(config_name=None):
     app.register_blueprint(jellyfin_bp, url_prefix='/api/jellyfin')
     app.register_blueprint(emby_bp, url_prefix='/api/emby')
     app.register_blueprint(tmdb_bp, url_prefix='/api/tmdb')
+    app.register_blueprint(imdb_bp, url_prefix='/api/imdb')
     app.register_blueprint(libraries_bp, url_prefix='/api/libraries')
     app.register_blueprint(recommendations_bp, url_prefix='/api/recommendations')
     app.register_blueprint(schedule_bp, url_prefix='/api/schedule')

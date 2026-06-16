@@ -7,9 +7,11 @@ import { RecommendationService } from '../../services/recommendation.service';
 import { PreferencesService } from '../../services/preferences.service';
 import { ExportService, ExportFormat } from '../../services/export.service';
 import { RadarrService } from '../../services/radarr.service';
+import { ImdbService } from '../../services/imdb.service';
 import { Gap } from '../../models/recommendation.model';
 import { PersonResult } from '../../models/actor.model';
 import { MediaLibrary } from '../../models/media-server.model';
+import { environment } from '../../../environments/environment';
 
 type SendState = 'sending' | 'sent' | 'error';
 
@@ -65,6 +67,10 @@ export class ActorsComponent implements OnInit, OnDestroy {
   ownedCount = 0;
   errorMessage = '';
 
+  // Where poster/title clicks go. IMDb links route through the backend, which
+  // resolves the IMDb ID lazily.
+  externalLinkProvider: 'tmdb' | 'imdb' = 'tmdb';
+
   // Radarr send state (movies only).
   radarrEnabled = false;
   private radarrStatus = new Map<number, SendState>();
@@ -80,6 +86,7 @@ export class ActorsComponent implements OnInit, OnDestroy {
     private preferencesService: PreferencesService,
     private exportService: ExportService,
     private radarrService: RadarrService,
+    private imdbService: ImdbService,
   ) {}
 
   ngOnInit(): void {
@@ -89,6 +96,7 @@ export class ActorsComponent implements OnInit, OnDestroy {
     this.preferencesService.load().pipe(catchError(() => of(null))).subscribe((prefs) => {
       if (prefs) {
         this.showFuture = !prefs.hideFutureReleasesByDefault;
+        this.externalLinkProvider = prefs.externalLinkProvider || 'tmdb';
       }
       this.detectActiveServer(prefs);
     });
@@ -187,6 +195,7 @@ export class ActorsComponent implements OnInit, OnDestroy {
       next: (gaps) => {
         this.allGaps = this.normalizeGaps(gaps);
         this.applyFilter();
+        this.loadImdbRatings();
         this.loadingGaps = false;
       },
       error: () => {
@@ -220,10 +229,50 @@ export class ActorsComponent implements OnInit, OnDestroy {
       overview: g.overview || '',
       groupName: g.collectionName || (this.selectedActor?.name ?? 'Filmography'),
       owned: !!g.owned,
-      externalUrl: g.tmdbId ? `https://www.themoviedb.org/movie/${g.tmdbId}` : '',
+      externalUrl: this.movieExternalUrl(g.tmdbId),
       radarrEligible: !!g.tmdbId,
       sonarrEligible: false,
     }));
+  }
+
+  /** Build the poster/title link for a movie, honoring the IMDb preference. */
+  private movieExternalUrl(tmdbId: number | null | undefined): string {
+    if (!tmdbId) return '';
+    return this.externalLinkProvider === 'imdb'
+      ? `${environment.apiUrl}/tmdb/movie/${tmdbId}/imdb`
+      : `https://www.themoviedb.org/movie/${tmdbId}`;
+  }
+
+  /**
+   * Live results-page switch between TMDB/IMDb links. Recomputes links in place
+   * and persists the choice as the new default (mirrors the gap filters).
+   */
+  onLinkProviderChange(): void {
+    for (const gap of this.allGaps) gap.externalUrl = this.movieExternalUrl(gap.id);
+    this.preferencesService.save({ externalLinkProvider: this.externalLinkProvider })
+      .subscribe({ next: () => {}, error: () => {} });
+  }
+
+  /**
+   * Best-effort fetch of IMDb ratings for the loaded filmography. The backend
+   * returns nothing unless the IMDb integration is enabled, so we always ask
+   * rather than caching an enabled flag (which would go stale under route reuse).
+   */
+  private loadImdbRatings(): void {
+    const ids = this.allGaps.map(g => g.id).filter((id): id is number => !!id);
+    if (!ids.length) return;
+    this.imdbService.getRatings(ids).pipe(
+      catchError(() => of({ ratings: {} as Record<string, any> }))
+    ).subscribe(res => {
+      const ratings = res.ratings || {};
+      for (const gap of this.allGaps) {
+        const r = ratings[String(gap.id)];
+        if (r) {
+          gap.imdbRating = r.aggregateRating;
+          gap.imdbVotes = r.voteCount;
+        }
+      }
+    });
   }
 
   // -- Filters --

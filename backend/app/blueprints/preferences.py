@@ -23,6 +23,10 @@ DEFAULTS = {
     'qualityFilterEnabled': False,
     'minRating': 0.0,       # TMDB vote_average, 0–10
     'minVoteCount': 0,      # TMDB vote_count (number of ratings)
+    # Where movie poster/title clicks go: 'tmdb' or 'imdb'. IMDb
+    # links resolve lazily through the backend (TMDB list responses don't carry
+    # IMDb IDs); TV titles always link to TheTVDB regardless of this setting.
+    'externalLinkProvider': 'tmdb',
 }
 
 
