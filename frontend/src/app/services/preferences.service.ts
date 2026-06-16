@@ -18,6 +18,7 @@ export interface UserPreferences {
   minRating: number;
   minVoteCount: number;
   externalLinkProvider: 'tmdb' | 'imdb';
+  showRatings: boolean;
 }
 
 /**
@@ -41,6 +42,7 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   minRating: 0,
   minVoteCount: 0,
   externalLinkProvider: 'tmdb',
+  showRatings: true,
 };
 
 @Injectable({

@@ -72,6 +72,9 @@ export class ActorsComponent implements OnInit, OnDestroy {
   // resolves the IMDb ID lazily.
   externalLinkProvider: 'tmdb' | 'imdb' = 'tmdb';
 
+  // Show IMDb/TMDB rating badges on cards (default from prefs, live-toggleable).
+  showRatings = true;
+
   // Fuller profile for the selected actor, shown as a header above the results.
   actorDetails: PersonDetails | null = null;
 
@@ -113,6 +116,7 @@ export class ActorsComponent implements OnInit, OnDestroy {
       if (prefs) {
         this.showFuture = !prefs.hideFutureReleasesByDefault;
         this.externalLinkProvider = prefs.externalLinkProvider || 'tmdb';
+        this.showRatings = prefs.showRatings !== false;
       }
       this.detectActiveServer(prefs);
     });
@@ -300,6 +304,12 @@ export class ActorsComponent implements OnInit, OnDestroy {
   // -- Filters --
 
   onFilterChange(): void { this.applyFilter(); }
+
+  /** Persist the show-ratings toggle so it sticks as the new default. */
+  onShowRatingsChange(): void {
+    this.preferencesService.save({ showRatings: this.showRatings })
+      .subscribe({ next: () => {}, error: () => {} });
+  }
 
   setView(view: 'all' | 'owned' | 'missing'): void {
     this.view = view;

@@ -27,6 +27,8 @@ DEFAULTS = {
     # links resolve lazily through the backend (TMDB list responses don't carry
     # IMDb IDs); TV titles always link to TheTVDB regardless of this setting.
     'externalLinkProvider': 'tmdb',
+    # Show IMDb/TMDB rating badges on movie cards.
+    'showRatings': True,
 }
 
 

@@ -151,6 +151,14 @@
                     <label class="form-check-label" for="actorShowIgnored">Ignored ({{ ignoredIds.size }})</label>
                   </div>
                 </li>
+                <li>
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="actorShowRatings"
+                           [(ngModel)]="showRatings" (ngModelChange)="onShowRatingsChange()">
+                    <label class="form-check-label" for="actorShowRatings"
+                           title="Show IMDb/TMDB rating badges on cards">Ratings</label>
+                  </div>
+                </li>
                 <li><hr class="dropdown-divider"></li>
                 <li>
                   <label class="form-label small mb-1 d-block">Sort by</label>
@@ -261,7 +269,7 @@
                   {{ gap.name }}
                 </a>
                 <div class="rec-year">{{ gap.year }}</div>
-                <div class="card-ratings" *ngIf="gap.imdbRating || gap.tmdbRating">
+                <div class="card-ratings" *ngIf="showRatings && (gap.imdbRating || gap.tmdbRating)">
                   <span *ngIf="gap.imdbRating" class="rating-chip imdb" [title]="(gap.imdbVotes | number) + ' votes on IMDb'">
                     <img class="rating-logo" src="assets/images/imdb-logo.svg" alt="IMDb"> {{ gap.imdbRating | number:'1.1-1' }}
                   </span>

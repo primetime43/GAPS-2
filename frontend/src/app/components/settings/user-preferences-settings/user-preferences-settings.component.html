@@ -43,6 +43,19 @@
       </select>
     </div>
 
+    <!-- Show Ratings -->
+    <div class="pref-card mb-3">
+      <h5>Show Ratings on Cards</h5>
+      <p class="text-muted small">
+        Show IMDb and TMDB rating badges on movie cards. You can also toggle this live from the
+        Filters menu on the Missing and Actors pages.
+      </p>
+      <label class="toggle-label">
+        <input type="checkbox" [(ngModel)]="prefs.showRatings">
+        <span class="ms-2">{{ prefs.showRatings ? 'Enabled' : 'Disabled' }}</span>
+      </label>
+    </div>
+
     <!-- Movie Link Provider -->
     <div class="pref-card mb-3">
       <h5>Movie Link Provider</h5>

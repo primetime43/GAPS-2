@@ -91,6 +91,9 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   // which resolves the IMDb ID lazily. TV always links to TheTVDB.
   externalLinkProvider: 'tmdb' | 'imdb' = 'tmdb';
 
+  // Show IMDb/TMDB rating badges on cards (default from prefs, live-toggleable).
+  showRatings = true;
+
   // Results sort + genre filter (reuse fields already on each gap).
   sortBy: 'default' | 'rating' | 'popularity' | 'year' | 'name' = 'default';
   genreFilter: number | null = null;
@@ -253,6 +256,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
         this.minRating = prefs.minRating || 0;
         this.minVoteCount = prefs.minVoteCount || 0;
         this.externalLinkProvider = prefs.externalLinkProvider || 'tmdb';
+        this.showRatings = prefs.showRatings !== false;
       }
       this.detectActiveServer(prefs, autoSelectLibrary);
     });
@@ -732,6 +736,12 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   // -- Filters --
 
   onFilterChange(): void { this.applyFilter(); }
+
+  /** Persist the show-ratings toggle so it sticks as the new default. */
+  onShowRatingsChange(): void {
+    this.preferencesService.save({ showRatings: this.showRatings })
+      .subscribe({ next: () => {}, error: () => {} });
+  }
 
   /** Sort a gap list by the selected key, leaving the source array untouched. */
   private sortGaps(list: Gap[]): Gap[] {
