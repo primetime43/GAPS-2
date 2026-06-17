@@ -1,5 +1,4 @@
 from flask import Blueprint, jsonify, request, current_app
-from app.services import config_store
 from app.services.media_servers import media_service_for
 
 actors_bp = Blueprint('actors', __name__)
@@ -33,6 +32,10 @@ def actor_gaps(person_id):
     library_names = request.args.getlist('libraryNames')
     show_existing = request.args.get('showExisting', 'true').lower() == 'true'
     include_minor = request.args.get('includeMinor', 'false').lower() == 'true'
+    # The client signals whether it wants IMDb ratings attached to TV gaps (it
+    # reflects the user's display toggle). The backend doesn't read the UI
+    # preference itself — that keeps display concerns on the client side.
+    include_imdb_ratings = request.args.get('includeImdbRatings', 'false').lower() == 'true'
     media_type = request.args.get('mediaType', default='movie', type=str).lower()
 
     tmdb = current_app.tmdb_service
@@ -46,7 +49,8 @@ def actor_gaps(person_id):
     service = _get_service(source)
 
     if media_type == 'tv':
-        gaps, error = _tv_gaps(tmdb, service, names, person_id, show_existing, include_minor)
+        gaps, error = _tv_gaps(tmdb, service, names, person_id, show_existing, include_minor,
+                               include_imdb_ratings)
     else:
         gaps, error = _movie_gaps(tmdb, service, names, person_id, show_existing, include_minor)
 
@@ -88,7 +92,8 @@ def _movie_gaps(tmdb, service, names, person_id, show_existing, include_minor):
     )
 
 
-def _tv_gaps(tmdb, service, names, person_id, show_existing, include_minor):
+def _tv_gaps(tmdb, service, names, person_id, show_existing, include_minor,
+             include_imdb_ratings=False):
     for name in names:
         if name not in service.shows_cache:
             service.get_shows(name)
@@ -117,18 +122,18 @@ def _tv_gaps(tmdb, service, names, person_id, show_existing, include_minor):
     if error or not gaps:
         return gaps, error
 
-    # Resolve TheTVDB + IMDb ids (for Sonarr / ignore / IMDb ratings) concurrently;
-    # cached after first.
     # Resolve TheTVDB + IMDb ids concurrently and persist newly-resolved ids (the
     # batch helper owns the concurrency cap + persist, shared with the movie path).
+    # TheTVDB ids power Sonarr / ignore; IMDb ids power links + the ratings below.
     tmdb_ids = [g['tmdbId'] for g in gaps]
     externals = tmdb.get_tv_external_ids_batch(tmdb_ids)
     for gap, ext in zip(gaps, externals):
         gap['tvdbId'] = ext.get('tvdbId')
         gap['imdbId'] = ext.get('imdbId')
 
-    # Attach IMDb ratings from the local dataset, only when the user wants them.
-    if config_store.get('preferences', {}).get('showImdbRatings', False):
+    # Attach IMDb ratings from the local dataset only when the client asked for
+    # them (so we don't trigger a dataset build for users who don't want IMDb).
+    if include_imdb_ratings:
         imdb_ids = [g['imdbId'] for g in gaps if g.get('imdbId')]
         ratings = current_app.imdb_service.get_ratings(imdb_ids)
         for gap in gaps:

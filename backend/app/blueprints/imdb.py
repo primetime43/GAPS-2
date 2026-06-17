@@ -1,5 +1,4 @@
 from flask import Blueprint, jsonify, request, current_app
-from app.services import config_store
 
 imdb_bp = Blueprint('imdb', __name__)
 
@@ -34,9 +33,11 @@ def ratings():
     resolve TMDB -> IMDb via TMDB's external_ids (cached, run concurrently)
     and then batch-fetch ratings from imdbapi.dev. Returns
     {ratings: {tmdbId: {imdbId, aggregateRating, voteCount}}}.
+
+    This is an explicit, client-initiated lookup — the frontend only calls it when
+    the user asks for IMDb ratings — so it does not consult the showImdbRatings UI
+    preference itself (that's a display concern owned by the client).
     """
-    if not config_store.get('preferences', {}).get('showImdbRatings', False):
-        return jsonify(ratings={})
     imdb_service = current_app.imdb_service
 
     raw_ids = (request.get_json() or {}).get('tmdbIds') or []

@@ -246,7 +246,10 @@ export class ActorsComponent implements OnInit, OnDestroy {
     this.errorMessage = '';
 
     const libs = this.selectedLibraries.length ? this.selectedLibraries : this.libraries.map(l => l.title);
-    this.actorService.getActorGaps(actor.id, libs, this.activeSource, true, this.showMinor, this.mediaType).subscribe({
+    // TV gaps bundle IMDb ratings in the response (no on-demand button for TV),
+    // so signal the toggle here; movies fetch ratings separately via the button.
+    const wantTvImdb = this.mediaType === 'tv' && this.showImdbRatings;
+    this.actorService.getActorGaps(actor.id, libs, this.activeSource, true, this.showMinor, this.mediaType, wantTvImdb).subscribe({
       next: (res) => {
         this.actorDetails = res.actor;
         this.allGaps = this.normalizeGaps(res.gaps);

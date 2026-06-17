@@ -30,12 +30,14 @@ export class ActorService {
     showExisting: boolean = true,
     includeMinor: boolean = false,
     mediaType: 'movie' | 'tv' = 'movie',
+    includeImdbRatings: boolean = false,
   ): Observable<{ gaps: CollectionGap[]; actor: PersonDetails | null }> {
     let params = new HttpParams()
       .set('source', source)
       .set('showExisting', showExisting.toString())
       .set('includeMinor', includeMinor.toString())
-      .set('mediaType', mediaType);
+      .set('mediaType', mediaType)
+      .set('includeImdbRatings', includeImdbRatings.toString());
     for (const lib of libraryNames) {
       params = params.append('libraryNames', lib);
     }
