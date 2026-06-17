@@ -7,6 +7,7 @@ export interface PersonResult {
   name: string;
   profileUrl: string | null;
   knownFor: string;      // short comma list of the person's best-known titles
+  popularity?: number;   // TMDB popularity (used for result ranking)
 }
 
 /**

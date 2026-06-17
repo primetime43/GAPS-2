@@ -103,6 +103,28 @@
         No people found for "{{ query }}".
       </div>
 
+      <!-- Popular-actor suggestions (empty search box, nothing picked yet) -->
+      <div *ngIf="!searching && !searchPerformed && !selectedActor && !query.trim() && popularActors.length > 0"
+           class="mb-4">
+        <h6 class="text-muted mb-2">Popular {{ mediaType === 'tv' ? 'TV' : 'movie' }} actors</h6>
+        <div class="actor-results">
+          <div *ngFor="let person of popularActors" class="actor-card clickable" (click)="selectActor(person)">
+            <img
+              *ngIf="person.profileUrl"
+              [src]="person.profileUrl"
+              [alt]="person.name"
+              class="actor-photo"
+              loading="lazy"
+            >
+            <div *ngIf="!person.profileUrl" class="actor-photo-placeholder">No Photo</div>
+            <div class="actor-info">
+              <div class="actor-name">{{ person.name }}</div>
+              <div class="actor-known-for" *ngIf="person.knownFor">{{ person.knownFor }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Loading gaps -->
       <div *ngIf="loadingGaps" class="text-center mt-4">
         <div class="spinner"></div>
@@ -213,6 +235,7 @@
             <!-- Load IMDb ratings on demand (movies only; not auto-fetched) -->
             <button *ngIf="mediaType === 'movie' && showImdbRatings && allGaps.length && !imdbRatingsLoaded"
                     class="btn btn-sm btn-outline-warning"
+                    title="Fetch IMDb ratings for these titles. Not loaded automatically — each one is looked up from IMDb, so this can take a few seconds."
                     (click)="loadImdbRatings()" [disabled]="loadingImdbRatings">
               <span *ngIf="loadingImdbRatings" class="spinner-border spinner-border-sm me-1"></span>
               {{ loadingImdbRatings ? 'Loading IMDb…' : 'Load IMDb ratings' }}

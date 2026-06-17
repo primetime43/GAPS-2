@@ -53,6 +53,8 @@ export class ActorsComponent implements OnInit, OnDestroy {
   searching = false;
   searchResults: PersonResult[] = [];
   searchPerformed = false;
+  // Trending actors shown as clickable suggestions when the search box is empty.
+  popularActors: PersonResult[] = [];
   selectedActor: PersonResult | null = null;
 
   loadingGaps = false;
@@ -128,6 +130,8 @@ export class ActorsComponent implements OnInit, OnDestroy {
       this.availableGenres = this.gapView.availableGenres(this.allGaps, this.genres);
     });
 
+    this.loadPopular();
+
     this.preferencesService.load().pipe(catchError(() => of(null))).subscribe((prefs) => {
       if (prefs) {
         this.showFuture = !prefs.hideFutureReleasesByDefault;
@@ -198,12 +202,19 @@ export class ActorsComponent implements OnInit, OnDestroy {
     this.mediaType = type;
     this.applyLibrarySelection();
     this.loadIgnored();
+    this.loadPopular();  // suggestions follow the tab (movie vs TV casts)
     this.refreshDownloaderStatus();
     // Keep the current actor and just re-fetch their results for the new type;
     // only the gaps differ, not the chosen person or the search box.
     if (this.selectedActor) {
       this.selectActor(this.selectedActor);
     }
+  }
+
+  /** Load the empty-state suggestions for the active tab (best-effort). */
+  private loadPopular(): void {
+    this.actorService.getPopular(this.mediaType).pipe(catchError(() => of([] as PersonResult[])))
+      .subscribe(people => this.popularActors = people);
   }
 
   private loadIgnored(): void {

@@ -23,6 +23,15 @@ export class ActorService {
     ).pipe(map(res => res.results));
   }
 
+  /** Suggested actors for the empty-search grid, from popular movies or TV
+   * shows depending on the active tab. */
+  getPopular(mediaType: 'movie' | 'tv' = 'movie'): Observable<PersonResult[]> {
+    const params = new HttpParams().set('mediaType', mediaType);
+    return this.http.get<{ results: PersonResult[] }>(
+      `${environment.apiUrl}/actors/popular`, { params }
+    ).pipe(map(res => res.results));
+  }
+
   getActorGaps(
     personId: number,
     libraryNames: string[],

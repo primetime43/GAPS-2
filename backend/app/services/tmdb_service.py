@@ -43,6 +43,10 @@ _ID_CACHE_TTL_SECONDS = 365 * 24 * 60 * 60
 # this stays well under the limit while cutting wall-clock on a cold (uncached)
 # filmography. Single source of truth — callers use the batch helpers below.
 _EXTERNAL_ID_WORKERS = 16
+# Popular titles (and their lead casts) only shift over days as new releases
+# trend, so cache the derived suggestions for a day. In-memory only, so a restart
+# refetches regardless.
+_POPULAR_CACHE_TTL_SECONDS = 24 * 60 * 60
 
 
 class TmdbService:
@@ -78,6 +82,10 @@ class TmdbService:
         self._tv_external_cache: dict[int, dict] = {}
         # TMDB movie genre id→name list (small, static); fetched once on demand.
         self._genre_cache: list[dict] | None = None
+        # Suggested actors for the empty-search grid, keyed by media type
+        # ('movie'/'tv') -> {'people': [...], 'at': float}. Cached briefly
+        # (see _POPULAR_CACHE_TTL_SECONDS). In-memory only.
+        self._popular_people_cache: dict[str, dict] = {}
 
         # Persistent cache for the collection lookups (the expensive ones).
         # _id_cache is intentionally not persisted — its search-key entries are
@@ -768,8 +776,30 @@ class TmdbService:
     # lookup is search-driven and synchronous: search a person, fetch their
     # filmography, cross-reference owned movies. Mirrors find_gaps_for_movie.
 
+    def _person_summary(self, person: dict) -> dict:
+        """Map a TMDB person record to the compact shape the Actors UI uses."""
+        known_for = [
+            kf.get("title") or kf.get("name")
+            for kf in (person.get("known_for") or [])
+            if kf.get("title") or kf.get("name")
+        ]
+        profile = person.get("profile_path")
+        return {
+            "id": person["id"],
+            "name": person.get("name", "Unknown"),
+            "profileUrl": f"{self._image_base_url}{profile}" if profile else None,
+            "knownFor": ", ".join(known_for[:3]),
+            "popularity": person.get("popularity") or 0,
+        }
+
     def search_people(self, query: str) -> list[dict]:
-        """Search TMDB for people (actors/actresses) by name."""
+        """Search TMDB for people (actors/actresses) by name.
+
+        TMDB's raw order can bury the recognizable actor under same-named crew, so
+        we re-rank the page: exact name match first, then prefix match, then
+        Acting-department people over directors/crew, then by popularity — keeping
+        a precise match on top while breaking ties toward who the user likely means.
+        """
         if not self._api_key or not query:
             return []
         try:
@@ -790,20 +820,105 @@ class TmdbService:
             logger.warning("TMDB person search failed for '%s': %s", query, e)
             return []
 
+        q = query.strip().lower()
+
+        def rank(person: dict):
+            name = (person.get("name") or "").lower()
+            return (
+                name == q,                                        # exact match
+                name.startswith(q),                               # prefix match
+                person.get("known_for_department") == "Acting",   # actors over crew
+                person.get("popularity") or 0,                    # popularity
+            )
+
+        results.sort(key=rank, reverse=True)
+        return [self._person_summary(p) for p in results[:10] if p.get("id")]
+
+    def _fetch_title_cast(self, media_type: str, title_id: int) -> list[dict]:
+        """Cast list for a single movie/show (TMDB `/{media_type}/{id}/credits`)."""
+        try:
+            resp = requests.get(
+                f"{self._base_url}/{media_type}/{title_id}/credits",
+                params={"api_key": self._api_key, "language": self._language},
+                timeout=10,
+            )
+            if resp.status_code != 200:
+                return []
+            return resp.json().get("cast", []) or []
+        except (requests.exceptions.RequestException, ValueError) as e:
+            logger.warning("Failed to fetch %s %s credits: %s", media_type, title_id, e)
+            return []
+
+    def get_popular_people(self, media_type: str = 'movie') -> list[dict]:
+        """Suggested actors for the empty search box, drawn from the top-billed
+        cast of currently-popular *movies* or *TV shows* (matching the active tab),
+        so the suggestions are on-topic and recognizable rather than TMDB's churny
+        global `/person/popular` list. Ranked by how many popular titles a person
+        appears in, then billing order, then popularity. `knownFor` shows the
+        popular titles they're in. Cached in memory per media type for
+        `_POPULAR_CACHE_TTL_SECONDS`."""
+        media_type = 'tv' if str(media_type).lower() == 'tv' else 'movie'
+        now = time.time()
+        with self._cache_lock:
+            entry = self._popular_people_cache.get(media_type)
+            if entry and now - entry['at'] < _POPULAR_CACHE_TTL_SECONDS:
+                return entry['people']
+        if not self._api_key:
+            return []
+        try:
+            resp = requests.get(
+                f"{self._base_url}/{media_type}/popular",
+                params={"api_key": self._api_key, "language": self._language},
+                timeout=10,
+            )
+            if resp.status_code != 200:
+                return []
+            titles = [t for t in resp.json().get("results", [])[:12] if t.get("id")]
+        except (requests.exceptions.RequestException, ValueError) as e:
+            logger.warning("TMDB popular %s fetch failed: %s", media_type, e)
+            return []
+
+        title_ids = [t["id"] for t in titles]
+        title_names = {t["id"]: (t.get("title") or t.get("name") or "") for t in titles}
+        with ThreadPoolExecutor(max_workers=_EXTERNAL_ID_WORKERS) as pool:
+            cast_lists = list(pool.map(lambda tid: self._fetch_title_cast(media_type, tid), title_ids))
+
+        # Aggregate top-billed cast across the popular titles.
+        agg: dict[int, dict] = {}
+        for tid, cast in zip(title_ids, cast_lists):
+            for member in cast[:10]:  # top-billed only
+                pid = member.get("id")
+                if not pid:
+                    continue
+                a = agg.get(pid)
+                if a is None:
+                    a = {"person": member, "titles": [], "count": 0, "best_order": 999}
+                    agg[pid] = a
+                a["count"] += 1
+                a["best_order"] = min(a["best_order"], member.get("order") or 999)
+                name = title_names.get(tid)
+                if name and name not in a["titles"]:
+                    a["titles"].append(name)
+
+        ranked = sorted(
+            agg.values(),
+            key=lambda a: (a["count"], -a["best_order"], a["person"].get("popularity") or 0),
+            reverse=True,
+        )
         people = []
-        for person in results[:10]:
-            known_for = [
-                kf.get("title") or kf.get("name")
-                for kf in (person.get("known_for") or [])
-                if kf.get("title") or kf.get("name")
-            ]
-            profile = person.get("profile_path")
+        for a in ranked[:12]:
+            p = a["person"]
+            profile = p.get("profile_path")
             people.append({
-                "id": person["id"],
-                "name": person.get("name", "Unknown"),
+                "id": p["id"],
+                "name": p.get("name", "Unknown"),
                 "profileUrl": f"{self._image_base_url}{profile}" if profile else None,
-                "knownFor": ", ".join(known_for[:3]),
+                "knownFor": ", ".join(a["titles"][:3]),
+                "popularity": p.get("popularity") or 0,
             })
+
+        with self._cache_lock:
+            self._popular_people_cache[media_type] = {"people": people, "at": now}
         return people
 
     def _get_person_movie_credits(self, person_id: int) -> dict | None:

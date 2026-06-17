@@ -330,6 +330,7 @@
           <!-- Load IMDb ratings on demand (movies only; not auto-fetched) -->
           <button *ngIf="mediaType === 'movie' && showImdbRatings && allGaps.length && !imdbRatingsLoaded"
                   class="btn btn-sm btn-outline-warning"
+                  title="Fetch IMDb ratings for these titles. Not loaded automatically — each one is looked up from IMDb, so this can take a few seconds."
                   (click)="loadImdbRatings()" [disabled]="loadingImdbRatings">
             <span *ngIf="loadingImdbRatings" class="spinner-border spinner-border-sm me-1"></span>
             {{ loadingImdbRatings ? 'Loading IMDb…' : 'Load IMDb ratings' }}

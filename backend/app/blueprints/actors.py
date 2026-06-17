@@ -24,6 +24,16 @@ def search_actors():
     return jsonify(results=results)
 
 
+@actors_bp.route('/popular', methods=['GET'])
+def popular_actors():
+    """Suggested actors for the empty-search grid, from popular movies or TV
+    shows depending on the active tab (mediaType)."""
+    if not current_app.tmdb_service.api_key:
+        return jsonify(error='No TMDB API key configured'), 400
+    media_type = request.args.get('mediaType', default='movie', type=str).lower()
+    return jsonify(results=current_app.tmdb_service.get_popular_people(media_type))
+
+
 @actors_bp.route('/<int:person_id>/gaps', methods=['GET'])
 def actor_gaps(person_id):
     """Find owned/missing movies or TV shows for an actor across libraries."""
