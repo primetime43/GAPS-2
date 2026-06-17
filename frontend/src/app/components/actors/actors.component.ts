@@ -9,7 +9,7 @@ import { ExportService, ExportFormat } from '../../services/export.service';
 import { RadarrService } from '../../services/radarr.service';
 import { SonarrService } from '../../services/sonarr.service';
 import { TvdbService } from '../../services/tvdb.service';
-import { ImdbService } from '../../services/imdb.service';
+import { GapViewService } from '../../services/gap-view.service';
 import { TmdbService, TmdbGenre } from '../../services/tmdb/tmdb.service';
 import { Gap } from '../../models/recommendation.model';
 import { PersonResult, PersonDetails } from '../../models/actor.model';
@@ -115,7 +115,7 @@ export class ActorsComponent implements OnInit, OnDestroy {
     private radarrService: RadarrService,
     private sonarrService: SonarrService,
     private tvdb: TvdbService,
-    private imdbService: ImdbService,
+    private gapView: GapViewService,
     private tmdbService: TmdbService,
   ) {}
 
@@ -125,7 +125,7 @@ export class ActorsComponent implements OnInit, OnDestroy {
 
     this.tmdbService.getGenres().pipe(catchError(() => of([] as TmdbGenre[]))).subscribe(g => {
       this.genres = g;
-      this.updateAvailableGenres();
+      this.availableGenres = this.gapView.availableGenres(this.allGaps, this.genres);
     });
 
     this.preferencesService.load().pipe(catchError(() => of(null))).subscribe((prefs) => {
@@ -357,20 +357,8 @@ export class ActorsComponent implements OnInit, OnDestroy {
    */
   loadImdbRatings(): void {
     if (!this.showImdbRatings || this.mediaType !== 'movie') return;
-    const ids = this.allGaps.map(g => g.id).filter((id): id is number => !!id);
-    if (!ids.length) return;
     this.loadingImdbRatings = true;
-    this.imdbService.getRatings(ids).pipe(
-      catchError(() => of({ ratings: {} as Record<string, any> }))
-    ).subscribe(res => {
-      const ratings = res.ratings || {};
-      for (const gap of this.allGaps) {
-        const r = ratings[String(gap.id)];
-        if (r) {
-          gap.imdbRating = r.aggregateRating;
-          gap.imdbVotes = r.voteCount;
-        }
-      }
+    this.gapView.applyImdbRatings(this.allGaps).subscribe(() => {
       this.loadingImdbRatings = false;
       this.imdbRatingsLoaded = true;
       this.applyFilter();  // reflect new ratings when sorting by rating
@@ -393,38 +381,6 @@ export class ActorsComponent implements OnInit, OnDestroy {
   setView(view: 'all' | 'owned' | 'missing'): void {
     this.view = view;
     this.applyFilter();
-  }
-
-  /** Sort a gap list by the selected key, leaving the source array untouched. */
-  private sortGaps(list: Gap[]): Gap[] {
-    switch (this.sortBy) {
-      case 'rating': return [...list].sort((a, b) => this.ratingOf(b) - this.ratingOf(a));
-      case 'popularity': return [...list].sort((a, b) => (b.popularity || 0) - (a.popularity || 0));
-      case 'year': return [...list].sort((a, b) => this.yearNum(b) - this.yearNum(a));
-      case 'name': return [...list].sort((a, b) => String(a.name).localeCompare(String(b.name)));
-      default: return list;
-    }
-  }
-
-  private yearNum(g: Gap): number {
-    const y = parseInt(String(g.year), 10);
-    return isNaN(y) ? 0 : y;
-  }
-
-  // Sort by the displayed IMDb rating, falling back to TMDB's so ordering still
-  // works when IMDb ratings are off.
-  private ratingOf(g: Gap): number {
-    return g.imdbRating ?? g.tmdbRating ?? 0;
-  }
-
-  /** Genres actually present in the current results, for the filter dropdown. */
-  private updateAvailableGenres(): void {
-    if (!this.genres.length || !this.allGaps.length) { this.availableGenres = []; return; }
-    const present = new Set<number>();
-    for (const g of this.allGaps) (g.genreIds || []).forEach(id => present.add(id));
-    this.availableGenres = this.genres
-      .filter(gen => present.has(gen.id))
-      .sort((a, b) => a.name.localeCompare(b.name));
   }
 
   // Including bonus content changes what the backend returns, so re-fetch.
@@ -470,7 +426,7 @@ export class ActorsComponent implements OnInit, OnDestroy {
     if (this.genreFilter != null) {
       filtered = filtered.filter(g => (g.genreIds || []).includes(this.genreFilter as number));
     }
-    filtered = this.sortGaps(filtered);
+    filtered = this.gapView.sortGaps(filtered, this.sortBy);
 
     const groups = new Map<string, Gap[]>();
     for (const gap of filtered) {
@@ -478,7 +434,7 @@ export class ActorsComponent implements OnInit, OnDestroy {
       groups.get(gap.groupName)!.push(gap);
     }
     this.collectionGroups = Array.from(groups.entries()).map(([name, gaps]) => ({ name, gaps }));
-    this.updateAvailableGenres();
+    this.availableGenres = this.gapView.availableGenres(this.allGaps, this.genres);
 
     const query = this.resultFilter.trim().toLowerCase();
     this.filteredGroups = !query
