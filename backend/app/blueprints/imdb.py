@@ -1,13 +1,7 @@
-from concurrent.futures import ThreadPoolExecutor
 from flask import Blueprint, jsonify, request, current_app
 from app.services import config_store
 
 imdb_bp = Blueprint('imdb', __name__)
-
-# Cap concurrent TMDB external-id lookups when resolving a batch of movies.
-# TMDB tolerates ~50 req/s, so this stays well under the limit while cutting the
-# wall-clock of the (now rare) cold resolution of an uncached filmography.
-_RESOLVE_WORKERS = 16
 
 
 @imdb_bp.route('/config', methods=['GET'])
@@ -57,10 +51,9 @@ def ratings():
         return jsonify(ratings={})
 
     tmdb_service = current_app.tmdb_service
-    with ThreadPoolExecutor(max_workers=_RESOLVE_WORKERS) as pool:
-        imdb_ids = list(pool.map(tmdb_service.get_imdb_id, tmdb_ids))
-    # Persist any newly-resolved ids so the next lookup is a local cache hit.
-    tmdb_service.persist_caches()
+    # Resolve TMDB->IMDb concurrently and persist newly-resolved ids (batch helper
+    # owns the concurrency cap + persist so it's not duplicated per blueprint).
+    imdb_ids = tmdb_service.get_imdb_ids(tmdb_ids)
 
     # Map each TMDB id to its resolved IMDb id, dropping the unresolved ones.
     tmdb_to_imdb = {t: i for t, i in zip(tmdb_ids, imdb_ids) if i}

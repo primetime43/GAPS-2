@@ -4,6 +4,7 @@ import os
 import re
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 import requests
 from app.services import config_store, scan_history
@@ -35,6 +36,10 @@ _CACHE_TTL_SECONDS = 7 * 24 * 60 * 60
 # and never pay that per-movie /external_ids call again. The long expiry is just a
 # self-heal backstop for the rare bad entry.
 _ID_CACHE_TTL_SECONDS = 365 * 24 * 60 * 60
+# Concurrency for batch /external_ids resolution. TMDB tolerates ~50 req/s, so
+# this stays well under the limit while cutting wall-clock on a cold (uncached)
+# filmography. Single source of truth — callers use the batch helpers below.
+_EXTERNAL_ID_WORKERS = 16
 
 
 class TmdbService:
@@ -404,41 +409,68 @@ class TmdbService:
 
         return None
 
+    def _fetch_external_ids(self, media_type: str, tmdb_id: int) -> dict | None:
+        """Single TMDB `/{movie|tv}/{id}/external_ids` call, shared by the movie
+        and TV resolvers. Returns the parsed JSON, or None on any failure or
+        non-200 — callers must treat None as "don't cache" so a transient error
+        (e.g. a 429) never poisons the persisted cache with a wrong answer.
+        """
+        if not self._api_key:
+            return None
+        try:
+            resp = requests.get(
+                f"{self._base_url}/{media_type}/{tmdb_id}/external_ids",
+                params={"api_key": self._api_key},
+                timeout=10,
+            )
+            if resp.status_code != 200:
+                return None
+            return resp.json()
+        except (requests.exceptions.RequestException, ValueError) as e:
+            logger.warning("Failed to fetch external ids for %s %s: %s", media_type, tmdb_id, e)
+            return None
+
+    def _resolve_external_batch(self, resolver, ids: list) -> list:
+        """Run a single-id external-id resolver over a batch concurrently, then
+        flush any newly-resolved ids to disk. The shared entry point for the
+        Actors / IMDb-ratings endpoints so the worker cap and the persist call
+        live here once instead of in each blueprint.
+        """
+        if not ids:
+            return []
+        with ThreadPoolExecutor(max_workers=_EXTERNAL_ID_WORKERS) as pool:
+            results = list(pool.map(resolver, ids))
+        self.persist_caches()
+        return results
+
     def get_imdb_id(self, tmdb_id: int) -> str | None:
         """Resolve a TMDB movie ID to its IMDb ID (e.g. 'tt0133093'), cached.
 
-        Backs the external-link toggle: poster/title clicks can
-        point to IMDb instead of TMDB. TMDB's list/credit/collection responses
-        don't carry IMDb IDs, so we look them up lazily per movie on demand.
-        Cached in-memory only — IMDb IDs are stable and these are cheap single
-        calls to regenerate after a restart.
+        Backs the external-link toggle and IMDb ratings: TMDB's list/credit/
+        collection responses don't carry IMDb IDs, so we look them up lazily per
+        movie. Cached and persisted (see _save_persistent_cache) — IMDb IDs are
+        stable, so each movie is resolved from TMDB once and reused thereafter.
         """
         if not tmdb_id:
             return None
         with self._cache_lock:
             if tmdb_id in self._imdb_id_cache:
                 return self._imdb_id_cache[tmdb_id]
-        if not self._api_key:
+        data = self._fetch_external_ids("movie", tmdb_id)
+        if data is None:
             return None
-        try:
-            resp = requests.get(
-                f"{self._base_url}/movie/{tmdb_id}/external_ids",
-                params={"api_key": self._api_key},
-                timeout=10,
-            )
-        except Exception as e:
-            logger.warning("Failed to fetch IMDb ID for TMDB movie %s: %s", tmdb_id, e)
-            return None
-        # Only cache a definitive answer — caching a transient failure (e.g. a 429)
-        # would persist a wrong "no IMDb id" forever. Misses just retry next time.
-        if resp.status_code != 200:
-            return None
-        imdb_id = resp.json().get("imdb_id") or None
+        imdb_id = data.get("imdb_id") or None
         with self._cache_lock:
             self._imdb_id_cache[tmdb_id] = imdb_id
             self._imdb_id_cache_ts[tmdb_id] = time.time()
             self._cache_dirty = True
         return imdb_id
+
+    def get_imdb_ids(self, tmdb_ids: list[int]) -> list[str | None]:
+        """Resolve a batch of TMDB movie IDs to IMDb IDs concurrently (order
+        preserved), persisting any newly-resolved ids. Used by /api/imdb/ratings.
+        """
+        return self._resolve_external_batch(self.get_imdb_id, tmdb_ids)
 
     def _get_collection_id(self, api_key: str, tmdb_id: int) -> int | None:
         """Get the collection ID for a movie, using cache."""
@@ -1029,28 +1061,26 @@ class TmdbService:
         with self._cache_lock:
             if tmdb_tv_id in self._tv_external_cache:
                 return self._tv_external_cache[tmdb_tv_id]
-        if not self._api_key:
+        data = self._fetch_external_ids("tv", tmdb_tv_id)
+        if data is None:
             return empty
-        result = dict(empty)
         try:
-            resp = requests.get(
-                f"{self._base_url}/tv/{tmdb_tv_id}/external_ids",
-                params={"api_key": self._api_key},
-                timeout=10,
-            )
-            # Only cache a definitive answer; a transient failure must retry, not
-            # poison the persisted cache with empty ids forever.
-            if resp.status_code != 200:
-                return empty
-            data = resp.json()
             raw_tvdb = data.get("tvdb_id")
-            result["tvdbId"] = int(raw_tvdb) if raw_tvdb else None
-            result["imdbId"] = data.get("imdb_id") or None
-        except (requests.exceptions.RequestException, ValueError, TypeError) as e:
-            logger.warning("Failed to fetch external ids for TMDB show %s: %s", tmdb_tv_id, e)
+            result = {
+                "tvdbId": int(raw_tvdb) if raw_tvdb else None,
+                "imdbId": data.get("imdb_id") or None,
+            }
+        except (ValueError, TypeError) as e:
+            logger.warning("Bad tvdb_id for TMDB show %s: %s", tmdb_tv_id, e)
             return empty
         with self._cache_lock:
             self._tv_external_cache[tmdb_tv_id] = result
             self._tv_external_cache_ts[tmdb_tv_id] = time.time()
             self._cache_dirty = True
         return result
+
+    def get_tv_external_ids_batch(self, tmdb_tv_ids: list[int]) -> list[dict]:
+        """Resolve a batch of TMDB TV ids to {tvdbId, imdbId} concurrently (order
+        preserved), persisting any newly-resolved ids. Used by actor TV gaps.
+        """
+        return self._resolve_external_batch(self.get_tv_external_ids, tmdb_tv_ids)
