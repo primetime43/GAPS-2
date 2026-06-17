@@ -327,6 +327,14 @@
             </ul>
           </div>
 
+          <!-- Load IMDb ratings on demand (movies only; not auto-fetched) -->
+          <button *ngIf="mediaType === 'movie' && showImdbRatings && allGaps.length && !imdbRatingsLoaded"
+                  class="btn btn-sm btn-outline-warning"
+                  (click)="loadImdbRatings()" [disabled]="loadingImdbRatings">
+            <span *ngIf="loadingImdbRatings" class="spinner-border spinner-border-sm me-1"></span>
+            {{ loadingImdbRatings ? 'Loading IMDb…' : 'Load IMDb ratings' }}
+          </button>
+
           <!-- Export -->
           <div class="dropdown">
             <button class="btn btn-sm btn-outline-info dropdown-toggle" type="button" data-bs-toggle="dropdown">

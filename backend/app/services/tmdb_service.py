@@ -30,6 +30,11 @@ _SELF_APPEARANCE_RE = re.compile(r"\b(self|himself|herself|themselves)\b", re.IG
 # collections (sequels, reissues), so re-fetch weekly to balance freshness vs.
 # TMDB rate limits.
 _CACHE_TTL_SECONDS = 7 * 24 * 60 * 60
+# External-id maps (TMDB->IMDb, TMDB->TheTVDB) are effectively immutable, so they
+# get a much longer TTL — the whole point is to resolve each title from TMDB once
+# and never pay that per-movie /external_ids call again. The long expiry is just a
+# self-heal backstop for the rare bad entry.
+_ID_CACHE_TTL_SECONDS = 365 * 24 * 60 * 60
 
 
 class TmdbService:
@@ -52,12 +57,14 @@ class TmdbService:
         # Actor filmography lookups (issue #49). Not persisted — credits change as
         # actors make new films, and these are cheap single calls to regenerate.
         self._person_credits_cache: dict[int, dict] = {}
-        # Movie -> IMDb ID lookups for external links. Not persisted — IMDb IDs
-        # are stable and resolved lazily via a single TMDB call.
+        # Movie -> IMDb ID lookups for external links / IMDb ratings. Persisted
+        # (see _save_persistent_cache): IMDb IDs are stable, and resolving them is
+        # one TMDB /external_ids call *per movie*, so the Actors filmography view
+        # would otherwise re-pay dozens of calls every session. Cache once, keep.
         self._imdb_id_cache: dict[int, str | None] = {}
         # TMDB TV id -> {tvdbId, imdbId}, for actor TV gaps (Sonarr / ignore /
-        # IMDb ratings). In-memory only; ids are stable and resolved lazily via a
-        # single TMDB external_ids call.
+        # IMDb ratings). Persisted for the same reason as _imdb_id_cache — one
+        # TMDB /external_ids call per show, stable ids.
         self._tv_external_cache: dict[int, dict] = {}
         # TMDB movie genre id→name list (small, static); fetched once on demand.
         self._genre_cache: list[dict] | None = None
@@ -68,6 +75,11 @@ class TmdbService:
         # parallel dicts so the in-memory cache shape stays unchanged.
         self._mc_cache_ts: dict[int, float] = {}
         self._coll_cache_ts: dict[int, float] = {}
+        self._imdb_id_cache_ts: dict[int, float] = {}
+        self._tv_external_cache_ts: dict[int, float] = {}
+        # Set when an id map gains a new entry; persist_caches() skips the disk
+        # write entirely when nothing changed (e.g. an all-cache-hit lookup).
+        self._cache_dirty = False
         self._cache_file = os.path.join(config_store.data_dir(), _CACHE_FILE_NAME)
         # _cache_lock protects in-memory dict reads/writes (held briefly).
         # _cache_save_lock protects the file I/O on persist (held while writing
@@ -143,6 +155,9 @@ class TmdbService:
             self._tv_external_cache.clear()
             self._mc_cache_ts.clear()
             self._coll_cache_ts.clear()
+            self._imdb_id_cache_ts.clear()
+            self._tv_external_cache_ts.clear()
+            self._cache_dirty = False
         try:
             os.remove(self._cache_file)
         except FileNotFoundError:
@@ -155,7 +170,7 @@ class TmdbService:
         if not os.path.isfile(self._cache_file):
             return
         try:
-            with open(self._cache_file, 'r') as f:
+            with open(self._cache_file, 'r', encoding='utf-8') as f:
                 data = json.load(f)
         except (OSError, json.JSONDecodeError) as e:
             logger.warning("Failed to load TMDB cache from %s: %s", self._cache_file, e)
@@ -196,6 +211,41 @@ class TmdbService:
             self._collection_cache[key] = value
             self._coll_cache_ts[key] = ts
 
+        for raw_key, entry in (data.get('imdb_ids') or {}).items():
+            if not isinstance(entry, dict):
+                continue
+            ts = entry.get('at')
+            if not isinstance(ts, (int, float)) or now - ts > _ID_CACHE_TTL_SECONDS:
+                continue
+            try:
+                key = int(raw_key)
+            except (TypeError, ValueError):
+                continue
+            value = entry.get('value')
+            if value is not None and not isinstance(value, str):
+                continue
+            self._imdb_id_cache[key] = value
+            self._imdb_id_cache_ts[key] = ts
+
+        for raw_key, entry in (data.get('tv_external') or {}).items():
+            if not isinstance(entry, dict):
+                continue
+            ts = entry.get('at')
+            if not isinstance(ts, (int, float)) or now - ts > _ID_CACHE_TTL_SECONDS:
+                continue
+            try:
+                key = int(raw_key)
+            except (TypeError, ValueError):
+                continue
+            value = entry.get('value')
+            if not isinstance(value, dict):
+                continue
+            self._tv_external_cache[key] = {
+                'tvdbId': value.get('tvdbId'),
+                'imdbId': value.get('imdbId'),
+            }
+            self._tv_external_cache_ts[key] = ts
+
         if self._movie_collection_cache or self._collection_cache:
             logger.info(
                 "Loaded TMDB cache: %d collection memberships, %d collections",
@@ -214,10 +264,18 @@ class TmdbService:
                 self._mc_cache_ts.setdefault(key, now)
             for key in self._collection_cache:
                 self._coll_cache_ts.setdefault(key, now)
+            for key in self._imdb_id_cache:
+                self._imdb_id_cache_ts.setdefault(key, now)
+            for key in self._tv_external_cache:
+                self._tv_external_cache_ts.setdefault(key, now)
             mc_snapshot = list(self._movie_collection_cache.items())
             coll_snapshot = list(self._collection_cache.items())
+            imdb_snapshot = list(self._imdb_id_cache.items())
+            tv_snapshot = list(self._tv_external_cache.items())
             mc_ts = dict(self._mc_cache_ts)
             coll_ts = dict(self._coll_cache_ts)
+            imdb_ts = dict(self._imdb_id_cache_ts)
+            tv_ts = dict(self._tv_external_cache_ts)
 
         payload: dict = {
             'version': 1,
@@ -229,16 +287,38 @@ class TmdbService:
                 str(key): {'value': value, 'at': coll_ts.get(key, now)}
                 for key, value in coll_snapshot
             },
+            'imdb_ids': {
+                str(key): {'value': value, 'at': imdb_ts.get(key, now)}
+                for key, value in imdb_snapshot
+            },
+            'tv_external': {
+                str(key): {'value': value, 'at': tv_ts.get(key, now)}
+                for key, value in tv_snapshot
+            },
         }
 
         with self._cache_save_lock:
             try:
                 tmp = self._cache_file + '.tmp'
-                with open(tmp, 'w') as f:
+                with open(tmp, 'w', encoding='utf-8') as f:
                     json.dump(payload, f)
                 os.replace(tmp, self._cache_file)
             except OSError as e:
                 logger.warning("Failed to persist TMDB cache: %s", e)
+
+    def persist_caches(self) -> None:
+        """Flush newly-resolved id caches to disk; no-op when nothing changed.
+
+        Called by the Actors / IMDb-ratings endpoints after a batch of per-title
+        /external_ids lookups so each resolved id survives a restart. Clearing the
+        dirty flag *before* the write means a concurrent insert that misses this
+        snapshot re-arms it and is captured by the next call.
+        """
+        with self._cache_lock:
+            if not self._cache_dirty:
+                return
+            self._cache_dirty = False
+        self._save_persistent_cache()
 
     def test_api_key(self, api_key: str) -> tuple[bool, int]:
         url = f"{self._base_url}/configuration?api_key={api_key}"
@@ -340,20 +420,24 @@ class TmdbService:
                 return self._imdb_id_cache[tmdb_id]
         if not self._api_key:
             return None
-        imdb_id: str | None = None
         try:
             resp = requests.get(
                 f"{self._base_url}/movie/{tmdb_id}/external_ids",
                 params={"api_key": self._api_key},
                 timeout=10,
             )
-            if resp.status_code == 200:
-                imdb_id = resp.json().get("imdb_id") or None
         except Exception as e:
             logger.warning("Failed to fetch IMDb ID for TMDB movie %s: %s", tmdb_id, e)
             return None
+        # Only cache a definitive answer — caching a transient failure (e.g. a 429)
+        # would persist a wrong "no IMDb id" forever. Misses just retry next time.
+        if resp.status_code != 200:
+            return None
+        imdb_id = resp.json().get("imdb_id") or None
         with self._cache_lock:
             self._imdb_id_cache[tmdb_id] = imdb_id
+            self._imdb_id_cache_ts[tmdb_id] = time.time()
+            self._cache_dirty = True
         return imdb_id
 
     def _get_collection_id(self, api_key: str, tmdb_id: int) -> int | None:
@@ -954,14 +1038,19 @@ class TmdbService:
                 params={"api_key": self._api_key},
                 timeout=10,
             )
-            if resp.status_code == 200:
-                data = resp.json()
-                raw_tvdb = data.get("tvdb_id")
-                result["tvdbId"] = int(raw_tvdb) if raw_tvdb else None
-                result["imdbId"] = data.get("imdb_id") or None
+            # Only cache a definitive answer; a transient failure must retry, not
+            # poison the persisted cache with empty ids forever.
+            if resp.status_code != 200:
+                return empty
+            data = resp.json()
+            raw_tvdb = data.get("tvdb_id")
+            result["tvdbId"] = int(raw_tvdb) if raw_tvdb else None
+            result["imdbId"] = data.get("imdb_id") or None
         except (requests.exceptions.RequestException, ValueError, TypeError) as e:
             logger.warning("Failed to fetch external ids for TMDB show %s: %s", tmdb_tv_id, e)
             return empty
         with self._cache_lock:
             self._tv_external_cache[tmdb_tv_id] = result
+            self._tv_external_cache_ts[tmdb_tv_id] = time.time()
+            self._cache_dirty = True
         return result

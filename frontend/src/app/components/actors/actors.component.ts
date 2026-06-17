@@ -82,6 +82,11 @@ export class ActorsComponent implements OnInit, OnDestroy {
   // live-toggleable from the Filters menu).
   showImdbRatings = false;
   showTmdbRatings = true;
+  // IMDb ratings are no longer fetched automatically (each title needs its own
+  // TMDB->IMDb lookup, which is slow on a full filmography). The user pulls them
+  // on demand via a button; these track that fetch per loaded filmography.
+  loadingImdbRatings = false;
+  imdbRatingsLoaded = false;
 
   // Fuller profile for the selected actor, shown as a header above the results.
   actorDetails: PersonDetails | null = null;
@@ -245,8 +250,8 @@ export class ActorsComponent implements OnInit, OnDestroy {
       next: (res) => {
         this.actorDetails = res.actor;
         this.allGaps = this.normalizeGaps(res.gaps);
+        this.imdbRatingsLoaded = false;  // fresh filmography → on-demand again
         this.applyFilter();
-        this.loadImdbRatings();
         this.loadingGaps = false;
       },
       error: () => {
@@ -345,15 +350,16 @@ export class ActorsComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Best-effort fetch of IMDb ratings for the loaded filmography. The backend
-   * returns nothing unless the IMDb integration is enabled, so we always ask
-   * rather than caching an enabled flag (which would go stale under route reuse).
+   * On-demand fetch of IMDb ratings for the loaded movie filmography (triggered
+   * by the "Load IMDb ratings" button). Not called automatically — resolving each
+   * title's IMDb id is a per-movie TMDB lookup, slow across a whole filmography.
+   * IMDb ratings are resolved from TMDB *movie* ids; TV gaps key on tvdbId.
    */
-  private loadImdbRatings(): void {
-    // IMDb ratings are resolved from TMDB *movie* ids; TV gaps key on tvdbId.
+  loadImdbRatings(): void {
     if (!this.showImdbRatings || this.mediaType !== 'movie') return;
     const ids = this.allGaps.map(g => g.id).filter((id): id is number => !!id);
     if (!ids.length) return;
+    this.loadingImdbRatings = true;
     this.imdbService.getRatings(ids).pipe(
       catchError(() => of({ ratings: {} as Record<string, any> }))
     ).subscribe(res => {
@@ -365,6 +371,9 @@ export class ActorsComponent implements OnInit, OnDestroy {
           gap.imdbVotes = r.voteCount;
         }
       }
+      this.loadingImdbRatings = false;
+      this.imdbRatingsLoaded = true;
+      this.applyFilter();  // reflect new ratings when sorting by rating
     });
   }
 
@@ -378,7 +387,7 @@ export class ActorsComponent implements OnInit, OnDestroy {
       showImdbRatings: this.showImdbRatings,
       showTmdbRatings: this.showTmdbRatings,
     }).subscribe({ next: () => {}, error: () => {} });
-    if (this.showImdbRatings) this.loadImdbRatings();
+    // No auto-fetch — the "Load IMDb ratings" button pulls them on demand.
   }
 
   setView(view: 'all' | 'owned' | 'missing'): void {

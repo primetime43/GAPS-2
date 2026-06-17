@@ -95,6 +95,10 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   // live-toggleable from the Filters menu).
   showImdbRatings = false;
   showTmdbRatings = true;
+  // IMDb ratings are pulled on demand (button), not auto-fetched — each title
+  // needs its own TMDB->IMDb lookup, slow across a full result set.
+  loadingImdbRatings = false;
+  imdbRatingsLoaded = false;
 
   // Results sort + genre filter (reuse fields already on each gap).
   sortBy: 'default' | 'rating' | 'popularity' | 'year' | 'name' = 'default';
@@ -333,7 +337,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
         this.totalOwned = progress!.total_owned;
         this.scanMode = true;
         this.applyFilter();
-        this.loadImdbRatings();
+        this.imdbRatingsLoaded = false;  // new result set → offer on-demand load again
         this.cacheCompletedScan(scanLibs, this.allGaps, progress!.total_owned);
       }
       this.loading = false;
@@ -414,7 +418,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     this.totalOwned = cached.totalOwned;
     this.scanMode = true;
     this.applyFilter();
-    this.loadImdbRatings();
+    this.imdbRatingsLoaded = false;  // new result set → offer on-demand load again
   }
 
   private cacheCompletedScan(libraries: string[], gaps: Gap[], totalOwned: number): void {
@@ -532,7 +536,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
             this.allGaps = this.normalizeGaps(progress.gaps);
             this.totalOwned = progress.total_owned;
             this.applyFilter();
-            this.loadImdbRatings();
+            this.imdbRatingsLoaded = false;  // new result set → offer on-demand load again
             this.loadingGaps = false;
             this.scanProgress = null;
             const scanLibs = progress.libraries?.length ? progress.libraries : [...scanLibraries];
@@ -666,7 +670,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
         this.allGaps = this.normalizeGaps(gaps);
         if (this.allGaps.length > 0 && this.allGaps.every(g => g.owned)) this.view = 'all';
         this.applyFilter();
-        this.loadImdbRatings();
+        this.imdbRatingsLoaded = false;  // new result set → offer on-demand load again
         this.loadingGaps = false;
       },
       error: () => {
@@ -735,14 +739,15 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Best-effort fetch of IMDb ratings for the current movie gaps. The backend
-   * returns nothing unless the IMDb integration is enabled, so we always ask
-   * rather than caching an enabled flag (which would go stale under route reuse).
+   * On-demand fetch of IMDb ratings for the current movie gaps (triggered by the
+   * "Load IMDb ratings" button). Not called automatically — resolving each title's
+   * IMDb id is a per-movie TMDB lookup, slow across a large result set.
    */
-  private loadImdbRatings(): void {
+  loadImdbRatings(): void {
     if (this.mediaType !== 'movie' || !this.showImdbRatings) return;
     const ids = this.allGaps.map(g => g.id).filter((id): id is number => !!id);
     if (!ids.length) return;
+    this.loadingImdbRatings = true;
     this.imdbService.getRatings(ids).pipe(
       catchError(() => of({ ratings: {} as Record<string, any> }))
     ).subscribe(res => {
@@ -754,6 +759,9 @@ export class RecommendedComponent implements OnInit, OnDestroy {
           gap.imdbVotes = r.voteCount;
         }
       }
+      this.loadingImdbRatings = false;
+      this.imdbRatingsLoaded = true;
+      this.applyFilter();  // reflect new ratings when sorting by rating
     });
   }
 
@@ -767,8 +775,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
       showImdbRatings: this.showImdbRatings,
       showTmdbRatings: this.showTmdbRatings,
     }).subscribe({ next: () => {}, error: () => {} });
-    // Enabling IMDb may need ratings we haven't fetched for this result set yet.
-    if (this.showImdbRatings) this.loadImdbRatings();
+    // No auto-fetch — the "Load IMDb ratings" button pulls them on demand.
   }
 
   /** Sort a gap list by the selected key, leaving the source array untouched. */

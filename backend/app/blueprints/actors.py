@@ -6,7 +6,8 @@ from app.services.media_servers import media_service_for
 actors_bp = Blueprint('actors', __name__)
 
 # Cap concurrent TMDB->TheTVDB lookups when resolving a batch of TV gaps.
-_RESOLVE_WORKERS = 8
+# Well under TMDB's ~50 req/s limit; only matters on the cold (uncached) load.
+_RESOLVE_WORKERS = 16
 
 
 def _get_service(source: str):
@@ -126,6 +127,8 @@ def _tv_gaps(tmdb, service, names, person_id, show_existing, include_minor):
     tmdb_ids = [g['tmdbId'] for g in gaps]
     with ThreadPoolExecutor(max_workers=_RESOLVE_WORKERS) as pool:
         externals = list(pool.map(tmdb.get_tv_external_ids, tmdb_ids))
+    # Persist any newly-resolved ids so the next lookup is a local cache hit.
+    tmdb.persist_caches()
     for gap, ext in zip(gaps, externals):
         gap['tvdbId'] = ext.get('tvdbId')
         gap['imdbId'] = ext.get('imdbId')
