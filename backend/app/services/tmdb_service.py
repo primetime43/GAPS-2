@@ -18,6 +18,10 @@ _CACHE_FILE_NAME = 'tmdb_cache.json'
 # "making-of" docs, and "as themselves" tribute/talk-show appearances. These
 # signals flag the latter so they're hidden by default (revealable via a toggle).
 _DOCUMENTARY_GENRE_ID = 99
+# Genres that signal non-acting filler in a filmography: documentary (99) plus
+# the TV-only talk (10767), news (10763), and reality (10764) genres, which are
+# almost always "as themselves" appearances rather than roles.
+_MINOR_GENRE_IDS = {99, 10767, 10763, 10764}
 _MINOR_VOTE_THRESHOLD = 10
 # Word-boundary match so "Self/Himself/Herself" credits are caught without
 # nuking real characters that merely contain the letters (e.g. "Selfridge").
@@ -51,6 +55,9 @@ class TmdbService:
         # Movie -> IMDb ID lookups for external links. Not persisted — IMDb IDs
         # are stable and resolved lazily via a single TMDB call.
         self._imdb_id_cache: dict[int, str | None] = {}
+        # TMDB TV id -> TheTVDB id, for actor TV gaps (Sonarr / ignore). In-memory
+        # only; ids are stable and resolved lazily via a single TMDB call.
+        self._tv_tvdb_cache: dict[int, int | None] = {}
         # TMDB movie genre id→name list (small, static); fetched once on demand.
         self._genre_cache: list[dict] | None = None
 
@@ -132,6 +139,7 @@ class TmdbService:
             self._movie_collection_cache.clear()
             self._collection_cache.clear()
             self._imdb_id_cache.clear()
+            self._tv_tvdb_cache.clear()
             self._mc_cache_ts.clear()
             self._coll_cache_ts.clear()
         try:
@@ -632,11 +640,11 @@ class TmdbService:
         return people
 
     def _get_person_movie_credits(self, person_id: int) -> dict | None:
-        """Fetch a person's profile + movie cast credits in one call, using cache.
+        """Fetch a person's profile + movie & TV cast credits in one call, cached.
 
-        The single /person call already returns bio/profile fields, so we keep a
-        `details` dict alongside the cast for the Actors page header — no extra
-        API call needed.
+        The single /person call already returns bio/profile fields and both
+        movie and TV credits, so we keep a `details` dict alongside the casts
+        for the Actors page (movies or shows) — no extra API call needed.
         """
         with self._cache_lock:
             if person_id in self._person_credits_cache:
@@ -648,7 +656,7 @@ class TmdbService:
                 params={
                     "api_key": self._api_key,
                     "language": self._language,
-                    "append_to_response": "movie_credits",
+                    "append_to_response": "movie_credits,tv_credits",
                 },
                 timeout=10,
             )
@@ -663,6 +671,7 @@ class TmdbService:
         credits = {
             "actor_name": data.get("name", "Unknown"),
             "cast": (data.get("movie_credits") or {}).get("cast", []),
+            "tv_cast": (data.get("tv_credits") or {}).get("cast", []),
             "details": {
                 "id": person_id,
                 "name": data.get("name", "Unknown"),
@@ -723,7 +732,7 @@ class TmdbService:
         character = (credit.get("character") or "")
         if "uncredited" in character.lower() or _SELF_APPEARANCE_RE.search(character):
             return True
-        if _DOCUMENTARY_GENRE_ID in (credit.get("genre_ids") or []):
+        if _MINOR_GENRE_IDS.intersection(credit.get("genre_ids") or []):
             return True
         # Obscure, already-released titles with almost no votes are typically
         # extras; unreleased real films (0 votes yet) are exempt.
@@ -830,3 +839,121 @@ class TmdbService:
         # Chronological, with undated titles last.
         entries.sort(key=lambda e: (e["year"] == "N/A", e["year"]))
         return entries, None
+
+    # -- Actor / actress TV gaps --
+    # The TV counterpart of get_actor_gaps: an actor's TV credits cross-checked
+    # against owned shows. TheTVDB ids (for Sonarr / the ignore list) are
+    # resolved by the caller from the returned tmdbId, lazily and cached.
+
+    def _build_actor_tv_gap_entries(
+        self,
+        tv_cast: list[dict],
+        actor_name: str,
+        owned_tmdb_ids: set[int],
+        owned_title_year: set[str],
+        show_existing: bool,
+        include_minor: bool = False,
+    ) -> list[dict]:
+        """Build TV gap entries from an actor's TV cast credits (one per show)."""
+        entries = []
+        seen: set[int] = set()
+        for credit in tv_cast:
+            show_id = credit.get("id")
+            if not show_id or show_id in seen:
+                continue
+            if credit.get("adult"):
+                continue
+            name = credit.get("name") or credit.get("original_name")
+            if not name:
+                continue
+            seen.add(show_id)
+
+            air_date = credit.get("first_air_date") or ""
+            year = air_date[:4] if air_date else "N/A"
+            name_key = f"{name.strip().lower()}|{year if year != 'N/A' else ''}"
+            is_owned = show_id in owned_tmdb_ids or name_key in owned_title_year
+
+            if not is_owned and not include_minor and self._is_minor_credit(credit, air_date):
+                continue
+            if not show_existing and is_owned:
+                continue
+
+            poster = credit.get("poster_path")
+            entries.append({
+                "tmdbId": show_id,
+                "name": name,
+                "year": year,
+                "releaseDate": air_date,
+                "posterUrl": f"{self._image_base_url}{poster}" if poster else None,
+                "overview": credit.get("overview", ""),
+                "collectionName": actor_name,
+                "owned": is_owned,
+                "voteAverage": credit.get("vote_average") or 0,
+                "voteCount": credit.get("vote_count") or 0,
+                "genreIds": credit.get("genre_ids") or [],
+                "popularity": credit.get("popularity") or 0,
+            })
+        return entries
+
+    def get_actor_tv_gaps(
+        self,
+        person_id: int,
+        owned_tmdb_ids: set[int],
+        owned_shows: list[dict] | None = None,
+        show_existing: bool = True,
+        include_minor: bool = False,
+    ) -> tuple[list[dict] | None, str | None]:
+        """Find owned/missing TV shows for an actor's TV credits.
+
+        Entries carry the TMDB show id; the caller resolves TheTVDB ids from it.
+        """
+        if not self._api_key:
+            return None, "No TMDB API key configured"
+
+        credits = self._get_person_movie_credits(person_id)
+        if credits is None:
+            return None, "Failed to fetch the actor's filmography"
+
+        owned_title_year: set[str] = set()
+        for show in owned_shows or []:
+            name = (show.get("name") or "").strip().lower()
+            year = str(show.get("year") or "")[:4]
+            if name:
+                owned_title_year.add(f"{name}|{year}")
+
+        entries = self._build_actor_tv_gap_entries(
+            credits.get("tv_cast", []),
+            credits.get("actor_name", "Unknown"),
+            owned_tmdb_ids,
+            owned_title_year,
+            show_existing,
+            include_minor,
+        )
+        entries.sort(key=lambda e: (e["year"] == "N/A", e["year"]))
+        return entries, None
+
+    def get_tv_tvdb_id(self, tmdb_tv_id: int) -> int | None:
+        """Resolve a TMDB TV id to its TheTVDB id (for Sonarr / ignore), cached."""
+        if not tmdb_tv_id:
+            return None
+        with self._cache_lock:
+            if tmdb_tv_id in self._tv_tvdb_cache:
+                return self._tv_tvdb_cache[tmdb_tv_id]
+        if not self._api_key:
+            return None
+        tvdb_id: int | None = None
+        try:
+            resp = requests.get(
+                f"{self._base_url}/tv/{tmdb_tv_id}/external_ids",
+                params={"api_key": self._api_key},
+                timeout=10,
+            )
+            if resp.status_code == 200:
+                raw = resp.json().get("tvdb_id")
+                tvdb_id = int(raw) if raw else None
+        except (requests.exceptions.RequestException, ValueError, TypeError) as e:
+            logger.warning("Failed to fetch TheTVDB id for TMDB show %s: %s", tmdb_tv_id, e)
+            return None
+        with self._cache_lock:
+            self._tv_tvdb_cache[tmdb_tv_id] = tvdb_id
+        return tvdb_id

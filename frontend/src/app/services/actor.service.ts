@@ -29,11 +29,13 @@ export class ActorService {
     source: string = 'plex',
     showExisting: boolean = true,
     includeMinor: boolean = false,
+    mediaType: 'movie' | 'tv' = 'movie',
   ): Observable<{ gaps: CollectionGap[]; actor: PersonDetails | null }> {
     let params = new HttpParams()
       .set('source', source)
       .set('showExisting', showExisting.toString())
-      .set('includeMinor', includeMinor.toString());
+      .set('includeMinor', includeMinor.toString())
+      .set('mediaType', mediaType);
     for (const lib of libraryNames) {
       params = params.append('libraryNames', lib);
     }
