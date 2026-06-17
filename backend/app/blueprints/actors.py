@@ -1,5 +1,6 @@
 from concurrent.futures import ThreadPoolExecutor
 from flask import Blueprint, jsonify, request, current_app
+from app.services import config_store
 from app.services.media_servers import media_service_for
 
 actors_bp = Blueprint('actors', __name__)
@@ -120,11 +121,23 @@ def _tv_gaps(tmdb, service, names, person_id, show_existing, include_minor):
     if error or not gaps:
         return gaps, error
 
-    # Resolve TheTVDB ids (for Sonarr / ignore) concurrently; cached after first.
+    # Resolve TheTVDB + IMDb ids (for Sonarr / ignore / IMDb ratings) concurrently;
+    # cached after first.
     tmdb_ids = [g['tmdbId'] for g in gaps]
     with ThreadPoolExecutor(max_workers=_RESOLVE_WORKERS) as pool:
-        tvdb_ids = list(pool.map(tmdb.get_tv_tvdb_id, tmdb_ids))
-    for gap, tvdb_id in zip(gaps, tvdb_ids):
-        gap['tvdbId'] = tvdb_id
+        externals = list(pool.map(tmdb.get_tv_external_ids, tmdb_ids))
+    for gap, ext in zip(gaps, externals):
+        gap['tvdbId'] = ext.get('tvdbId')
+        gap['imdbId'] = ext.get('imdbId')
+
+    # Attach IMDb ratings from the local dataset, only when the user wants them.
+    if config_store.get('preferences', {}).get('showImdbRatings', False):
+        imdb_ids = [g['imdbId'] for g in gaps if g.get('imdbId')]
+        ratings = current_app.imdb_service.get_ratings(imdb_ids)
+        for gap in gaps:
+            r = ratings.get(gap.get('imdbId'))
+            if r:
+                gap['imdbRating'] = r['aggregateRating']
+                gap['imdbVotes'] = r['voteCount']
 
     return gaps, None

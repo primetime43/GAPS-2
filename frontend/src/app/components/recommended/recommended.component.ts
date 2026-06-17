@@ -774,7 +774,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   /** Sort a gap list by the selected key, leaving the source array untouched. */
   private sortGaps(list: Gap[]): Gap[] {
     switch (this.sortBy) {
-      case 'rating': return [...list].sort((a, b) => (b.tmdbRating || 0) - (a.tmdbRating || 0));
+      case 'rating': return [...list].sort((a, b) => this.ratingOf(b) - this.ratingOf(a));
       case 'popularity': return [...list].sort((a, b) => (b.popularity || 0) - (a.popularity || 0));
       case 'year': return [...list].sort((a, b) => this.yearNum(b) - this.yearNum(a));
       case 'name': return [...list].sort((a, b) => String(a.name).localeCompare(String(b.name)));
@@ -785,6 +785,12 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   private yearNum(g: Gap): number {
     const y = parseInt(String(g.year), 10);
     return isNaN(y) ? 0 : y;
+  }
+
+  // Sort by the displayed IMDb rating, falling back to TMDB's (always present)
+  // so ordering still works when IMDb ratings are off.
+  private ratingOf(g: Gap): number {
+    return g.imdbRating ?? g.tmdbRating ?? 0;
   }
 
   /** Genres actually present in the current results, for the filter dropdown. */

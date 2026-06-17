@@ -55,9 +55,10 @@ class TmdbService:
         # Movie -> IMDb ID lookups for external links. Not persisted — IMDb IDs
         # are stable and resolved lazily via a single TMDB call.
         self._imdb_id_cache: dict[int, str | None] = {}
-        # TMDB TV id -> TheTVDB id, for actor TV gaps (Sonarr / ignore). In-memory
-        # only; ids are stable and resolved lazily via a single TMDB call.
-        self._tv_tvdb_cache: dict[int, int | None] = {}
+        # TMDB TV id -> {tvdbId, imdbId}, for actor TV gaps (Sonarr / ignore /
+        # IMDb ratings). In-memory only; ids are stable and resolved lazily via a
+        # single TMDB external_ids call.
+        self._tv_external_cache: dict[int, dict] = {}
         # TMDB movie genre id→name list (small, static); fetched once on demand.
         self._genre_cache: list[dict] | None = None
 
@@ -139,7 +140,7 @@ class TmdbService:
             self._movie_collection_cache.clear()
             self._collection_cache.clear()
             self._imdb_id_cache.clear()
-            self._tv_tvdb_cache.clear()
+            self._tv_external_cache.clear()
             self._mc_cache_ts.clear()
             self._coll_cache_ts.clear()
         try:
@@ -932,16 +933,21 @@ class TmdbService:
         entries.sort(key=lambda e: (e["year"] == "N/A", e["year"]))
         return entries, None
 
-    def get_tv_tvdb_id(self, tmdb_tv_id: int) -> int | None:
-        """Resolve a TMDB TV id to its TheTVDB id (for Sonarr / ignore), cached."""
+    def get_tv_external_ids(self, tmdb_tv_id: int) -> dict:
+        """Resolve a TMDB TV id to {tvdbId, imdbId}, cached.
+
+        TheTVDB id powers Sonarr / the ignore list / links; the IMDb id lets us
+        show IMDb ratings for shows. Both come from one external_ids call.
+        """
+        empty = {"tvdbId": None, "imdbId": None}
         if not tmdb_tv_id:
-            return None
+            return empty
         with self._cache_lock:
-            if tmdb_tv_id in self._tv_tvdb_cache:
-                return self._tv_tvdb_cache[tmdb_tv_id]
+            if tmdb_tv_id in self._tv_external_cache:
+                return self._tv_external_cache[tmdb_tv_id]
         if not self._api_key:
-            return None
-        tvdb_id: int | None = None
+            return empty
+        result = dict(empty)
         try:
             resp = requests.get(
                 f"{self._base_url}/tv/{tmdb_tv_id}/external_ids",
@@ -949,11 +955,13 @@ class TmdbService:
                 timeout=10,
             )
             if resp.status_code == 200:
-                raw = resp.json().get("tvdb_id")
-                tvdb_id = int(raw) if raw else None
+                data = resp.json()
+                raw_tvdb = data.get("tvdb_id")
+                result["tvdbId"] = int(raw_tvdb) if raw_tvdb else None
+                result["imdbId"] = data.get("imdb_id") or None
         except (requests.exceptions.RequestException, ValueError, TypeError) as e:
-            logger.warning("Failed to fetch TheTVDB id for TMDB show %s: %s", tmdb_tv_id, e)
-            return None
+            logger.warning("Failed to fetch external ids for TMDB show %s: %s", tmdb_tv_id, e)
+            return empty
         with self._cache_lock:
-            self._tv_tvdb_cache[tmdb_tv_id] = tvdb_id
-        return tvdb_id
+            self._tv_external_cache[tmdb_tv_id] = result
+        return result
