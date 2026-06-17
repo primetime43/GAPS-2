@@ -13,6 +13,9 @@ from app.services.scan_progress import ScanProgressTracker
 logger = logging.getLogger(__name__)
 
 _CACHE_FILE_NAME = 'tmdb_cache.json'
+# External-id maps live in their own file so an actor lookup (which resolves a few
+# new ids) doesn't rewrite the much larger collection cache every time.
+_ID_CACHE_FILE_NAME = 'tmdb_external_ids.json'
 
 # Heuristics for decluttering an actor's filmography (issue #49): TMDB's
 # movie_credits cast list mixes real acting roles with DVD extras, featurettes,
@@ -63,13 +66,15 @@ class TmdbService:
         # actors make new films, and these are cheap single calls to regenerate.
         self._person_credits_cache: dict[int, dict] = {}
         # Movie -> IMDb ID lookups for external links / IMDb ratings. Persisted
-        # (see _save_persistent_cache): IMDb IDs are stable, and resolving them is
-        # one TMDB /external_ids call *per movie*, so the Actors filmography view
-        # would otherwise re-pay dozens of calls every session. Cache once, keep.
+        # (see _save_id_cache): IMDb IDs are stable, and resolving them is one TMDB
+        # /external_ids call *per movie*, so the Actors filmography view would
+        # otherwise re-pay dozens of calls every session. Cache once, keep. A
+        # cached None (TMDB has no IMDb id) is kept in memory but NOT persisted, so
+        # a title that gains an id later is re-checked after a restart.
         self._imdb_id_cache: dict[int, str | None] = {}
         # TMDB TV id -> {tvdbId, imdbId}, for actor TV gaps (Sonarr / ignore /
-        # IMDb ratings). Persisted for the same reason as _imdb_id_cache — one
-        # TMDB /external_ids call per show, stable ids.
+        # IMDb ratings). Persisted like _imdb_id_cache; a fully-empty result
+        # ({tvdbId: None, imdbId: None}) is a negative and not persisted.
         self._tv_external_cache: dict[int, dict] = {}
         # TMDB movie genre id→name list (small, static); fetched once on demand.
         self._genre_cache: list[dict] | None = None
@@ -84,8 +89,9 @@ class TmdbService:
         self._tv_external_cache_ts: dict[int, float] = {}
         # Set when an id map gains a new entry; persist_caches() skips the disk
         # write entirely when nothing changed (e.g. an all-cache-hit lookup).
-        self._cache_dirty = False
+        self._id_cache_dirty = False
         self._cache_file = os.path.join(config_store.data_dir(), _CACHE_FILE_NAME)
+        self._id_cache_file = os.path.join(config_store.data_dir(), _ID_CACHE_FILE_NAME)
         # _cache_lock protects in-memory dict reads/writes (held briefly).
         # _cache_save_lock protects the file I/O on persist (held while writing
         # the temp file). Separate so HTTP-driven dict updates don't block on
@@ -162,27 +168,68 @@ class TmdbService:
             self._coll_cache_ts.clear()
             self._imdb_id_cache_ts.clear()
             self._tv_external_cache_ts.clear()
-            self._cache_dirty = False
-        try:
-            os.remove(self._cache_file)
-        except FileNotFoundError:
-            pass
-        except OSError as e:
-            logger.warning("Failed to remove TMDB cache file: %s", e)
+            self._id_cache_dirty = False
+        for path in (self._cache_file, self._id_cache_file):
+            try:
+                os.remove(path)
+            except FileNotFoundError:
+                pass
+            except OSError as e:
+                logger.warning("Failed to remove TMDB cache file %s: %s", path, e)
 
-    def _load_persistent_cache(self) -> None:
-        """Populate in-memory caches from disk, dropping entries older than the TTL."""
-        if not os.path.isfile(self._cache_file):
-            return
+    @staticmethod
+    def _read_cache_json(path: str) -> dict | None:
+        """Read a JSON cache file, returning the dict or None on absence/error."""
+        if not os.path.isfile(path):
+            return None
         try:
-            with open(self._cache_file, 'r', encoding='utf-8') as f:
+            with open(path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
         except (OSError, json.JSONDecodeError) as e:
-            logger.warning("Failed to load TMDB cache from %s: %s", self._cache_file, e)
-            return
-        if not isinstance(data, dict):
-            return
+            logger.warning("Failed to load cache from %s: %s", path, e)
+            return None
+        return data if isinstance(data, dict) else None
 
+    def _atomic_write_json(self, path: str, payload: dict) -> None:
+        """Write payload to path via temp-file + atomic rename (UTF-8)."""
+        with self._cache_save_lock:
+            try:
+                tmp = path + '.tmp'
+                with open(tmp, 'w', encoding='utf-8') as f:
+                    json.dump(payload, f)
+                os.replace(tmp, path)
+            except OSError as e:
+                logger.warning("Failed to persist cache %s: %s", path, e)
+
+    def _load_persistent_cache(self) -> None:
+        """Populate in-memory caches from disk, dropping entries older than the TTL.
+
+        Collections live in `_cache_file`; the external-id maps live in their own
+        `_id_cache_file`. For installs that predate the split, the id maps may
+        still be embedded in the collection file — read them from there as a
+        one-time migration when the dedicated file isn't present yet.
+        """
+        collection_data = self._read_cache_json(self._cache_file)
+        if collection_data:
+            self._load_collection_sections(collection_data)
+
+        id_data = self._read_cache_json(self._id_cache_file)
+        if id_data is None:
+            id_data = collection_data  # migrate from the legacy combined file
+        if id_data:
+            self._load_id_sections(id_data)
+
+        if self._movie_collection_cache or self._collection_cache:
+            logger.info(
+                "Loaded TMDB cache: %d collection memberships, %d collections, "
+                "%d imdb ids, %d tv external ids",
+                len(self._movie_collection_cache),
+                len(self._collection_cache),
+                len(self._imdb_id_cache),
+                len(self._tv_external_cache),
+            )
+
+    def _load_collection_sections(self, data: dict) -> None:
         now = time.time()
         for raw_key, entry in (data.get('movie_collection') or {}).items():
             if not isinstance(entry, dict):
@@ -216,6 +263,8 @@ class TmdbService:
             self._collection_cache[key] = value
             self._coll_cache_ts[key] = ts
 
+    def _load_id_sections(self, data: dict) -> None:
+        now = time.time()
         for raw_key, entry in (data.get('imdb_ids') or {}).items():
             if not isinstance(entry, dict):
                 continue
@@ -251,36 +300,21 @@ class TmdbService:
             }
             self._tv_external_cache_ts[key] = ts
 
-        if self._movie_collection_cache or self._collection_cache:
-            logger.info(
-                "Loaded TMDB cache: %d collection memberships, %d collections",
-                len(self._movie_collection_cache),
-                len(self._collection_cache),
-            )
-
-    def _save_persistent_cache(self) -> None:
-        """Write the persistent caches to disk via atomic rename."""
+    def _save_collection_cache(self) -> None:
+        """Write the collection caches (the large maps) to `_cache_file`. Called
+        at scan end, so the big write is infrequent."""
         now = time.time()
-        # Snapshot under the cache lock so concurrent inserts can't corrupt
-        # the iteration. JSON serialization and file I/O happen outside the
-        # lock to keep contention with the HTTP-driven cache mutations short.
+        # Snapshot under the cache lock so concurrent inserts can't corrupt the
+        # iteration; serialization + file I/O happen outside it.
         with self._cache_lock:
             for key in self._movie_collection_cache:
                 self._mc_cache_ts.setdefault(key, now)
             for key in self._collection_cache:
                 self._coll_cache_ts.setdefault(key, now)
-            for key in self._imdb_id_cache:
-                self._imdb_id_cache_ts.setdefault(key, now)
-            for key in self._tv_external_cache:
-                self._tv_external_cache_ts.setdefault(key, now)
             mc_snapshot = list(self._movie_collection_cache.items())
             coll_snapshot = list(self._collection_cache.items())
-            imdb_snapshot = list(self._imdb_id_cache.items())
-            tv_snapshot = list(self._tv_external_cache.items())
             mc_ts = dict(self._mc_cache_ts)
             coll_ts = dict(self._coll_cache_ts)
-            imdb_ts = dict(self._imdb_id_cache_ts)
-            tv_ts = dict(self._tv_external_cache_ts)
 
         payload: dict = {
             'version': 1,
@@ -292,38 +326,54 @@ class TmdbService:
                 str(key): {'value': value, 'at': coll_ts.get(key, now)}
                 for key, value in coll_snapshot
             },
+        }
+        self._atomic_write_json(self._cache_file, payload)
+
+    def _save_id_cache(self) -> None:
+        """Write the external-id maps to their own (small) file. Only *positive*
+        resolutions are persisted: a cached None / fully-empty result is a
+        negative kept in memory for the session but not on disk, so a title that
+        gains an id later is re-checked after a restart instead of staying stale.
+        """
+        now = time.time()
+        with self._cache_lock:
+            for key in self._imdb_id_cache:
+                self._imdb_id_cache_ts.setdefault(key, now)
+            for key in self._tv_external_cache:
+                self._tv_external_cache_ts.setdefault(key, now)
+            imdb_snapshot = list(self._imdb_id_cache.items())
+            tv_snapshot = list(self._tv_external_cache.items())
+            imdb_ts = dict(self._imdb_id_cache_ts)
+            tv_ts = dict(self._tv_external_cache_ts)
+
+        payload: dict = {
+            'version': 1,
             'imdb_ids': {
                 str(key): {'value': value, 'at': imdb_ts.get(key, now)}
-                for key, value in imdb_snapshot
+                for key, value in imdb_snapshot if value is not None
             },
             'tv_external': {
                 str(key): {'value': value, 'at': tv_ts.get(key, now)}
                 for key, value in tv_snapshot
+                if value and (value.get('tvdbId') is not None or value.get('imdbId') is not None)
             },
         }
-
-        with self._cache_save_lock:
-            try:
-                tmp = self._cache_file + '.tmp'
-                with open(tmp, 'w', encoding='utf-8') as f:
-                    json.dump(payload, f)
-                os.replace(tmp, self._cache_file)
-            except OSError as e:
-                logger.warning("Failed to persist TMDB cache: %s", e)
+        self._atomic_write_json(self._id_cache_file, payload)
 
     def persist_caches(self) -> None:
-        """Flush newly-resolved id caches to disk; no-op when nothing changed.
+        """Flush newly-resolved id maps to disk; no-op when nothing changed.
 
         Called by the Actors / IMDb-ratings endpoints after a batch of per-title
-        /external_ids lookups so each resolved id survives a restart. Clearing the
-        dirty flag *before* the write means a concurrent insert that misses this
+        /external_ids lookups so each resolved id survives a restart. Writes only
+        the small id-cache file (not the collection cache). Clearing the dirty
+        flag *before* the write means a concurrent insert that misses this
         snapshot re-arms it and is captured by the next call.
         """
         with self._cache_lock:
-            if not self._cache_dirty:
+            if not self._id_cache_dirty:
                 return
-            self._cache_dirty = False
-        self._save_persistent_cache()
+            self._id_cache_dirty = False
+        self._save_id_cache()
 
     def test_api_key(self, api_key: str) -> tuple[bool, int]:
         url = f"{self._base_url}/configuration?api_key={api_key}"
@@ -448,7 +498,7 @@ class TmdbService:
 
         Backs the external-link toggle and IMDb ratings: TMDB's list/credit/
         collection responses don't carry IMDb IDs, so we look them up lazily per
-        movie. Cached and persisted (see _save_persistent_cache) — IMDb IDs are
+        movie. Cached and persisted (see _save_id_cache) — IMDb IDs are
         stable, so each movie is resolved from TMDB once and reused thereafter.
         """
         if not tmdb_id:
@@ -463,7 +513,7 @@ class TmdbService:
         with self._cache_lock:
             self._imdb_id_cache[tmdb_id] = imdb_id
             self._imdb_id_cache_ts[tmdb_id] = time.time()
-            self._cache_dirty = True
+            self._id_cache_dirty = True
         return imdb_id
 
     def get_imdb_ids(self, tmdb_ids: list[int]) -> list[str | None]:
@@ -683,7 +733,7 @@ class TmdbService:
             gaps.extend(self._build_gap_entries(coll_data, owned_tmdb_ids, show_existing))
 
         gaps.sort(key=lambda g: (g["collectionName"], g["year"]))
-        self._save_persistent_cache()
+        self._save_collection_cache()
         return gaps, None
 
     def find_gaps_for_movie(
@@ -1076,7 +1126,7 @@ class TmdbService:
         with self._cache_lock:
             self._tv_external_cache[tmdb_tv_id] = result
             self._tv_external_cache_ts[tmdb_tv_id] = time.time()
-            self._cache_dirty = True
+            self._id_cache_dirty = True
         return result
 
     def get_tv_external_ids_batch(self, tmdb_tv_ids: list[int]) -> list[dict]:
