@@ -181,7 +181,7 @@
         (ngModelChange)="currentPage = 1; prefetchNextPage()"
       >
       <div class="movie-grid">
-        <div *ngFor="let item of pagedItems" class="movie-card clickable" (click)="selectItem(item)">
+        <div *ngFor="let item of pagedItems; trackBy: trackByBrowseItem" class="movie-card clickable" (click)="selectItem(item)">
           <img
             *ngIf="item.posterUrl"
             [src]="item.posterUrl"
@@ -401,7 +401,7 @@
       >
 
       <!-- Groups -->
-      <div *ngFor="let group of filteredGroups" class="collection-group mb-4">
+      <div *ngFor="let group of filteredGroups; trackBy: trackByGroupName" class="collection-group mb-4">
         <div class="d-flex align-items-center mb-2">
           <h6 class="collection-name mb-0">{{ group.name }}</h6>
           <button
@@ -420,7 +420,7 @@
           </button>
         </div>
         <div class="rec-grid">
-          <div *ngFor="let gap of group.gaps" class="rec-card" [class.owned]="gap.owned" [class.ignored]="isIgnored(gap)">
+          <div *ngFor="let gap of group.gaps; trackBy: trackByGapId" class="rec-card" [class.owned]="gap.owned" [class.ignored]="isIgnored(gap)">
             <div class="owned-badge" *ngIf="gap.owned">Owned</div>
             <div class="ignored-badge" *ngIf="isIgnored(gap)">Ignored</div>
             <button

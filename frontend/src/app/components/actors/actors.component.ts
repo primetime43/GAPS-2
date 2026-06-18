@@ -415,6 +415,16 @@ export class ActorsComponent implements OnInit, OnDestroy {
     return this.ignoredIds.has(gap.id);
   }
 
+  // trackBy so the gap grid reuses DOM nodes instead of re-creating every card
+  // each change-detection cycle.
+  trackByGroupName(_index: number, group: GapGroup): string {
+    return group.name;
+  }
+
+  trackByGapId(_index: number, gap: Gap): number {
+    return gap.id;
+  }
+
   applyFilter(): void {
     let filtered = this.allGaps;
     if (this.view === 'owned') {

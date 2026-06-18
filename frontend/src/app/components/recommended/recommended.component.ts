@@ -109,9 +109,25 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   genres: TmdbGenre[] = [];
   availableGenres: TmdbGenre[] = [];
 
+  // Memoized browse-item filter. `items` is only ever reassigned (never mutated
+  // in place), so caching against its reference + the query lets us skip the
+  // O(n) filter on every change-detection cycle, recomputing only when the item
+  // set or filter text actually changes. pagedItems/totalPages stay getters —
+  // once filteredItems is cached they're just a slice/count and cost nothing.
+  private _filteredItemsRef: BrowseItem[] | null = null;
+  private _filteredItemsQuery: string | null = null;
+  private _filteredItemsCache: BrowseItem[] = [];
+
   get filteredItems(): BrowseItem[] {
     const query = this.itemFilter.trim().toLowerCase();
-    return query ? this.items.filter(m => m.name.toLowerCase().includes(query)) : this.items;
+    if (this.items !== this._filteredItemsRef || query !== this._filteredItemsQuery) {
+      this._filteredItemsRef = this.items;
+      this._filteredItemsQuery = query;
+      this._filteredItemsCache = query
+        ? this.items.filter(m => m.name.toLowerCase().includes(query))
+        : this.items;
+    }
+    return this._filteredItemsCache;
   }
 
   get pagedItems(): BrowseItem[] {
@@ -121,6 +137,20 @@ export class RecommendedComponent implements OnInit, OnDestroy {
 
   get totalPages(): number {
     return Math.ceil(this.filteredItems.length / this.itemsPerPage);
+  }
+
+  // trackBy helpers so large *ngFor lists reuse DOM nodes instead of re-creating
+  // every card each change-detection cycle.
+  trackByBrowseItem(_index: number, item: BrowseItem): string | number {
+    return item.tmdbId ?? `${item.name}|${item.year}`;
+  }
+
+  trackByGroupName(_index: number, group: GapGroup): string {
+    return group.name;
+  }
+
+  trackByGapId(_index: number, gap: Gap): number {
+    return gap.id;
   }
 
   // All gaps from backend (normalized; always includes owned)
