@@ -4,7 +4,7 @@ import time
 from collections import OrderedDict
 
 import requests as http_requests
-from flask import Blueprint, jsonify, request, current_app, Response
+from flask import Blueprint, jsonify, request, current_app, Response, stream_with_context
 
 from app.services.media_servers import media_service_for
 
@@ -130,18 +130,40 @@ def image_proxy():
 
         resp = http_requests.get(url, headers=headers, timeout=10, stream=True)
         if resp.status_code != 200:
+            resp.close()
             return Response('Image not found', status=404)
 
         content_type = resp.headers.get('Content-Type', 'image/jpeg')
-        image_data = resp.content
 
+        # With the server-side cache on we need the whole image to store it, so
+        # buffer once. Otherwise stream the upstream response straight through
+        # without holding the full poster in memory.
         if use_cache:
+            image_data = resp.content
             _cache_put(cache_key, image_data, content_type)
+            return Response(
+                image_data,
+                content_type=content_type,
+                headers={'Cache-Control': 'public, max-age=86400'},
+            )
+
+        resp_headers = {'Cache-Control': 'public, max-age=86400'}
+        content_length = resp.headers.get('Content-Length')
+        if content_length:
+            resp_headers['Content-Length'] = content_length
+
+        def stream():
+            try:
+                for chunk in resp.iter_content(chunk_size=65536):
+                    if chunk:
+                        yield chunk
+            finally:
+                resp.close()
 
         return Response(
-            image_data,
+            stream_with_context(stream()),
             content_type=content_type,
-            headers={'Cache-Control': 'public, max-age=86400'},
+            headers=resp_headers,
         )
 
     except Exception as e:
