@@ -18,6 +18,11 @@ class JellyfinService:
         self._movies_cache_lock = threading.Lock()
         self._shows_cache: dict[str, dict] = {}
         self._shows_cache_lock = threading.Lock()
+        # Cached library list. get_movies/get_shows resolve a library name -> id
+        # on every call; the list rarely changes, so cache it until the
+        # connection changes (None = not loaded yet).
+        self._libraries_cache: list | None = None
+        self._libraries_cache_lock = threading.Lock()
 
         # Restore persisted state
         saved = config_store.get('jellyfin', {})
@@ -56,6 +61,7 @@ class JellyfinService:
 
         self._server_url = server_url.rstrip('/')
         self._api_key = api_key
+        self.clear_libraries_cache()  # new connection → drop any cached list
 
         # Get first admin user ID
         try:
@@ -75,7 +81,15 @@ class JellyfinService:
 
     # -- Libraries --
 
-    def fetch_libraries(self) -> tuple[list | None, str | None]:
+    def clear_libraries_cache(self) -> None:
+        with self._libraries_cache_lock:
+            self._libraries_cache = None
+
+    def fetch_libraries(self, force: bool = False) -> tuple[list | None, str | None]:
+        if not force:
+            with self._libraries_cache_lock:
+                if self._libraries_cache is not None:
+                    return self._libraries_cache, None
         if not self._server_url or not self._api_key:
             return None, 'Not connected'
 
@@ -102,6 +116,8 @@ class JellyfinService:
                     'id': item.get('Id', item.get('ItemId', '')),
                 })
 
+            with self._libraries_cache_lock:
+                self._libraries_cache = libraries
             return libraries, None
         except Exception as e:
             return None, str(e)
@@ -121,7 +137,7 @@ class JellyfinService:
             return False, 'Could not reach server', None
         self.clear_movies_cache()
         self.clear_shows_cache()
-        libs, err = self.fetch_libraries()
+        libs, err = self.fetch_libraries(force=True)
         if err:
             return False, err, None
         if self._active_server:
@@ -144,6 +160,7 @@ class JellyfinService:
             'server_url': server_url,
             'libraries': libraries if isinstance(libraries, list) else [],
         }
+        self.clear_libraries_cache()  # creds may have changed → refetch on demand
         config_store.put('jellyfin', {
             'server_url': self._server_url,
             'api_key': api_key,
@@ -161,6 +178,7 @@ class JellyfinService:
         self._user_id = None
         self.clear_movies_cache()
         self.clear_shows_cache()
+        self.clear_libraries_cache()
         config_store.remove('jellyfin')
 
     # -- Movies --
