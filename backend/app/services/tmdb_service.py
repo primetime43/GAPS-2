@@ -59,8 +59,7 @@ class TmdbService:
         # concurrent workers don't exhaust the pool (which would churn connections).
         self._session = requests.Session()
         _adapter = requests.adapters.HTTPAdapter(pool_connections=10, pool_maxsize=_EXTERNAL_ID_WORKERS)
-        self._session.mount('https://', _adapter)
-        self._session.mount('http://', _adapter)
+        self._session.mount('https://', _adapter)  # TMDB is HTTPS-only
         self._api_key: str | None = config_store.get('tmdb_api_key')
         # Preference-derived scan settings (language + quality filter). Loaded
         # here and refreshed via reload_preferences() when the user saves.

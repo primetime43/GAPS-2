@@ -50,8 +50,7 @@ class TvdbService:
         # a fresh TLS handshake each. pool_maxsize matches the scan worker count.
         self._session = requests.Session()
         _adapter = requests.adapters.HTTPAdapter(pool_connections=10, pool_maxsize=_SCAN_WORKERS)
-        self._session.mount('https://', _adapter)
-        self._session.mount('http://', _adapter)
+        self._session.mount('https://', _adapter)  # TheTVDB is HTTPS-only
 
         # Auth token cache (in-memory only — cheap to regenerate on restart).
         self._token: str | None = None
