@@ -45,6 +45,14 @@ class TvdbService:
     def __init__(self, base_url: str):
         self._base_url = base_url.rstrip('/')
 
+        # Shared HTTP session: connection pooling + keep-alive so the many
+        # concurrent TheTVDB calls in a scan reuse connections instead of paying
+        # a fresh TLS handshake each. pool_maxsize matches the scan worker count.
+        self._session = requests.Session()
+        _adapter = requests.adapters.HTTPAdapter(pool_connections=10, pool_maxsize=_SCAN_WORKERS)
+        self._session.mount('https://', _adapter)
+        self._session.mount('http://', _adapter)
+
         # Auth token cache (in-memory only — cheap to regenerate on restart).
         self._token: str | None = None
         self._token_at: float = 0.0
@@ -111,7 +119,7 @@ class TvdbService:
         if pin:
             payload['pin'] = pin
         try:
-            resp = requests.post(f'{self._base_url}/login', json=payload, timeout=DEFAULT_TIMEOUT)
+            resp = self._session.post(f'{self._base_url}/login', json=payload, timeout=DEFAULT_TIMEOUT)
         except requests.exceptions.RequestException as e:
             return None, f'Connection failed: {e}'
 
@@ -163,7 +171,7 @@ class TvdbService:
         url = f'{self._base_url}{path}'
         for attempt in (1, 2):
             try:
-                resp = requests.get(
+                resp = self._session.get(
                     url,
                     headers={'Authorization': f'Bearer {token}'},
                     params=params,
