@@ -53,6 +53,14 @@ class TmdbService:
     def __init__(self, base_url: str, image_base_url: str):
         self._base_url = base_url
         self._image_base_url = image_base_url
+        # Shared HTTP session: connection pooling + keep-alive so the hundreds of
+        # TMDB calls during a scan reuse connections instead of paying a fresh
+        # TLS handshake each time. pool_maxsize matches the worker count so
+        # concurrent workers don't exhaust the pool (which would churn connections).
+        self._session = requests.Session()
+        _adapter = requests.adapters.HTTPAdapter(pool_connections=10, pool_maxsize=_EXTERNAL_ID_WORKERS)
+        self._session.mount('https://', _adapter)
+        self._session.mount('http://', _adapter)
         self._api_key: str | None = config_store.get('tmdb_api_key')
         # Preference-derived scan settings (language + quality filter). Loaded
         # here and refreshed via reload_preferences() when the user saves.
@@ -385,7 +393,7 @@ class TmdbService:
 
     def test_api_key(self, api_key: str) -> tuple[bool, int]:
         url = f"{self._base_url}/configuration?api_key={api_key}"
-        response = requests.get(url, timeout=10)
+        response = self._session.get(url, timeout=10)
         return response.status_code == 200, response.status_code
 
     def save_api_key(self, api_key: str) -> tuple[bool, int]:
@@ -416,7 +424,7 @@ class TmdbService:
                     return self._id_cache[cache_key]
             resolved: int | None = None
             try:
-                resp = requests.get(
+                resp = self._session.get(
                     f"{self._base_url}/find/{imdb_id}",
                     params={"api_key": api_key, "external_source": "imdb_id"},
                     timeout=10,
@@ -443,7 +451,7 @@ class TmdbService:
                 params = {"api_key": api_key, "query": title, "language": self._language}
                 if year:
                     params["year"] = year
-                resp = requests.get(
+                resp = self._session.get(
                     f"{self._base_url}/search/movie",
                     params=params,
                     timeout=10,
@@ -476,7 +484,7 @@ class TmdbService:
         if not self._api_key:
             return None
         try:
-            resp = requests.get(
+            resp = self._session.get(
                 f"{self._base_url}/{media_type}/{tmdb_id}/external_ids",
                 params={"api_key": self._api_key},
                 timeout=10,
@@ -538,7 +546,7 @@ class TmdbService:
 
         coll_id: int | None = None
         try:
-            resp = requests.get(
+            resp = self._session.get(
                 f"{self._base_url}/movie/{tmdb_id}",
                 params={"api_key": api_key, "language": self._language},
                 timeout=10,
@@ -560,7 +568,7 @@ class TmdbService:
                 return self._collection_cache[collection_id]
 
         try:
-            resp = requests.get(
+            resp = self._session.get(
                 f"{self._base_url}/collection/{collection_id}",
                 params={"api_key": api_key, "language": self._language},
                 timeout=10,
@@ -766,17 +774,20 @@ class TmdbService:
         For each owned movie, check if it belongs to a TMDB collection.
         Then fetch the full collection and find movies not in the library.
 
-        All TMDB responses are cached so repeat scans are near-instant.
+        The per-movie collection lookups and per-collection fetches are the
+        dominant cost of a cold scan, so both run concurrently over a thread pool
+        (bounded by _EXTERNAL_ID_WORKERS); the shared keep-alive session reuses
+        connections across them. All TMDB responses are cached, so a warm
+        re-scan stays near-instant. Two phases: resolve every owned movie's id +
+        collection first (completing ownership), then fetch the unique
+        collections those touched and build gaps against the full owned set.
         """
-        seen_collections: set[int] = set()
-        gaps = []
-        total = len(owned_movies)
+        processed = {'n': 0}
+        processed_lock = threading.Lock()
 
-        for i, movie in enumerate(owned_movies):
+        def resolve_one(movie: dict):
             if not self._scan.is_current(generation):
-                break
-            self._scan.update(generation, processed=i + 1, current_movie=movie.get('name', ''))
-
+                return None
             tmdb_id = self.resolve_tmdb_id(
                 api_key,
                 movie.get('tmdbId'),
@@ -784,22 +795,45 @@ class TmdbService:
                 movie.get('name'),
                 movie.get('year'),
             )
-            if not tmdb_id:
+            collection_id = self._get_collection_id(api_key, tmdb_id) if tmdb_id else None
+            with processed_lock:
+                processed['n'] += 1
+                done = processed['n']
+            self._scan.update(generation, processed=done, current_movie=movie.get('name', ''))
+            return tmdb_id, collection_id
+
+        # Phase 1: resolve ids + collection membership for every owned movie.
+        with ThreadPoolExecutor(max_workers=_EXTERNAL_ID_WORKERS) as pool:
+            results = list(pool.map(resolve_one, owned_movies))
+
+        if not self._scan.is_current(generation):
+            return [], None
+
+        collection_ids: set[int] = set()
+        for result in results:
+            if not result:
                 continue
+            tmdb_id, collection_id = result
+            if tmdb_id:
+                owned_tmdb_ids.add(tmdb_id)
+            if collection_id:
+                collection_ids.add(collection_id)
+        self._scan.update(generation, collections_found=len(collection_ids))
 
-            owned_tmdb_ids.add(tmdb_id)
+        # Phase 2: fetch the unique collections concurrently, then build gaps
+        # against the now-complete owned set.
+        def fetch_collection(collection_id: int):
+            if not self._scan.is_current(generation):
+                return None
+            return self._get_collection(api_key, collection_id)
 
-            collection_id = self._get_collection_id(api_key, tmdb_id)
-            if not collection_id or collection_id in seen_collections:
-                continue
-            seen_collections.add(collection_id)
-            self._scan.update(generation, collections_found=len(seen_collections))
+        with ThreadPoolExecutor(max_workers=_EXTERNAL_ID_WORKERS) as pool:
+            coll_datas = list(pool.map(fetch_collection, collection_ids))
 
-            coll_data = self._get_collection(api_key, collection_id)
-            if not coll_data:
-                continue
-
-            gaps.extend(self._build_gap_entries(coll_data, owned_tmdb_ids, show_existing))
+        gaps: list[dict] = []
+        for coll_data in coll_datas:
+            if coll_data:
+                gaps.extend(self._build_gap_entries(coll_data, owned_tmdb_ids, show_existing))
 
         gaps.sort(key=lambda g: (g["collectionName"], g["year"]))
         self._save_collection_cache()
@@ -975,7 +1009,7 @@ class TmdbService:
         if not self._api_key or not query:
             return []
         try:
-            resp = requests.get(
+            resp = self._session.get(
                 f"{self._base_url}/search/person",
                 params={
                     "api_key": self._api_key,
@@ -1009,7 +1043,7 @@ class TmdbService:
     def _fetch_title_cast(self, media_type: str, title_id: int) -> list[dict]:
         """Cast list for a single movie/show (TMDB `/{media_type}/{id}/credits`)."""
         try:
-            resp = requests.get(
+            resp = self._session.get(
                 f"{self._base_url}/{media_type}/{title_id}/credits",
                 params={"api_key": self._api_key, "language": self._language},
                 timeout=10,
@@ -1038,7 +1072,7 @@ class TmdbService:
         if not self._api_key:
             return []
         try:
-            resp = requests.get(
+            resp = self._session.get(
                 f"{self._base_url}/{media_type}/popular",
                 params={"api_key": self._api_key, "language": self._language},
                 timeout=10,
@@ -1105,7 +1139,7 @@ class TmdbService:
                 return self._person_credits_cache[person_id]
 
         try:
-            resp = requests.get(
+            resp = self._session.get(
                 f"{self._base_url}/person/{person_id}",
                 params={
                     "api_key": self._api_key,
@@ -1156,7 +1190,7 @@ class TmdbService:
             return []
         genres: list[dict] = []
         try:
-            resp = requests.get(
+            resp = self._session.get(
                 f"{self._base_url}/genre/movie/list",
                 params={"api_key": self._api_key, "language": self._language},
                 timeout=10,
