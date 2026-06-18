@@ -31,6 +31,12 @@ DEFAULTS = {
     # at scan time); IMDb ratings require the local dataset, so they default off.
     'showImdbRatings': False,
     'showTmdbRatings': True,
+    # Remembered Missing-view display filters (owned/missing/all view, sort,
+    # genre, show-future). Pure UI state for the frontend — deliberately separate
+    # from hideOwnedByDefault/hideFutureReleasesByDefault (which also drive
+    # scheduled-scan counts) so browsing filters don't change scan behavior.
+    # None until the user changes a filter; stored/returned as an opaque object.
+    'missingFilters': None,
 }
 
 

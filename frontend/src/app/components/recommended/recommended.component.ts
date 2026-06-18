@@ -9,7 +9,7 @@ import { RecommendationService } from '../../services/recommendation.service';
 import { TvdbService } from '../../services/tvdb.service';
 import { Gap } from '../../models/recommendation.model';
 import { MediaLibrary } from '../../models/media-server.model';
-import { PreferencesService } from '../../services/preferences.service';
+import { PreferencesService, MissingFilters } from '../../services/preferences.service';
 import { ExportService, ExportFormat } from '../../services/export.service';
 import { RadarrService } from '../../services/radarr.service';
 import { SonarrService } from '../../services/sonarr.service';
@@ -103,6 +103,9 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   // Results sort + genre filter (reuse fields already on each gap).
   sortBy: 'default' | 'rating' | 'popularity' | 'year' | 'name' = 'default';
   genreFilter: number | null = null;
+  // True once preferences have been loaded and applied; gates saveMissingFilters
+  // so early/initial state changes don't clobber the persisted filters.
+  private filtersLoaded = false;
   genres: TmdbGenre[] = [];
   availableGenres: TmdbGenre[] = [];
 
@@ -232,6 +235,8 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     // The genre filter is movie-only; clear it so it can't hide all TV results.
     this.genreFilter = null;
     this.availableGenres = [];
+    // Keep the remembered filters in step with the cleared genre.
+    this.saveMissingFilters();
     this.loadIgnored();
     this.applyLibraryFilter();
   }
@@ -264,7 +269,18 @@ export class RecommendedComponent implements OnInit, OnDestroy {
         this.externalLinkProvider = prefs.externalLinkProvider || 'tmdb';
         this.showImdbRatings = !!prefs.showImdbRatings;
         this.showTmdbRatings = prefs.showTmdbRatings !== false;
+        // Remembered Missing-view filters override the seeded defaults above.
+        const mf = prefs.missingFilters;
+        if (mf) {
+          if (mf.view) this.view = mf.view;
+          if (mf.sortBy) this.sortBy = mf.sortBy;
+          this.genreFilter = mf.genreFilter ?? null;
+          if (typeof mf.showFuture === 'boolean') this.showFuture = mf.showFuture;
+        }
       }
+      // Enable persistence only after the initial state is applied, so the
+      // assignments above don't trigger a save that overwrites the saved value.
+      this.filtersLoaded = true;
       this.detectActiveServer(prefs, autoSelectLibrary);
     });
   }
@@ -768,7 +784,30 @@ export class RecommendedComponent implements OnInit, OnDestroy {
 
   // -- Filters --
 
-  onFilterChange(): void { this.applyFilter(); }
+  onFilterChange(): void {
+    this.applyFilter();
+    this.saveMissingFilters();
+  }
+
+  /** Sort/genre dropdown change: re-filter and remember the choice. */
+  onResultFilterChange(): void {
+    this.applyFilter();
+    this.saveMissingFilters();
+  }
+
+  /** Persist the Missing-view display filters so they survive a refresh. Stored
+   * separately from the hideOwned/hideFuture scan defaults (see MissingFilters).
+   * Fire-and-forget; no-op until preferences have finished loading. */
+  private saveMissingFilters(): void {
+    if (!this.filtersLoaded) return;
+    const missingFilters: MissingFilters = {
+      view: this.view,
+      sortBy: this.sortBy,
+      genreFilter: this.genreFilter,
+      showFuture: this.showFuture,
+    };
+    this.preferencesService.save({ missingFilters }).subscribe({ next: () => {}, error: () => {} });
+  }
 
   /** Persist the per-provider rating toggles so they stick as the new default. */
   onRatingPrefsChange(): void {
@@ -782,6 +821,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   setView(view: 'all' | 'owned' | 'missing'): void {
     this.view = view;
     this.applyFilter();
+    this.saveMissingFilters();
   }
 
   /**

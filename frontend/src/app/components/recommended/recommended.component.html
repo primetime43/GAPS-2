@@ -311,7 +311,7 @@
               <li>
                 <label class="form-label small mb-1 d-block">Sort by</label>
                 <select class="form-select form-select-sm dark-select"
-                        [(ngModel)]="sortBy" (ngModelChange)="applyFilter()">
+                        [(ngModel)]="sortBy" (ngModelChange)="onResultFilterChange()">
                   <option value="default">Default</option>
                   <option value="rating">Rating</option>
                   <option value="popularity">Popularity</option>
@@ -322,7 +322,7 @@
               <li *ngIf="mediaType === 'movie' && availableGenres.length">
                 <label class="form-label small mb-1 mt-2 d-block">Genre</label>
                 <select class="form-select form-select-sm dark-select"
-                        [(ngModel)]="genreFilter" (ngModelChange)="applyFilter()">
+                        [(ngModel)]="genreFilter" (ngModelChange)="onResultFilterChange()">
                   <option [ngValue]="null">All genres</option>
                   <option *ngFor="let gen of availableGenres" [ngValue]="gen.id">{{ gen.name }}</option>
                 </select>
