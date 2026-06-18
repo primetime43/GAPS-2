@@ -70,6 +70,7 @@ describe('RecommendedComponent', () => {
     ]);
     preferencesService = jasmine.createSpyObj('PreferencesService', ['load', 'save']);
     exportService = jasmine.createSpyObj('ExportService', ['exportGaps']);
+    exportService.exportGaps.and.returnValue(Promise.resolve());
     radarrService = jasmine.createSpyObj('RadarrService', ['getConfig', 'getLibraryTmdbIds', 'addMovie']);
     sonarrService = jasmine.createSpyObj('SonarrService', ['getConfig', 'getLibraryTvdbIds', 'addSeries']);
     imdbService = jasmine.createSpyObj('ImdbService', ['getConfig', 'getRatings']);

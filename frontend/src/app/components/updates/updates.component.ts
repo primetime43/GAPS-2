@@ -1,7 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
-import { marked } from 'marked';
 
 interface GitHubRelease {
   tag_name: string;
@@ -29,7 +28,9 @@ export class UpdatesComponent implements OnInit {
     this.http.get<GitHubRelease[]>(
       'https://api.github.com/repos/primetime43/GAPS-2/releases'
     ).subscribe({
-      next: (data) => {
+      next: async (data) => {
+        // Lazy-load marked only when the releases list renders.
+        const { marked } = await import('marked');
         this.releases = data.map(r => ({
           ...r,
           bodyHtml: this.sanitizer.bypassSecurityTrustHtml(

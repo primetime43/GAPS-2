@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, ViewChild, ElementRef, NgZone } from '@angular/core';
 import { NavigationEnd, Router } from '@angular/router';
 import { forkJoin, Observable, Subject, Subscription, timer } from 'rxjs';
 import { catchError, filter, map, skip, switchMap, takeUntil } from 'rxjs/operators';
@@ -153,10 +153,79 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     return gap.id;
   }
 
+  // Memoized windowed view of filteredGroups capped at renderLimit cards.
+  // filteredGroups is only ever reassigned, so a reference + limit check lets us
+  // skip recomputing the window every change-detection cycle.
+  private _visibleRef: GapGroup[] | null = null;
+  private _visibleLimit = -1;
+  private _visibleGroups: GapGroup[] = [];
+  private _hasMore = false;
+
+  get visibleGroups(): GapGroup[] {
+    if (this.filteredGroups !== this._visibleRef || this.renderLimit !== this._visibleLimit) {
+      this._visibleRef = this.filteredGroups;
+      this._visibleLimit = this.renderLimit;
+      const out: GapGroup[] = [];
+      let shown = 0;
+      let total = 0;
+      for (const group of this.filteredGroups) total += group.gaps.length;
+      for (const group of this.filteredGroups) {
+        if (shown >= this.renderLimit) break;
+        const room = this.renderLimit - shown;
+        if (group.gaps.length <= room) {
+          out.push(group);
+          shown += group.gaps.length;
+        } else {
+          // Partially render this group; trackByGroupName keeps the DOM node so
+          // growing the window just appends cards to it.
+          out.push({ ...group, gaps: group.gaps.slice(0, room) });
+          shown += room;
+        }
+      }
+      this._visibleGroups = out;
+      this._hasMore = shown < total;
+    }
+    return this._visibleGroups;
+  }
+
+  get hasMoreToRender(): boolean {
+    this.visibleGroups;  // ensure the window (and _hasMore) is current
+    return this._hasMore;
+  }
+
+  /** Reveal the next chunk of gap cards. */
+  loadMore(): void {
+    this.renderLimit += this.RENDER_CHUNK;
+  }
+
+  // Auto-load the next chunk as the sentinel (rendered only while more remains)
+  // scrolls near the viewport. The observer fires outside Angular, so hop back
+  // into the zone to trigger change detection.
+  @ViewChild('renderSentinel') set renderSentinel(el: ElementRef<HTMLElement> | undefined) {
+    this.renderObserver?.disconnect();
+    if (!el) return;
+    this.renderObserver = new IntersectionObserver(
+      entries => {
+        if (entries.some(e => e.isIntersecting)) {
+          this.zone.run(() => this.loadMore());
+        }
+      },
+      { rootMargin: '600px' },
+    );
+    this.renderObserver.observe(el.nativeElement);
+  }
+
   // All gaps from backend (normalized; always includes owned)
   allGaps: Gap[] = [];
   collectionGroups: GapGroup[] = [];
   filteredGroups: GapGroup[] = [];
+  // Progressive rendering: only this many gap cards are in the DOM at once,
+  // grown on scroll (IntersectionObserver) or via the "Show more" button, so a
+  // large result set doesn't render thousands of nodes up front. Reset on every
+  // applyFilter (new scan / filter change).
+  private readonly RENDER_CHUNK = 60;
+  renderLimit = this.RENDER_CHUNK;
+  private renderObserver?: IntersectionObserver;
   // Ignored items (TMDB ids for movies, TheTVDB ids for shows — reloaded on toggle)
   ignoredIds: Set<number> = new Set();
   showIgnored = false;
@@ -213,6 +282,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     private gapView: GapViewService,
     private tmdbService: TmdbService,
     private router: Router,
+    private zone: NgZone,
   ) {}
 
   ngOnInit(): void {
@@ -232,6 +302,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.stopPolling();
+    this.renderObserver?.disconnect();
     this.destroy$.next();
     this.destroy$.complete();
   }
@@ -901,9 +972,17 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     this.applyFilter();
   }
 
+  // The template renders windowed groups (progressive rendering), so the group
+  // handed to a per-group action may hold only the visible slice of cards. These
+  // resolve the full group by name so "Ignore All" etc. act on the whole group.
+  private groupByName = new Map<string, GapGroup>();
+  private fullGroupOf(group: GapGroup): GapGroup {
+    return this.groupByName.get(group.name) ?? group;
+  }
+
   ignoreCollection(group: GapGroup, event: Event): void {
     event.stopPropagation();
-    const ids = group.gaps.filter(g => !g.owned && !this.ignoredIds.has(g.id)).map(g => g.id);
+    const ids = this.fullGroupOf(group).gaps.filter(g => !g.owned && !this.ignoredIds.has(g.id)).map(g => g.id);
     if (!ids.length) return;
     for (const id of ids) this.ignoredIds.add(id);
     this.ignoreAddBulk(ids).subscribe({
@@ -914,7 +993,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
 
   unignoreCollection(group: GapGroup, event: Event): void {
     event.stopPropagation();
-    const ids = group.gaps.filter(g => this.ignoredIds.has(g.id)).map(g => g.id);
+    const ids = this.fullGroupOf(group).gaps.filter(g => this.ignoredIds.has(g.id)).map(g => g.id);
     if (!ids.length) return;
     for (const id of ids) this.ignoredIds.delete(id);
     this.ignoreRemoveBulk(ids).subscribe({
@@ -924,7 +1003,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   }
 
   collectionHasUnignoredGaps(group: GapGroup): boolean {
-    return group.gaps.some(g => !g.owned && !this.ignoredIds.has(g.id));
+    return this.fullGroupOf(group).gaps.some(g => !g.owned && !this.ignoredIds.has(g.id));
   }
 
   private ignoreAdd(id: number) {
@@ -952,7 +1031,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
 
   exportResults(format: ExportFormat): void {
     const gaps = this.filteredGroups.flatMap(g => g.gaps);
-    this.exportService.exportGaps(gaps, format);
+    this.exportService.exportGaps(gaps, format).catch(() => {});
   }
 
   private friendlyError(msg: string): string {
@@ -1038,6 +1117,10 @@ export class RecommendedComponent implements OnInit, OnDestroy {
         }))
         .filter(group => group.gaps.length > 0);
     }
+    // Index full groups by name for per-group actions (windowed rendering may
+    // hand a partial group to the template), and reset the render window.
+    this.groupByName = new Map(this.filteredGroups.map(g => [g.name, g]));
+    this.renderLimit = this.RENDER_CHUNK;
   }
 
   // -- Radarr (movies) / Sonarr (TV) --

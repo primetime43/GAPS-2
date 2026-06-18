@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, ViewChild, ElementRef, NgZone } from '@angular/core';
 import { of, Subject } from 'rxjs';
 import { catchError, debounceTime, distinctUntilChanged, map, switchMap, takeUntil } from 'rxjs/operators';
 import { ActiveServerService } from '../../services/active-server.service';
@@ -61,6 +61,11 @@ export class ActorsComponent implements OnInit, OnDestroy {
   allGaps: Gap[] = [];
   collectionGroups: GapGroup[] = [];
   filteredGroups: GapGroup[] = [];
+  // Progressive rendering — cap cards in the DOM, grow on scroll / "Show more".
+  // An actor filmography is usually one big group, so this windows that group.
+  private readonly RENDER_CHUNK = 60;
+  renderLimit = this.RENDER_CHUNK;
+  private renderObserver?: IntersectionObserver;
   ignoredIds: Set<number> = new Set();
 
   // Primary owned/missing selector — the whole point of the page.
@@ -119,6 +124,7 @@ export class ActorsComponent implements OnInit, OnDestroy {
     private tvdb: TvdbService,
     private gapView: GapViewService,
     private tmdbService: TmdbService,
+    private zone: NgZone,
   ) {}
 
   ngOnInit(): void {
@@ -166,6 +172,7 @@ export class ActorsComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.renderObserver?.disconnect();
     this.destroy$.next();
     this.destroy$.complete();
   }
@@ -425,6 +432,61 @@ export class ActorsComponent implements OnInit, OnDestroy {
     return gap.id;
   }
 
+  // Memoized windowed view of filteredGroups capped at renderLimit cards (see
+  // the recommended component for the rationale).
+  private _visibleRef: GapGroup[] | null = null;
+  private _visibleLimit = -1;
+  private _visibleGroups: GapGroup[] = [];
+  private _hasMore = false;
+
+  get visibleGroups(): GapGroup[] {
+    if (this.filteredGroups !== this._visibleRef || this.renderLimit !== this._visibleLimit) {
+      this._visibleRef = this.filteredGroups;
+      this._visibleLimit = this.renderLimit;
+      const out: GapGroup[] = [];
+      let shown = 0;
+      let total = 0;
+      for (const group of this.filteredGroups) total += group.gaps.length;
+      for (const group of this.filteredGroups) {
+        if (shown >= this.renderLimit) break;
+        const room = this.renderLimit - shown;
+        if (group.gaps.length <= room) {
+          out.push(group);
+          shown += group.gaps.length;
+        } else {
+          out.push({ ...group, gaps: group.gaps.slice(0, room) });
+          shown += room;
+        }
+      }
+      this._visibleGroups = out;
+      this._hasMore = shown < total;
+    }
+    return this._visibleGroups;
+  }
+
+  get hasMoreToRender(): boolean {
+    this.visibleGroups;
+    return this._hasMore;
+  }
+
+  loadMore(): void {
+    this.renderLimit += this.RENDER_CHUNK;
+  }
+
+  @ViewChild('renderSentinel') set renderSentinel(el: ElementRef<HTMLElement> | undefined) {
+    this.renderObserver?.disconnect();
+    if (!el) return;
+    this.renderObserver = new IntersectionObserver(
+      entries => {
+        if (entries.some(e => e.isIntersecting)) {
+          this.zone.run(() => this.loadMore());
+        }
+      },
+      { rootMargin: '600px' },
+    );
+    this.renderObserver.observe(el.nativeElement);
+  }
+
   applyFilter(): void {
     let filtered = this.allGaps;
     if (this.view === 'owned') {
@@ -469,6 +531,9 @@ export class ActorsComponent implements OnInit, OnDestroy {
             gaps: group.gaps.filter(g => g.name.toLowerCase().includes(query)),
           }))
           .filter(group => group.gaps.length > 0);
+    // Index full groups by name for per-group actions, and reset the window.
+    this.groupByName = new Map(this.filteredGroups.map(g => [g.name, g]));
+    this.renderLimit = this.RENDER_CHUNK;
   }
 
   // -- Ignore (movies → shared ignored_movies list; TV → TheTVDB ignore list) --
@@ -498,9 +563,16 @@ export class ActorsComponent implements OnInit, OnDestroy {
     this.applyFilter();
   }
 
+  // Windowed rendering may hand a partial group to the template; resolve the
+  // full group by name so per-group actions cover every card, not just visible.
+  private groupByName = new Map<string, GapGroup>();
+  private fullGroupOf(group: GapGroup): GapGroup {
+    return this.groupByName.get(group.name) ?? group;
+  }
+
   ignoreAll(group: GapGroup, event: Event): void {
     event.stopPropagation();
-    const ids = group.gaps.filter(g => !g.owned && !this.ignoredIds.has(g.id)).map(g => g.id);
+    const ids = this.fullGroupOf(group).gaps.filter(g => !g.owned && !this.ignoredIds.has(g.id)).map(g => g.id);
     if (!ids.length) return;
     for (const id of ids) this.ignoredIds.add(id);
     this.ignoreAddBulk(ids).subscribe({
@@ -511,7 +583,7 @@ export class ActorsComponent implements OnInit, OnDestroy {
 
   unignoreAll(group: GapGroup, event: Event): void {
     event.stopPropagation();
-    const ids = group.gaps.filter(g => this.ignoredIds.has(g.id)).map(g => g.id);
+    const ids = this.fullGroupOf(group).gaps.filter(g => this.ignoredIds.has(g.id)).map(g => g.id);
     if (!ids.length) return;
     for (const id of ids) this.ignoredIds.delete(id);
     this.ignoreRemoveBulk(ids).subscribe({
@@ -521,12 +593,12 @@ export class ActorsComponent implements OnInit, OnDestroy {
   }
 
   hasUnignoredGaps(group: GapGroup): boolean {
-    return group.gaps.some(g => !g.owned && !this.ignoredIds.has(g.id));
+    return this.fullGroupOf(group).gaps.some(g => !g.owned && !this.ignoredIds.has(g.id));
   }
 
   exportResults(format: ExportFormat): void {
     const gaps = this.filteredGroups.flatMap(g => g.gaps);
-    this.exportService.exportGaps(gaps, format);
+    this.exportService.exportGaps(gaps, format).catch(() => {});
   }
 
   // -- Send to Radarr (movies) / Sonarr (TV) --

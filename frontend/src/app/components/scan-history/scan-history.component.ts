@@ -2,7 +2,6 @@ import { Component, OnDestroy, OnInit } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
-import * as XLSX from 'xlsx';
 import {
   ScanHistoryEntry,
   ScanHistoryEntryDetail,
@@ -103,7 +102,9 @@ export class ScanHistoryComponent implements OnInit, OnDestroy {
           this.rowError[id] = 'No gap details stored for this scan.';
           return;
         }
-        this.writeWorkbook(detail, format);
+        this.writeWorkbook(detail, format).catch(() => {
+          this.rowError[id] = 'Failed to build the export file.';
+        });
       },
       error: (err) => {
         this.exportingFor[id] = null;
@@ -116,7 +117,9 @@ export class ScanHistoryComponent implements OnInit, OnDestroy {
     return !!entry.id && this.exportingFor[entry.id] === format;
   }
 
-  private writeWorkbook(detail: ScanHistoryEntryDetail, format: ExportFormat): void {
+  private async writeWorkbook(detail: ScanHistoryEntryDetail, format: ExportFormat): Promise<void> {
+    // Load xlsx lazily so it stays out of the main bundle (see ExportService).
+    const XLSX = await import('xlsx');
     const isTv = detail.mediaType === 'tv';
     const rows = detail.gaps.map((g: ScanHistoryGap) => ({
       Group: (isTv ? g.franchiseName : g.collectionName) || '',

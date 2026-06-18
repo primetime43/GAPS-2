@@ -113,7 +113,7 @@ describe('ScanHistoryComponent', () => {
     httpMock.expectOne(`${environment.apiUrl}/scan-history?limit=50`)
       .flush({ history: [exportableEntry], lastMovie: null, lastTv: null });
 
-    const writeSpy = spyOn<any>(component, 'writeWorkbook');
+    const writeSpy = spyOn<any>(component, 'writeWorkbook').and.returnValue(Promise.resolve());
 
     component.exportRow(exportableEntry, 'xlsx');
     tick();

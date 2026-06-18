@@ -401,7 +401,7 @@
       >
 
       <!-- Groups -->
-      <div *ngFor="let group of filteredGroups; trackBy: trackByGroupName" class="collection-group mb-4">
+      <div *ngFor="let group of visibleGroups; trackBy: trackByGroupName" class="collection-group mb-4">
         <div class="d-flex align-items-center mb-2">
           <h6 class="collection-name mb-0">{{ group.name }}</h6>
           <button
@@ -465,6 +465,12 @@
             </div>
           </div>
         </div>
+      </div>
+
+      <!-- Progressive render: load more cards as this scrolls into view (auto),
+           with a manual fallback button. -->
+      <div *ngIf="hasMoreToRender" #renderSentinel class="text-center my-3">
+        <button class="btn btn-outline-light btn-sm" (click)="loadMore()">Show more</button>
       </div>
     </div>
 
