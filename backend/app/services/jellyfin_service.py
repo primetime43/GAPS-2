@@ -169,6 +169,38 @@ class JellyfinService:
         with self._movies_cache_lock:
             self._movies_cache = {}
 
+    def _fetch_all_items(self, url: str, base_params: dict, timeout) -> tuple[list | None, int | None]:
+        """Fetch every item across pages. A single /Items response is capped, so a
+        library larger than the cap would otherwise be silently truncated; page via
+        StartIndex until TotalRecordCount is reached. Returns (items, None) on
+        success or (None, http_status) on a non-200. Network errors propagate to
+        the caller's try/except.
+        """
+        page_size = 10000   # large page so normal libraries are still one request
+        max_pages = 1000    # backstop against a server that ignores StartIndex
+        items: list = []
+        start = 0
+        for _ in range(max_pages):
+            params = {**base_params, 'StartIndex': str(start), 'Limit': str(page_size)}
+            resp = requests.get(url, headers=self._headers(), params=params, timeout=timeout)
+            if resp.status_code != 200:
+                return None, resp.status_code
+            data = resp.json()
+            page = data.get('Items', []) or []
+            items.extend(page)
+            if not page:
+                break
+            start += len(page)
+            total = data.get('TotalRecordCount')
+            if isinstance(total, int):
+                # TotalRecordCount is authoritative — keep paging even if the
+                # server returned a short page (some configs cap below our Limit).
+                if start >= total:
+                    break
+            elif len(page) < page_size:
+                break
+        return items, None
+
     def get_movies(self, library_name: str) -> tuple[list[dict] | None, str | None]:
         with self._movies_cache_lock:
             cached = self._movies_cache.get(library_name)
@@ -193,14 +225,13 @@ class JellyfinService:
             return None, f'Library "{library_name}" not found'
 
         try:
-            params = {
+            base_params = {
                 'IncludeItemTypes': 'Movie',
                 'Fields': 'ProviderIds,Overview',
                 'Recursive': 'true',
-                'Limit': '10000',
             }
             if library_id:
-                params['ParentId'] = library_id
+                base_params['ParentId'] = library_id
 
             if self._user_id:
                 url = f"{self._base()}/Users/{self._user_id}/Items"
@@ -209,12 +240,9 @@ class JellyfinService:
 
             prefs = config_store.get('preferences', {})
             timeout = prefs.get('mediaServerTimeout', 30)
-            resp = requests.get(url, headers=self._headers(), params=params, timeout=timeout)
-            if resp.status_code != 200:
-                return None, f'Failed to fetch movies (HTTP {resp.status_code})'
-
-            data = resp.json()
-            items = data.get('Items', [])
+            items, status = self._fetch_all_items(url, base_params, timeout)
+            if status is not None:
+                return None, f'Failed to fetch movies (HTTP {status})'
 
             movie_data = []
             tmdb_ids = []
@@ -296,14 +324,13 @@ class JellyfinService:
             return None, f'Library "{library_name}" not found'
 
         try:
-            params = {
+            base_params = {
                 'IncludeItemTypes': 'Series',
                 'Fields': 'ProviderIds,Overview',
                 'Recursive': 'true',
-                'Limit': '10000',
             }
             if library_id:
-                params['ParentId'] = library_id
+                base_params['ParentId'] = library_id
 
             if self._user_id:
                 url = f"{self._base()}/Users/{self._user_id}/Items"
@@ -312,11 +339,9 @@ class JellyfinService:
 
             prefs = config_store.get('preferences', {})
             timeout = prefs.get('mediaServerTimeout', 30)
-            resp = requests.get(url, headers=self._headers(), params=params, timeout=timeout)
-            if resp.status_code != 200:
-                return None, f'Failed to fetch shows (HTTP {resp.status_code})'
-
-            items = resp.json().get('Items', [])
+            items, status = self._fetch_all_items(url, base_params, timeout)
+            if status is not None:
+                return None, f'Failed to fetch shows (HTTP {status})'
 
             show_data = []
             tvdb_ids = []
