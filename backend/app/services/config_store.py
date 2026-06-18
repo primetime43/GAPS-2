@@ -220,11 +220,78 @@ def save(data: dict) -> None:
         _cache = copy.deepcopy(data)
 
 
+# Large, non-secret blobs (scan results + history) live in their own plaintext
+# sidecar JSON files instead of inside the encrypted config, so that:
+#   * routine put('preferences') / get() don't re-encrypt and deep-copy MBs of
+#     gap data on every settings read/write, and
+#   * config.enc stays small (just credentials + settings).
+# These hold only titles / ids / library names — no secrets — matching the
+# existing plaintext tmdb_cache.json / tmdb_external_ids.json sidecars (and
+# written 0600 like config.enc). Installs predating the split migrate
+# transparently on first access (see _sidecar_get).
+_SIDECAR_KEYS = {'last_scan', 'last_tv_scan', 'scan_history'}
+
+
+def _sidecar_path(key: str) -> str:
+    return os.path.join(_DATA_DIR, f'{key}.json')
+
+
+def _sidecar_write(key: str, value) -> None:
+    """Atomically write a sidecar value as plaintext JSON (owner-only perms)."""
+    _ensure_dir()
+    path = _sidecar_path(key)
+    tmp = path + '.tmp'
+    try:
+        with open(tmp, 'w', encoding='utf-8') as f:
+            json.dump(value, f)
+        try:
+            os.chmod(tmp, 0o600)
+        except OSError:
+            pass  # best-effort on Windows
+        os.replace(tmp, path)
+    except OSError as e:
+        logger.warning("Failed to write sidecar %s: %s", path, e)
+
+
+def _strip_encrypted_key(key: str) -> None:
+    """Drop a key from the encrypted blob — used to migrate a sidecar key out of
+    config.enc on installs that predate the split."""
+    with _WRITE_LOCK:
+        data = load()
+        if key in data:
+            data.pop(key, None)
+            save(data)
+
+
+def _sidecar_get(key: str, default):
+    path = _sidecar_path(key)
+    if os.path.isfile(path):
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except (OSError, json.JSONDecodeError) as e:
+            logger.warning("Failed to read sidecar %s: %s", path, e)
+            return default
+    # No sidecar yet — migrate a legacy value still embedded in config.enc.
+    legacy = load().get(key)
+    if legacy is not None:
+        _sidecar_write(key, legacy)
+        _strip_encrypted_key(key)
+        logger.info("Migrated '%s' out of config.enc into %s", key, path)
+        return legacy
+    return default
+
+
 def get(key: str, default=None):
+    if key in _SIDECAR_KEYS:
+        return _sidecar_get(key, default)
     return load().get(key, default)
 
 
 def put(key: str, value) -> None:
+    if key in _SIDECAR_KEYS:
+        _sidecar_write(key, value)
+        return
     with _WRITE_LOCK:
         data = load()
         data[key] = value
@@ -232,6 +299,15 @@ def put(key: str, value) -> None:
 
 
 def remove(key: str) -> None:
+    if key in _SIDECAR_KEYS:
+        try:
+            os.remove(_sidecar_path(key))
+        except FileNotFoundError:
+            pass
+        except OSError as e:
+            logger.warning("Failed to remove sidecar %s: %s", _sidecar_path(key), e)
+        _strip_encrypted_key(key)  # also clear any pre-migration copy
+        return
     with _WRITE_LOCK:
         data = load()
         data.pop(key, None)
