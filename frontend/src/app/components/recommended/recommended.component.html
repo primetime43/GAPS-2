@@ -78,8 +78,17 @@
           <button
             class="btn btn-primary"
             [disabled]="!selectedLibraries.length || loadingItems || loadingGaps || items.length === 0"
-            (click)="scanLibrary(false)">
+            (click)="scanLibrary(false)"
+            title="Scan the selected libraries for missing titles, using cached data where available">
             Scan for Gaps
+          </button>
+          <button
+            *ngIf="mediaType !== 'tv'"
+            class="btn btn-outline-secondary"
+            [disabled]="!selectedLibraries.length || loadingItems || loadingGaps || items.length === 0"
+            (click)="updateScan()"
+            title="Only look up movies added since the last scan, then merge into the previous results">
+            Update
           </button>
           <button
             class="btn btn-outline-secondary"
@@ -224,6 +233,9 @@
         </div>
         <div *ngIf="freshScanActive" class="fresh-scan-notice mt-2">
           Cache cleared — all data is being fetched fresh from {{ mediaType === 'tv' ? 'TheTVDB' : 'TMDB' }}.
+        </div>
+        <div *ngIf="incrementalActive" class="fresh-scan-notice mt-2">
+          Quick update — only checking movies added since the last scan.
         </div>
         <div class="text-center mt-3">
           <button class="btn btn-outline-danger btn-sm" (click)="stopScan()">Stop Scan</button>

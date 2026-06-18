@@ -65,11 +65,12 @@ export class RecommendationService {
     libraryNames: string[],
     showExisting: boolean,
     freshScan = false,
-    source: string = 'plex'
-  ): Observable<{ status: string; total: number }> {
-    return this.http.post<{ status: string; total: number }>(
+    source: string = 'plex',
+    incremental = false
+  ): Observable<{ status: string; total: number; mode: 'full' | 'incremental' }> {
+    return this.http.post<{ status: string; total: number; mode: 'full' | 'incremental' }>(
       `${environment.apiUrl}/recommendations/scan`,
-      { libraryNames, showExisting, freshScan, source }
+      { libraryNames, showExisting, freshScan, source, incremental }
     );
   }
 

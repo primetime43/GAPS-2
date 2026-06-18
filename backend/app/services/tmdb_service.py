@@ -581,13 +581,26 @@ class TmdbService:
         coll_data: dict,
         owned_tmdb_ids: set[int],
         show_existing: bool,
+        owned_title_year: set[str] | None = None,
     ) -> list[dict]:
-        """Build gap entry dicts from collection data."""
+        """Build gap entry dicts from collection data.
+
+        `owned_title_year` (a set of normalized `title|year` keys) is an optional
+        fallback so an owned movie that lacks a TMDB id still counts as owned.
+        The full scan resolves every owned movie into `owned_tmdb_ids` and doesn't
+        need it; the incremental scan passes it so it can skip that resolve pass.
+        """
         collection_name = coll_data.get("name", "Unknown Collection")
         entries = []
         for part in coll_data.get("parts", []):
             part_id = part["id"]
             is_owned = part_id in owned_tmdb_ids
+            if not is_owned and owned_title_year:
+                part_title = (part.get("title") or "").strip().lower()
+                part_release = part.get("release_date") or ""
+                part_year = part_release[:4] if part_release else ""
+                if f"{part_title}|{part_year}" in owned_title_year:
+                    is_owned = True
             if not show_existing and is_owned:
                 continue
             # Drop low-tier missing movies at scan time (issue #47) so they're
@@ -617,6 +630,36 @@ class TmdbService:
     def scan_progress(self) -> dict:
         return self._scan.snapshot
 
+    @staticmethod
+    def _movie_key(movie: dict) -> str:
+        """Stable identity for an owned movie, used to diff the library between
+        scans (incremental scan). Prefers the TMDB id; falls back to a normalized
+        title|year so id-less movies still get a consistent key. Mirrors the
+        dedup key the recommendations blueprint builds when merging libraries.
+        """
+        tmdb_id = movie.get('tmdbId')
+        if tmdb_id:
+            return f"tmdb:{tmdb_id}"
+        name = (movie.get('name') or '').strip().lower()
+        return f"ty:{name}|{movie.get('year') or ''}"
+
+    def _load_incremental_prior(self, libraries: list[str]) -> dict | None:
+        """Return the previous scan result if it can seed an incremental scan,
+        else None (caller falls back to a full scan).
+
+        Usable only when the persisted scan covered the *same* set of libraries
+        and carries an `owned_keys` fingerprint — scans saved before this feature
+        (no fingerprint) or for a different library selection can't be diffed.
+        """
+        prior = config_store.get('last_scan')
+        if not isinstance(prior, dict):
+            return None
+        if not isinstance(prior.get('gaps'), list) or not isinstance(prior.get('owned_keys'), list):
+            return None
+        if set(prior.get('libraries') or []) != set(libraries):
+            return None
+        return prior
+
     def start_scan(
         self,
         api_key: str,
@@ -624,9 +667,17 @@ class TmdbService:
         owned_tmdb_ids: set[int],
         show_existing: bool = False,
         library_names: list[str] | None = None,
-    ) -> None:
-        """Start a library scan in a background thread."""
+        incremental: bool = False,
+    ) -> bool:
+        """Start a library scan in a background thread.
+
+        When `incremental` is set and a compatible previous scan exists, only the
+        movies added since that scan are looked up against TMDB and the result is
+        merged into the prior gaps; otherwise a full scan runs. Returns whether
+        the scan actually runs incrementally (False = fell back to a full scan).
+        """
         libraries = list(library_names or [])
+        prior = self._load_incremental_prior(libraries) if incremental else None
         generation = self._scan.begin(
             total=len(owned_movies),
             total_owned=len(owned_tmdb_ids),
@@ -634,10 +685,11 @@ class TmdbService:
         )
         thread = threading.Thread(
             target=self._run_scan,
-            args=(api_key, owned_movies, owned_tmdb_ids, show_existing, libraries, generation),
+            args=(api_key, owned_movies, owned_tmdb_ids, show_existing, libraries, generation, prior),
             daemon=True,
         )
         thread.start()
+        return prior is not None
 
     def cancel_scan(self) -> bool:
         """Stop the running scan. Returns True if a scan was running."""
@@ -651,10 +703,16 @@ class TmdbService:
         show_existing: bool,
         libraries: list[str],
         generation: int,
+        prior: dict | None = None,
     ) -> None:
-        """Background scan worker."""
+        """Background scan worker. Runs the incremental finder when `prior` is
+        supplied, otherwise a full scan; the result handling is identical."""
         try:
-            gaps, _ = self.find_collection_gaps(api_key, owned_movies, owned_tmdb_ids, show_existing, generation)
+            if prior is not None:
+                gaps, _ = self.find_collection_gaps_incremental(
+                    api_key, owned_movies, owned_tmdb_ids, prior, show_existing, generation)
+            else:
+                gaps, _ = self.find_collection_gaps(api_key, owned_movies, owned_tmdb_ids, show_existing, generation)
             completed_at = datetime.now(timezone.utc).isoformat()
             final_gaps = gaps or []
             # A newer scan or a cancel superseded us — leave their state alone.
@@ -667,6 +725,9 @@ class TmdbService:
                     'total_owned': len(owned_tmdb_ids),
                     'libraries': libraries,
                     'completed_at': completed_at,
+                    # Fingerprint of the owned library so the next scan can run
+                    # incrementally (diff added/removed movies against this).
+                    'owned_keys': [self._movie_key(m) for m in owned_movies],
                 })
             except OSError as e:
                 logger.warning("Failed to persist last_scan: %s", e)
@@ -743,6 +804,117 @@ class TmdbService:
         gaps.sort(key=lambda g: (g["collectionName"], g["year"]))
         self._save_collection_cache()
         return gaps, None
+
+    def _removed_collection_id(self, key: str) -> int | None:
+        """Collection id of a movie that was removed since the last scan, if we
+        already know it from the persisted membership cache (no API call).
+
+        Lets a deletion resurface its collection's gaps without a full rescan.
+        Only id-keyed movies can be mapped; removed id-less (title|year) movies
+        can't be resolved here and are reconciled by the ownership recompute in
+        the merge (or, fully, by a later full scan).
+        """
+        if not key.startswith('tmdb:'):
+            return None
+        try:
+            movie_id = int(key[5:])
+        except ValueError:
+            return None
+        with self._cache_lock:
+            return self._movie_collection_cache.get(movie_id)
+
+    def find_collection_gaps_incremental(
+        self,
+        api_key: str,
+        owned_movies: list[dict],
+        owned_tmdb_ids: set[int],
+        prior: dict,
+        show_existing: bool = False,
+        generation: int | None = None,
+    ) -> tuple[list[dict] | None, str | None]:
+        """Update the previous scan's gaps for the movies added/removed since.
+
+        Every owned movie is resolved to a TMDB id (cheap when it already carries
+        one) so ownership is complete, but only *newly added* movies pay the
+        per-movie collection lookup — the dominant cost of a full scan. The
+        collections those new (and any known removed) movies touch are rebuilt
+        against the current library; gaps for untouched collections are carried
+        over from `prior`, re-flagging ownership so filled gaps drop out and
+        removed titles reappear. Collections are matched by name across runs
+        (TMDB collection names are effectively unique).
+        """
+        prior_keys = set(prior.get('owned_keys') or [])
+        prior_gaps = prior.get('gaps') or []
+        current_keys = {self._movie_key(m) for m in owned_movies}
+
+        # Title|year index of the whole owned library so rebuilt collections can
+        # recognize an owned movie that lacks a TMDB id — without resolving every
+        # old movie (the expensive part we're skipping). `owned_tmdb_ids` already
+        # carries every owned movie that has a TMDB id (from the media server).
+        owned_title_year: set[str] = set()
+        for movie in owned_movies:
+            name = (movie.get('name') or '').strip().lower()
+            year = str(movie.get('year') or '')[:4]
+            if name:
+                owned_title_year.add(f"{name}|{year}")
+
+        # Only the movies added since the last scan need a per-movie collection
+        # lookup — that's what makes this fast. Progress reflects just that work.
+        new_movies = [m for m in owned_movies if self._movie_key(m) not in prior_keys]
+        self._scan.update(generation, total=len(new_movies), processed=0)
+
+        affected_collection_ids: set[int] = set()
+        for i, movie in enumerate(new_movies):
+            if not self._scan.is_current(generation):
+                break
+            self._scan.update(generation, processed=i + 1, current_movie=movie.get('name', ''))
+
+            tmdb_id = self.resolve_tmdb_id(
+                api_key,
+                movie.get('tmdbId'),
+                movie.get('imdbId'),
+                movie.get('name'),
+                movie.get('year'),
+            )
+            if not tmdb_id:
+                continue
+            owned_tmdb_ids.add(tmdb_id)
+
+            collection_id = self._get_collection_id(api_key, tmdb_id)
+            if collection_id:
+                affected_collection_ids.add(collection_id)
+
+        # Re-check collections that lost a member since the last scan (only those
+        # whose id we already know — see _removed_collection_id).
+        for key in prior_keys - current_keys:
+            removed_collection_id = self._removed_collection_id(key)
+            if removed_collection_id:
+                affected_collection_ids.add(removed_collection_id)
+
+        self._scan.update(generation, collections_found=len(affected_collection_ids))
+
+        # Rebuild only the affected collections against the current library.
+        affected_names: set[str] = set()
+        rebuilt: list[dict] = []
+        for collection_id in affected_collection_ids:
+            if not self._scan.is_current(generation):
+                break
+            coll_data = self._get_collection(api_key, collection_id)
+            if not coll_data:
+                continue
+            affected_names.add(coll_data.get("name", "Unknown Collection"))
+            rebuilt.extend(
+                self._build_gap_entries(coll_data, owned_tmdb_ids, show_existing, owned_title_year))
+
+        # Carry over prior gaps from untouched collections unchanged: if no movie
+        # was added to or removed from a collection, its ownership can't have
+        # changed since the prior scan, so its entries are still valid.
+        merged: list[dict] = [g for g in prior_gaps if g.get("collectionName") not in affected_names]
+        merged.extend(rebuilt)
+
+        merged.sort(key=lambda g: (g["collectionName"], g["year"]))
+        self._save_collection_cache()
+        return merged, None
 
     def find_gaps_for_movie(
         self,

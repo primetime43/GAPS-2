@@ -151,6 +151,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   // Scan progress (normalized across movie/TV scans)
   scanProgress: UnifiedProgress | null = null;
   freshScanActive = false;
+  incrementalActive = false;
   showFreshScanConfirm = false;
 
   // Radarr (movies) / Sonarr (TV) send state, keyed by downloader.
@@ -457,6 +458,12 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     this.startScan(false);
   }
 
+  /** Quick update: only look up movies added since the last scan (movies only).
+   * Falls back to a full scan server-side if there's no compatible prior scan. */
+  updateScan(): void {
+    this.startScan(false, true);
+  }
+
   onFreshScanConfirm(): void {
     this.showFreshScanConfirm = false;
     this.startScan(true);
@@ -466,8 +473,9 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     this.showFreshScanConfirm = false;
   }
 
-  private startScan(freshScan: boolean): void {
+  private startScan(freshScan: boolean, incremental = false): void {
     this.freshScanActive = freshScan;
+    this.incrementalActive = incremental;
     this.scanMode = true;
     this.selectedItem = null;
     this.loadingGaps = true;
@@ -504,8 +512,13 @@ export class RecommendedComponent implements OnInit, OnDestroy {
       );
       forkJoin(loadRequests).subscribe({
         next: () => {
-          this.recommendationService.startScan(scanLibraries, true, freshScan, this.activeSource).subscribe({
-            next: () => this.startPolling(scanLibraries),
+          this.recommendationService.startScan(scanLibraries, true, freshScan, this.activeSource, incremental).subscribe({
+            next: (res) => {
+              // The server runs a full scan if there's no compatible prior scan
+              // to update from — keep the notice honest about what actually ran.
+              this.incrementalActive = res.mode === 'incremental';
+              this.startPolling(scanLibraries);
+            },
             error: (err) => {
               this.errorMessage = err.error?.error || 'Failed to start scan.';
               this.loadingGaps = false;
