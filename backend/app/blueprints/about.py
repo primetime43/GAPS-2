@@ -4,7 +4,7 @@ from flask import Blueprint, jsonify
 
 about_bp = Blueprint('about', __name__)
 
-VERSION = '2.7.0'
+VERSION = '2.8.0'
 
 
 def _get_commit() -> str:
