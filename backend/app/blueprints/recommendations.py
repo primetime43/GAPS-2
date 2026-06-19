@@ -67,6 +67,9 @@ def scan_library_gaps():
     source = data.get('source', 'plex')
     show_existing = data.get('showExisting', False)
     fresh_scan = data.get('freshScan', False)
+    # Incremental: only look up movies added since the last scan and merge into
+    # the prior result. Ignored when freshScan is set (which clears everything).
+    incremental = data.get('incremental', False) and not fresh_scan
 
     # Support both single and multiple library names
     names = library_names if library_names else ([library_name] if library_name else [])
@@ -91,6 +94,13 @@ def scan_library_gaps():
         # Re-fetch movies for the selected libraries
         for name in names:
             service.get_movies(name)
+    elif incremental:
+        # Refresh the owned-movie list so newly-added titles are visible, but
+        # keep the TMDB collection cache — that's what lets the scan touch only
+        # the new movies instead of re-deriving the whole library.
+        service.clear_movies_cache()
+        for name in names:
+            service.get_movies(name)
 
     cache = service.movies_cache
 
@@ -111,15 +121,22 @@ def scan_library_gaps():
     if not owned_movies:
         return jsonify(error='No movies loaded for the selected libraries. Browse the libraries first to load movie data.'), 400
 
-    tmdb.start_scan(
+    used_incremental = tmdb.start_scan(
         api_key=api_key,
         owned_movies=owned_movies,
         owned_tmdb_ids=owned_ids,
         show_existing=show_existing,
         library_names=names,
+        incremental=incremental,
     )
 
-    return jsonify(status='started', total=len(owned_movies))
+    return jsonify(
+        status='started',
+        total=len(owned_movies),
+        # 'full' when an incremental scan was requested but no compatible prior
+        # scan existed, so the client can tell the user it ran a full scan.
+        mode='incremental' if used_incremental else 'full',
+    )
 
 
 @recommendations_bp.route('/scan/progress', methods=['GET'])

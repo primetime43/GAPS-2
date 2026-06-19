@@ -14,6 +14,8 @@ import { PreferencesService, DEFAULT_PREFERENCES } from '../../services/preferen
 import { ExportService } from '../../services/export.service';
 import { RadarrService } from '../../services/radarr.service';
 import { SonarrService } from '../../services/sonarr.service';
+import { ImdbService } from '../../services/imdb.service';
+import { TmdbService } from '../../services/tmdb/tmdb.service';
 import { Gap } from '../../models/recommendation.model';
 
 @Component({ selector: 'app-confirm-modal', template: '', standalone: false })
@@ -52,6 +54,8 @@ describe('RecommendedComponent', () => {
   let exportService: jasmine.SpyObj<ExportService>;
   let radarrService: jasmine.SpyObj<RadarrService>;
   let sonarrService: jasmine.SpyObj<SonarrService>;
+  let imdbService: jasmine.SpyObj<ImdbService>;
+  let tmdbService: jasmine.SpyObj<TmdbService>;
 
   beforeEach(async () => {
     activeServerService = jasmine.createSpyObj('ActiveServerService', ['getActive']);
@@ -66,8 +70,10 @@ describe('RecommendedComponent', () => {
     ]);
     preferencesService = jasmine.createSpyObj('PreferencesService', ['load', 'save']);
     exportService = jasmine.createSpyObj('ExportService', ['exportGaps']);
+    exportService.exportGaps.and.returnValue(Promise.resolve());
     radarrService = jasmine.createSpyObj('RadarrService', ['getConfig', 'getLibraryTmdbIds', 'addMovie']);
     sonarrService = jasmine.createSpyObj('SonarrService', ['getConfig', 'getLibraryTvdbIds', 'addSeries']);
+    imdbService = jasmine.createSpyObj('ImdbService', ['getConfig', 'getRatings']);
 
     activeServerService.getActive.and.returnValue(of(null));
     recommendationService.getIgnored.and.returnValue(of([]));
@@ -81,6 +87,10 @@ describe('RecommendedComponent', () => {
     sonarrService.getConfig.and.returnValue(of(null as any));
     preferencesService.save.and.returnValue(of({} as any));
     preferencesService.load.and.returnValue(of({ ...DEFAULT_PREFERENCES }));
+    imdbService.getConfig.and.returnValue(of({ datasetUrl: '' }));
+    imdbService.getRatings.and.returnValue(of({ ratings: {} }));
+    tmdbService = jasmine.createSpyObj('TmdbService', ['getGenres']);
+    tmdbService.getGenres.and.returnValue(of([]));
 
     await TestBed.configureTestingModule({
       imports: [HttpClientTestingModule, FormsModule, RouterTestingModule],
@@ -94,6 +104,8 @@ describe('RecommendedComponent', () => {
         { provide: ExportService, useValue: exportService },
         { provide: RadarrService, useValue: radarrService },
         { provide: SonarrService, useValue: sonarrService },
+        { provide: ImdbService, useValue: imdbService },
+        { provide: TmdbService, useValue: tmdbService },
       ],
     }).compileComponents();
 
@@ -152,7 +164,7 @@ describe('RecommendedComponent', () => {
     fixture.detectChanges();
     tick();
 
-    expect(component.selectedLibrary).toBe('Movies');
+    expect(component.selectedLibraries).toContain('Movies');
     expect(component.itemsPerPage).toBe(25);
     expect(component.view).toBe('missing');
   }));
@@ -169,9 +181,8 @@ describe('RecommendedComponent', () => {
     ];
     libraryService.getMovies.and.returnValue(of({ movies: mockMovies } as any));
 
-    component.selectedLibrary = 'Movies';
     component.selectedLibraries = ['Movies'];
-    component.onLibrarySelect();
+    component.loadItems();
     tick();
 
     expect(component.items.length).toBe(2);
@@ -307,7 +318,6 @@ describe('RecommendedComponent', () => {
   it('movie scan should persist the quality filter before starting', fakeAsync(() => {
     component.mediaType = 'movie';
     component.activeSource = 'plex';
-    component.selectedLibrary = 'Movies';
     component.selectedLibraries = ['Movies'];
     component.qualityFilter = true;
     component.minRating = 6.5;

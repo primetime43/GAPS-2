@@ -13,7 +13,12 @@ def set_schedule():
     data = request.get_json() or {}
     media_type = data.get('mediaType', 'movie')
     preset = data.get('preset', '')
-    library = data.get('library', '')
+    # Multiple libraries; accept the legacy single `library` field too.
+    libraries = data.get('libraries')
+    if not isinstance(libraries, list):
+        single = data.get('library', '')
+        libraries = [single] if single else []
+    libraries = [str(x) for x in libraries if x]
     source = data.get('source', 'plex')
     hour = data.get('hour', 4)
     minute = data.get('minute', 0)
@@ -21,11 +26,11 @@ def set_schedule():
 
     if media_type not in ('movie', 'tv'):
         return jsonify(error='mediaType must be "movie" or "tv"'), 400
-    if not preset or not library:
-        return jsonify(error='preset and library are required'), 400
+    if not preset or not libraries:
+        return jsonify(error='preset and at least one library are required'), 400
 
     success = current_app.schedule_service.set_schedule(
-        media_type, preset, library, source, hour, minute, day_of_week,
+        media_type, preset, libraries, source, hour, minute, day_of_week,
     )
     if not success:
         return jsonify(error='Invalid preset or time'), 400

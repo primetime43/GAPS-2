@@ -1,0 +1,59 @@
+<div class="top-margin regular-text">
+  <p>
+    IMDb ratings come from IMDb's free
+    <a class="activeLink" href="https://datasets.imdbws.com" target="_blank">official dataset</a> — no
+    account or API key needed. It's downloaded once (~8&nbsp;MB) into a local database and refreshed
+    daily, so ratings load instantly with no rate limits. IMDb links are resolved through
+    <a class="activeLink" routerLink="/settings/tmdb">TMDB</a>, so a TMDB API key is still required.
+    TV titles always link to TheTVDB.
+  </p>
+
+  <div *ngIf="loading" class="text-muted">Loading settings...</div>
+
+  <div *ngIf="!loading">
+    <!-- Message -->
+    <div *ngIf="message"
+         class="alert"
+         [class.alert-success]="messageType === 'success'"
+         [class.alert-danger]="messageType === 'error'">
+      {{ message }}
+    </div>
+
+    <!-- Dataset management -->
+    <h5 class="mb-2">Ratings dataset</h5>
+    <p class="text-muted small mb-3">
+      Turn IMDb ratings on under
+      <a class="activeLink" routerLink="/settings/user-preferences">User Preferences</a>
+      (or the Filters menu on the Missing/Actors pages). This tab just manages the dataset itself.
+    </p>
+
+    <div class="form-group mb-3">
+      <label for="imdbDatasetUrl" class="form-label">Ratings dataset URL</label>
+      <input
+        class="form-control dark-input"
+        id="imdbDatasetUrl"
+        [(ngModel)]="status.datasetUrl"
+        placeholder="https://datasets.imdbws.com/title.ratings.tsv.gz"
+      >
+      <div class="text-muted mt-1" style="font-size: 13px;">
+        Change only if you self-host or mirror the IMDb dataset.
+      </div>
+    </div>
+
+    <div class="mb-3">
+      <span class="text-muted me-2">Dataset:</span>
+      <span [class.text-success]="status.ready && !status.building">{{ datasetLabel }}</span>
+    </div>
+
+    <button class="btn btn-info me-2" type="button" (click)="refresh()" [disabled]="status.building">
+      {{ status.building ? 'Downloading…' : 'Download / refresh now' }}
+    </button>
+
+    <div class="mt-4">
+      <button class="btn btn-primary" type="button" (click)="save()" [disabled]="saving">
+        {{ saving ? 'Saving...' : 'Save' }}
+      </button>
+      <span *ngIf="saved" class="text-success ms-3">Saved!</span>
+    </div>
+  </div>
+</div>

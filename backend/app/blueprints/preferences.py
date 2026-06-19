@@ -23,12 +23,30 @@ DEFAULTS = {
     'qualityFilterEnabled': False,
     'minRating': 0.0,       # TMDB vote_average, 0–10
     'minVoteCount': 0,      # TMDB vote_count (number of ratings)
+    # Where movie poster/title clicks go: 'tmdb' or 'imdb'. IMDb
+    # links resolve lazily through the backend (TMDB list responses don't carry
+    # IMDb IDs); TV titles always link to TheTVDB regardless of this setting.
+    'externalLinkProvider': 'tmdb',
+    # Show rating badges on cards, per provider. TMDB ratings are free (captured
+    # at scan time); IMDb ratings require the local dataset, so they default off.
+    'showImdbRatings': False,
+    'showTmdbRatings': True,
+    # Remembered Missing-view display filters (owned/missing/all view, sort,
+    # genre, show-future). Pure UI state for the frontend — deliberately separate
+    # from hideOwnedByDefault/hideFutureReleasesByDefault (which also drive
+    # scheduled-scan counts) so browsing filters don't change scan behavior.
+    # None until the user changes a filter; stored/returned as an opaque object.
+    'missingFilters': None,
 }
 
 
 @preferences_bp.route('', methods=['GET'])
 def get_preferences():
     saved = config_store.get('preferences', {})
+    # Migrate the legacy IMDb integration toggle (config_store 'imdb'.enabled),
+    # which now lives as the showImdbRatings preference.
+    if 'showImdbRatings' not in saved:
+        saved = {**saved, 'showImdbRatings': bool(config_store.get('imdb', {}).get('enabled', False))}
     prefs = {**DEFAULTS, **saved}
     return jsonify(prefs)
 

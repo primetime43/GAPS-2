@@ -67,6 +67,17 @@ docker pull primetime43/gaps-2:develop
 
 > **Persist `/app/data`.** GAPS encrypts saved settings (API keys, tokens, server URLs) in `backend/data/config.enc`. The encryption key lives next to it as `.config.key`, so both files must be on a persistent volume — otherwise every container recreation generates a fresh key and the old config becomes unreadable. The `docker run` example above and the Compose file already mount `/app/data`; if you write your own command (e.g. an unRAID template), make sure the mount is there. To override the key explicitly — for moving between hosts or sharing a config across replicas — set the `GAPS2_CONFIG_KEY` environment variable to a Fernet key (output of `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`).
 
+### Images of v2.8.0
+<details>
+  <summary>Click to view screenshots of version 2.8.0</summary>
+<img width="1714" height="993" alt="Screenshot 2026-06-19 005444" src="https://github.com/user-attachments/assets/8ed1c95b-1b5d-4e43-be3a-4b2f83cfdc10" />
+<img width="1712" height="993" alt="Screenshot 2026-06-19 005343" src="https://github.com/user-attachments/assets/a4156924-8168-4d12-a043-7948006154cf" />
+<img width="1707" height="993" alt="Screenshot 2026-06-19 005600" src="https://github.com/user-attachments/assets/d9f2e4ff-5d48-4e26-bd34-afcb1f1e1b9c" />
+<img width="1702" height="989" alt="Screenshot 2026-06-19 005659" src="https://github.com/user-attachments/assets/9cb8f921-8720-468c-a8d6-50ff41971be2" />
+<img width="1707" height="990" alt="Screenshot 2026-06-19 005723" src="https://github.com/user-attachments/assets/e4c5f9c7-569f-4b00-95b7-8ea85e7b4b2f" />
+<img width="1707" height="992" alt="Screenshot 2026-06-19 010229" src="https://github.com/user-attachments/assets/0e5e8222-78d2-490c-82c3-3042cb9c20e9" />
+</details>
+
 ### Images of v2.1.0
 <details>
   <summary>Click to view screenshots of version 2.1.0</summary>

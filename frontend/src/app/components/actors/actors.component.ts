@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, ViewChild, ElementRef, NgZone } from '@angular/core';
 import { of, Subject } from 'rxjs';
 import { catchError, debounceTime, distinctUntilChanged, map, switchMap, takeUntil } from 'rxjs/operators';
 import { ActiveServerService } from '../../services/active-server.service';
@@ -7,11 +7,17 @@ import { RecommendationService } from '../../services/recommendation.service';
 import { PreferencesService } from '../../services/preferences.service';
 import { ExportService, ExportFormat } from '../../services/export.service';
 import { RadarrService } from '../../services/radarr.service';
+import { SonarrService } from '../../services/sonarr.service';
+import { TvdbService } from '../../services/tvdb.service';
+import { GapViewService } from '../../services/gap-view.service';
+import { TmdbService, TmdbGenre } from '../../services/tmdb/tmdb.service';
 import { Gap } from '../../models/recommendation.model';
-import { PersonResult } from '../../models/actor.model';
+import { PersonResult, PersonDetails } from '../../models/actor.model';
 import { MediaLibrary } from '../../models/media-server.model';
+import { environment } from '../../../environments/environment';
 
 type SendState = 'sending' | 'sent' | 'error';
+type MediaType = 'movie' | 'tv';
 
 interface GapGroup {
   name: string;
@@ -37,6 +43,9 @@ export class ActorsComponent implements OnInit, OnDestroy {
   activeSource: 'plex' | 'jellyfin' | 'emby' = 'plex';
   activeServerName = '';
 
+  // Movies or TV shows — the actor's filmography is fetched accordingly.
+  mediaType: MediaType = 'movie';
+  private allLibraries: MediaLibrary[] = [];
   libraries: MediaLibrary[] = [];
   selectedLibraries: string[] = [];
 
@@ -44,12 +53,19 @@ export class ActorsComponent implements OnInit, OnDestroy {
   searching = false;
   searchResults: PersonResult[] = [];
   searchPerformed = false;
+  // Trending actors shown as clickable suggestions when the search box is empty.
+  popularActors: PersonResult[] = [];
   selectedActor: PersonResult | null = null;
 
   loadingGaps = false;
   allGaps: Gap[] = [];
   collectionGroups: GapGroup[] = [];
   filteredGroups: GapGroup[] = [];
+  // Progressive rendering — cap cards in the DOM, grow on scroll / "Show more".
+  // An actor filmography is usually one big group, so this windows that group.
+  private readonly RENDER_CHUNK = 60;
+  renderLimit = this.RENDER_CHUNK;
+  private renderObserver?: IntersectionObserver;
   ignoredIds: Set<number> = new Set();
 
   // Primary owned/missing selector — the whole point of the page.
@@ -65,10 +81,34 @@ export class ActorsComponent implements OnInit, OnDestroy {
   ownedCount = 0;
   errorMessage = '';
 
-  // Radarr send state (movies only).
-  radarrEnabled = false;
-  private radarrStatus = new Map<number, SendState>();
-  private radarrErrors = new Map<number, string>();
+  // Where poster/title clicks go. IMDb links route through the backend, which
+  // resolves the IMDb ID lazily.
+  externalLinkProvider: 'tmdb' | 'imdb' = 'tmdb';
+
+  // Show IMDb/TMDB rating badges on cards, per provider (default from prefs,
+  // live-toggleable from the Filters menu).
+  showImdbRatings = false;
+  showTmdbRatings = true;
+  // IMDb ratings are no longer fetched automatically (each title needs its own
+  // TMDB->IMDb lookup, which is slow on a full filmography). The user pulls them
+  // on demand via a button; these track that fetch per loaded filmography.
+  loadingImdbRatings = false;
+  imdbRatingsLoaded = false;
+
+  // Fuller profile for the selected actor, shown as a header above the results.
+  actorDetails: PersonDetails | null = null;
+
+  // Results sort + genre filter (reuse fields already on each gap).
+  sortBy: 'default' | 'rating' | 'popularity' | 'year' | 'name' = 'default';
+  genreFilter: number | null = null;
+  genres: TmdbGenre[] = [];
+  availableGenres: TmdbGenre[] = [];
+
+  // Send-to-downloader state. The active downloader follows mediaType:
+  // movies → Radarr (by TMDB id), TV → Sonarr (by TheTVDB id).
+  downloaderEnabled = false;
+  private sendStatus = new Map<number, SendState>();
+  private sendErrors = new Map<number, string>();
 
   private search$ = new Subject<string>();
   private destroy$ = new Subject<void>();
@@ -80,15 +120,30 @@ export class ActorsComponent implements OnInit, OnDestroy {
     private preferencesService: PreferencesService,
     private exportService: ExportService,
     private radarrService: RadarrService,
+    private sonarrService: SonarrService,
+    private tvdb: TvdbService,
+    private gapView: GapViewService,
+    private tmdbService: TmdbService,
+    private zone: NgZone,
   ) {}
 
   ngOnInit(): void {
     this.loadIgnored();
-    this.refreshRadarrStatus();
+    this.refreshDownloaderStatus();
+
+    this.tmdbService.getGenres().pipe(catchError(() => of([] as TmdbGenre[]))).subscribe(g => {
+      this.genres = g;
+      this.availableGenres = this.gapView.availableGenres(this.allGaps, this.genres);
+    });
+
+    this.loadPopular();
 
     this.preferencesService.load().pipe(catchError(() => of(null))).subscribe((prefs) => {
       if (prefs) {
         this.showFuture = !prefs.hideFutureReleasesByDefault;
+        this.externalLinkProvider = prefs.externalLinkProvider || 'tmdb';
+        this.showImdbRatings = !!prefs.showImdbRatings;
+        this.showTmdbRatings = prefs.showTmdbRatings !== false;
       }
       this.detectActiveServer(prefs);
     });
@@ -117,6 +172,7 @@ export class ActorsComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.renderObserver?.disconnect();
     this.destroy$.next();
     this.destroy$.complete();
   }
@@ -127,14 +183,8 @@ export class ActorsComponent implements OnInit, OnDestroy {
         this.hasServer = true;
         this.activeSource = active.source;
         this.activeServerName = active.server;
-        this.libraries = active.libraries.filter(l => l.type === 'movie');
-        // Default to the configured default library if it's a movie library,
-        // otherwise cross-check ownership against every movie library.
-        if (prefs?.defaultLibrary && this.libraries.some(l => l.title === prefs.defaultLibrary)) {
-          this.selectedLibraries = [prefs.defaultLibrary];
-        } else {
-          this.selectedLibraries = this.libraries.map(l => l.title);
-        }
+        this.allLibraries = active.libraries;
+        this.applyLibrarySelection(prefs?.defaultLibrary);
       } else {
         this.hasServer = false;
       }
@@ -142,10 +192,41 @@ export class ActorsComponent implements OnInit, OnDestroy {
     });
   }
 
+  /** Pick the libraries matching the current mediaType and seed the selection. */
+  private applyLibrarySelection(defaultLibrary?: string): void {
+    const wantType = this.mediaType === 'tv' ? 'show' : 'movie';
+    this.libraries = this.allLibraries.filter(l => l.type === wantType);
+    if (defaultLibrary && this.libraries.some(l => l.title === defaultLibrary)) {
+      this.selectedLibraries = [defaultLibrary];
+    } else {
+      // Default to cross-checking ownership across every matching library.
+      this.selectedLibraries = this.libraries.map(l => l.title);
+    }
+  }
+
+  setMediaType(type: MediaType): void {
+    if (this.mediaType === type) return;
+    this.mediaType = type;
+    this.applyLibrarySelection();
+    this.loadIgnored();
+    this.loadPopular();  // suggestions follow the tab (movie vs TV casts)
+    this.refreshDownloaderStatus();
+    // Keep the current actor and just re-fetch their results for the new type;
+    // only the gaps differ, not the chosen person or the search box.
+    if (this.selectedActor) {
+      this.selectActor(this.selectedActor);
+    }
+  }
+
+  /** Load the empty-state suggestions for the active tab (best-effort). */
+  private loadPopular(): void {
+    this.actorService.getPopular(this.mediaType).pipe(catchError(() => of([] as PersonResult[])))
+      .subscribe(people => this.popularActors = people);
+  }
+
   private loadIgnored(): void {
-    this.recommendationService.getIgnored().pipe(catchError(() => of([]))).subscribe(
-      ids => this.ignoredIds = new Set(ids)
-    );
+    const src$ = this.mediaType === 'tv' ? this.tvdb.getIgnored() : this.recommendationService.getIgnored();
+    src$.pipe(catchError(() => of([]))).subscribe(ids => this.ignoredIds = new Set(ids));
   }
 
   // -- Library selection (which libraries count as "owned") --
@@ -183,9 +264,14 @@ export class ActorsComponent implements OnInit, OnDestroy {
     this.errorMessage = '';
 
     const libs = this.selectedLibraries.length ? this.selectedLibraries : this.libraries.map(l => l.title);
-    this.actorService.getActorGaps(actor.id, libs, this.activeSource, true, this.showMinor).subscribe({
-      next: (gaps) => {
-        this.allGaps = this.normalizeGaps(gaps);
+    // TV gaps bundle IMDb ratings in the response (no on-demand button for TV),
+    // so signal the toggle here; movies fetch ratings separately via the button.
+    const wantTvImdb = this.mediaType === 'tv' && this.showImdbRatings;
+    this.actorService.getActorGaps(actor.id, libs, this.activeSource, true, this.showMinor, this.mediaType, wantTvImdb).subscribe({
+      next: (res) => {
+        this.actorDetails = res.actor;
+        this.allGaps = this.normalizeGaps(res.gaps);
+        this.imdbRatingsLoaded = false;  // fresh filmography → on-demand again
         this.applyFilter();
         this.loadingGaps = false;
       },
@@ -198,15 +284,44 @@ export class ActorsComponent implements OnInit, OnDestroy {
 
   clearActor(): void {
     this.selectedActor = null;
+    this.actorDetails = null;
     this.allGaps = [];
     this.collectionGroups = [];
     this.filteredGroups = [];
     this.resultFilter = '';
     this.errorMessage = '';
+    // Reset the search box so a fresh search starts clean (issue #52).
+    this.query = '';
+    this.searchResults = [];
+    this.searchPerformed = false;
   }
 
   private normalizeGaps(raw: any[]): Gap[] {
     if (!Array.isArray(raw)) return [];
+    const groupName = this.selectedActor?.name ?? 'Filmography';
+    if (this.mediaType === 'tv') {
+      return raw.map(g => ({
+        id: g.tvdbId || g.tmdbId,   // tvdbId drives Sonarr/ignore; falls back to tmdb
+        name: g.name,
+        year: g.year,
+        releaseDate: g.releaseDate,
+        posterUrl: g.posterUrl ?? null,
+        overview: g.overview || '',
+        groupName,
+        owned: !!g.owned,
+        tmdbId: g.tmdbId,
+        imdbId: g.imdbId || undefined,
+        externalUrl: this.tvExternalUrl(g.tmdbId, g.imdbId),
+        radarrEligible: false,
+        sonarrEligible: !!g.tvdbId,
+        tmdbRating: g.voteAverage > 0 ? g.voteAverage : undefined,
+        tmdbVotes: g.voteCount || undefined,
+        imdbRating: g.imdbRating || undefined,
+        imdbVotes: g.imdbVotes || undefined,
+        genreIds: g.genreIds || [],
+        popularity: g.popularity || 0,
+      }));
+    }
     return raw.map(g => ({
       id: g.tmdbId,
       name: g.name,
@@ -214,17 +329,75 @@ export class ActorsComponent implements OnInit, OnDestroy {
       releaseDate: g.releaseDate,
       posterUrl: g.posterUrl ?? null,
       overview: g.overview || '',
-      groupName: g.collectionName || (this.selectedActor?.name ?? 'Filmography'),
+      groupName,
       owned: !!g.owned,
-      externalUrl: g.tmdbId ? `https://www.themoviedb.org/movie/${g.tmdbId}` : '',
+      externalUrl: this.movieExternalUrl(g.tmdbId),
       radarrEligible: !!g.tmdbId,
       sonarrEligible: false,
+      tmdbRating: g.voteAverage > 0 ? g.voteAverage : undefined,
+      tmdbVotes: g.voteCount || undefined,
+      genreIds: g.genreIds || [],
+      popularity: g.popularity || 0,
     }));
+  }
+
+  /** Build the poster/title link for a movie, honoring the IMDb preference. */
+  private movieExternalUrl(tmdbId: number | null | undefined): string {
+    if (!tmdbId) return '';
+    return this.externalLinkProvider === 'imdb'
+      ? `${environment.apiUrl}/tmdb/movie/${tmdbId}/imdb`
+      : `https://www.themoviedb.org/movie/${tmdbId}`;
+  }
+
+  /** Build the link for a TV show, honoring the TMDB/IMDb provider preference. */
+  private tvExternalUrl(tmdbId: number | null | undefined, imdbId: string | null | undefined): string {
+    if (this.externalLinkProvider === 'imdb' && imdbId) return `https://www.imdb.com/title/${imdbId}/`;
+    if (tmdbId) return `https://www.themoviedb.org/tv/${tmdbId}`;
+    return imdbId ? `https://www.imdb.com/title/${imdbId}/` : '';
+  }
+
+  /**
+   * Live results-page switch between TMDB/IMDb links. Recomputes links in place
+   * and persists the choice as the new default (mirrors the gap filters).
+   */
+  onLinkProviderChange(): void {
+    for (const gap of this.allGaps) {
+      gap.externalUrl = this.mediaType === 'tv'
+        ? this.tvExternalUrl(gap.tmdbId, gap.imdbId)
+        : this.movieExternalUrl(gap.id);
+    }
+    this.preferencesService.save({ externalLinkProvider: this.externalLinkProvider })
+      .subscribe({ next: () => {}, error: () => {} });
+  }
+
+  /**
+   * On-demand fetch of IMDb ratings for the loaded movie filmography (triggered
+   * by the "Load IMDb ratings" button). Not called automatically — resolving each
+   * title's IMDb id is a per-movie TMDB lookup, slow across a whole filmography.
+   * IMDb ratings are resolved from TMDB *movie* ids; TV gaps key on tvdbId.
+   */
+  loadImdbRatings(): void {
+    if (!this.showImdbRatings || this.mediaType !== 'movie') return;
+    this.loadingImdbRatings = true;
+    this.gapView.applyImdbRatings(this.allGaps).subscribe(() => {
+      this.loadingImdbRatings = false;
+      this.imdbRatingsLoaded = true;
+      this.applyFilter();  // reflect new ratings when sorting by rating
+    });
   }
 
   // -- Filters --
 
   onFilterChange(): void { this.applyFilter(); }
+
+  /** Persist the per-provider rating toggles so they stick as the new default. */
+  onRatingPrefsChange(): void {
+    this.preferencesService.save({
+      showImdbRatings: this.showImdbRatings,
+      showTmdbRatings: this.showTmdbRatings,
+    }).subscribe({ next: () => {}, error: () => {} });
+    // No auto-fetch — the "Load IMDb ratings" button pulls them on demand.
+  }
 
   setView(view: 'all' | 'owned' | 'missing'): void {
     this.view = view;
@@ -236,15 +409,82 @@ export class ActorsComponent implements OnInit, OnDestroy {
     if (this.selectedActor) this.selectActor(this.selectedActor);
   }
 
-  // Mirrors the movie branch of recommended.component's isFutureRelease.
+  // Mirrors recommended.component's isFutureRelease.
   isFutureRelease(gap: Gap): boolean {
     const today = new Date().toISOString().slice(0, 10);
     if (gap.releaseDate) return gap.releaseDate > today;
-    return true; // movie with no date → unannounced/future
+    if (this.mediaType === 'movie') return true; // no date → unannounced/future
+    const year = parseInt(String(gap.year), 10);
+    return year ? year > new Date().getFullYear() : false;
   }
 
   isIgnored(gap: Gap): boolean {
     return this.ignoredIds.has(gap.id);
+  }
+
+  // trackBy so the gap grid reuses DOM nodes instead of re-creating every card
+  // each change-detection cycle.
+  trackByGroupName(_index: number, group: GapGroup): string {
+    return group.name;
+  }
+
+  trackByGapId(_index: number, gap: Gap): number {
+    return gap.id;
+  }
+
+  // Memoized windowed view of filteredGroups capped at renderLimit cards (see
+  // the recommended component for the rationale).
+  private _visibleRef: GapGroup[] | null = null;
+  private _visibleLimit = -1;
+  private _visibleGroups: GapGroup[] = [];
+  private _hasMore = false;
+
+  get visibleGroups(): GapGroup[] {
+    if (this.filteredGroups !== this._visibleRef || this.renderLimit !== this._visibleLimit) {
+      this._visibleRef = this.filteredGroups;
+      this._visibleLimit = this.renderLimit;
+      const out: GapGroup[] = [];
+      let shown = 0;
+      let total = 0;
+      for (const group of this.filteredGroups) total += group.gaps.length;
+      for (const group of this.filteredGroups) {
+        if (shown >= this.renderLimit) break;
+        const room = this.renderLimit - shown;
+        if (group.gaps.length <= room) {
+          out.push(group);
+          shown += group.gaps.length;
+        } else {
+          out.push({ ...group, gaps: group.gaps.slice(0, room) });
+          shown += room;
+        }
+      }
+      this._visibleGroups = out;
+      this._hasMore = shown < total;
+    }
+    return this._visibleGroups;
+  }
+
+  get hasMoreToRender(): boolean {
+    this.visibleGroups;
+    return this._hasMore;
+  }
+
+  loadMore(): void {
+    this.renderLimit += this.RENDER_CHUNK;
+  }
+
+  @ViewChild('renderSentinel') set renderSentinel(el: ElementRef<HTMLElement> | undefined) {
+    this.renderObserver?.disconnect();
+    if (!el) return;
+    this.renderObserver = new IntersectionObserver(
+      entries => {
+        if (entries.some(e => e.isIntersecting)) {
+          this.zone.run(() => this.loadMore());
+        }
+      },
+      { rootMargin: '600px' },
+    );
+    this.renderObserver.observe(el.nativeElement);
   }
 
   applyFilter(): void {
@@ -269,12 +509,18 @@ export class ActorsComponent implements OnInit, OnDestroy {
       && (this.showFuture || !this.isFutureRelease(g))
     ).length;
 
+    if (this.genreFilter != null) {
+      filtered = filtered.filter(g => (g.genreIds || []).includes(this.genreFilter as number));
+    }
+    filtered = this.gapView.sortGaps(filtered, this.sortBy);
+
     const groups = new Map<string, Gap[]>();
     for (const gap of filtered) {
       if (!groups.has(gap.groupName)) groups.set(gap.groupName, []);
       groups.get(gap.groupName)!.push(gap);
     }
     this.collectionGroups = Array.from(groups.entries()).map(([name, gaps]) => ({ name, gaps }));
+    this.availableGenres = this.gapView.availableGenres(this.allGaps, this.genres);
 
     const query = this.resultFilter.trim().toLowerCase();
     this.filteredGroups = !query
@@ -285,28 +531,51 @@ export class ActorsComponent implements OnInit, OnDestroy {
             gaps: group.gaps.filter(g => g.name.toLowerCase().includes(query)),
           }))
           .filter(group => group.gaps.length > 0);
+    // Index full groups by name for per-group actions, and reset the window.
+    this.groupByName = new Map(this.filteredGroups.map(g => [g.name, g]));
+    this.renderLimit = this.RENDER_CHUNK;
   }
 
-  // -- Ignore (shared ignored_movies list) --
+  // -- Ignore (movies → shared ignored_movies list; TV → TheTVDB ignore list) --
+
+  private ignoreAdd(id: number) {
+    return this.mediaType === 'tv' ? this.tvdb.addIgnored(id) : this.recommendationService.addIgnored(id);
+  }
+  private ignoreRemove(id: number) {
+    return this.mediaType === 'tv' ? this.tvdb.removeIgnored(id) : this.recommendationService.removeIgnored(id);
+  }
+  private ignoreAddBulk(ids: number[]) {
+    return this.mediaType === 'tv' ? this.tvdb.addIgnoredBulk(ids) : this.recommendationService.addIgnoredBulk(ids);
+  }
+  private ignoreRemoveBulk(ids: number[]) {
+    return this.mediaType === 'tv' ? this.tvdb.removeIgnoredBulk(ids) : this.recommendationService.removeIgnoredBulk(ids);
+  }
 
   toggleIgnore(gap: Gap, event: Event): void {
     event.stopPropagation();
     if (this.ignoredIds.has(gap.id)) {
       this.ignoredIds.delete(gap.id);
-      this.recommendationService.removeIgnored(gap.id).subscribe({ error: () => this.ignoredIds.add(gap.id) });
+      this.ignoreRemove(gap.id).subscribe({ error: () => this.ignoredIds.add(gap.id) });
     } else {
       this.ignoredIds.add(gap.id);
-      this.recommendationService.addIgnored(gap.id).subscribe({ error: () => this.ignoredIds.delete(gap.id) });
+      this.ignoreAdd(gap.id).subscribe({ error: () => this.ignoredIds.delete(gap.id) });
     }
     this.applyFilter();
   }
 
+  // Windowed rendering may hand a partial group to the template; resolve the
+  // full group by name so per-group actions cover every card, not just visible.
+  private groupByName = new Map<string, GapGroup>();
+  private fullGroupOf(group: GapGroup): GapGroup {
+    return this.groupByName.get(group.name) ?? group;
+  }
+
   ignoreAll(group: GapGroup, event: Event): void {
     event.stopPropagation();
-    const ids = group.gaps.filter(g => !g.owned && !this.ignoredIds.has(g.id)).map(g => g.id);
+    const ids = this.fullGroupOf(group).gaps.filter(g => !g.owned && !this.ignoredIds.has(g.id)).map(g => g.id);
     if (!ids.length) return;
     for (const id of ids) this.ignoredIds.add(id);
-    this.recommendationService.addIgnoredBulk(ids).subscribe({
+    this.ignoreAddBulk(ids).subscribe({
       error: () => { for (const id of ids) this.ignoredIds.delete(id); this.applyFilter(); },
     });
     this.applyFilter();
@@ -314,76 +583,100 @@ export class ActorsComponent implements OnInit, OnDestroy {
 
   unignoreAll(group: GapGroup, event: Event): void {
     event.stopPropagation();
-    const ids = group.gaps.filter(g => this.ignoredIds.has(g.id)).map(g => g.id);
+    const ids = this.fullGroupOf(group).gaps.filter(g => this.ignoredIds.has(g.id)).map(g => g.id);
     if (!ids.length) return;
     for (const id of ids) this.ignoredIds.delete(id);
-    this.recommendationService.removeIgnoredBulk(ids).subscribe({
+    this.ignoreRemoveBulk(ids).subscribe({
       error: () => { for (const id of ids) this.ignoredIds.add(id); this.applyFilter(); },
     });
     this.applyFilter();
   }
 
   hasUnignoredGaps(group: GapGroup): boolean {
-    return group.gaps.some(g => !g.owned && !this.ignoredIds.has(g.id));
+    return this.fullGroupOf(group).gaps.some(g => !g.owned && !this.ignoredIds.has(g.id));
   }
 
   exportResults(format: ExportFormat): void {
     const gaps = this.filteredGroups.flatMap(g => g.gaps);
-    this.exportService.exportGaps(gaps, format);
+    this.exportService.exportGaps(gaps, format).catch(() => {});
   }
 
-  // -- Radarr --
+  // -- Send to Radarr (movies) / Sonarr (TV) --
 
-  refreshRadarrStatus(): void {
-    this.radarrService.getConfig().pipe(catchError(() => of(null))).subscribe((cfg: any) => {
-      this.radarrEnabled = !!(cfg && cfg.enabled);
-      if (!this.radarrEnabled) return;
-      this.radarrService.getLibraryTmdbIds().pipe(
-        map(res => res.tmdb_ids || []), catchError(() => of([] as number[]))
-      ).subscribe((ids) => {
-        for (const id of ids) {
-          if (this.radarrStatus.get(id) !== 'sending') this.radarrStatus.set(id, 'sent');
-        }
+  /** The downloader label for the active media type. */
+  get downloaderName(): string {
+    return this.mediaType === 'tv' ? 'Sonarr' : 'Radarr';
+  }
+
+  refreshDownloaderStatus(): void {
+    this.sendStatus.clear();
+    this.sendErrors.clear();
+    if (this.mediaType === 'tv') {
+      this.sonarrService.getConfig().pipe(catchError(() => of(null))).subscribe((cfg: any) => {
+        this.downloaderEnabled = !!(cfg && cfg.enabled);
+        if (!this.downloaderEnabled) return;
+        this.sonarrService.getLibraryTvdbIds().pipe(
+          map(res => res.tvdb_ids || []), catchError(() => of([] as number[]))
+        ).subscribe(ids => this.markSent(ids));
       });
-    });
+    } else {
+      this.radarrService.getConfig().pipe(catchError(() => of(null))).subscribe((cfg: any) => {
+        this.downloaderEnabled = !!(cfg && cfg.enabled);
+        if (!this.downloaderEnabled) return;
+        this.radarrService.getLibraryTmdbIds().pipe(
+          map(res => res.tmdb_ids || []), catchError(() => of([] as number[]))
+        ).subscribe(ids => this.markSent(ids));
+      });
+    }
   }
 
-  canSendToRadarr(gap: Gap): boolean {
-    return this.radarrEnabled && gap.radarrEligible && !gap.owned && !this.isIgnored(gap);
+  private markSent(ids: number[]): void {
+    for (const id of ids) {
+      if (this.sendStatus.get(id) !== 'sending') this.sendStatus.set(id, 'sent');
+    }
   }
 
-  sendToRadarr(gap: Gap, event: Event): void {
+  canSend(gap: Gap): boolean {
+    const eligible = this.mediaType === 'tv' ? gap.sonarrEligible : gap.radarrEligible;
+    return this.downloaderEnabled && eligible && !gap.owned && !this.isIgnored(gap);
+  }
+
+  send(gap: Gap, event: Event): void {
     event.stopPropagation();
     event.preventDefault();
-    if (!gap.id || !this.radarrEnabled || !gap.radarrEligible) return;
-    if (this.radarrStatus.get(gap.id) === 'sending') return;
-    this.radarrStatus.set(gap.id, 'sending');
-    this.radarrErrors.delete(gap.id);
-    this.radarrService.addMovie(gap.id, gap.name, parseInt(String(gap.year), 10) || 0).subscribe({
-      next: () => this.radarrStatus.set(gap.id, 'sent'),
+    if (!gap.id || !this.downloaderEnabled) return;
+    if (this.sendStatus.get(gap.id) === 'sending') return;
+    this.sendStatus.set(gap.id, 'sending');
+    this.sendErrors.delete(gap.id);
+
+    const add$ = this.mediaType === 'tv'
+      ? this.sonarrService.addSeries(gap.id, gap.name)
+      : this.radarrService.addMovie(gap.id, gap.name, parseInt(String(gap.year), 10) || 0);
+    add$.subscribe({
+      next: () => this.sendStatus.set(gap.id, 'sent'),
       error: (err: any) => {
-        this.radarrStatus.set(gap.id, 'error');
-        this.radarrErrors.set(gap.id, err.error?.error || 'Failed to add to Radarr');
+        this.sendStatus.set(gap.id, 'error');
+        this.sendErrors.set(gap.id, err.error?.error || `Failed to add to ${this.downloaderName}`);
       },
     });
   }
 
-  radarrStatusOf(id: number | undefined): SendState | undefined {
-    return id ? this.radarrStatus.get(id) : undefined;
+  sendStatusOf(id: number | undefined): SendState | undefined {
+    return id ? this.sendStatus.get(id) : undefined;
   }
-  radarrErrorOf(id: number | undefined): string | undefined {
-    return id ? this.radarrErrors.get(id) : undefined;
+  sendErrorOf(id: number | undefined): string | undefined {
+    return id ? this.sendErrors.get(id) : undefined;
   }
-  radarrButtonLabel(id: number | undefined): string {
-    switch (this.radarrStatusOf(id)) {
+  sendButtonLabel(id: number | undefined): string {
+    switch (this.sendStatusOf(id)) {
       case 'sending': return 'Sending...';
-      case 'sent': return 'In Radarr';
+      case 'sent': return `In ${this.downloaderName}`;
       case 'error': return 'Retry';
-      default: return 'Send to Radarr';
+      default: return `Send to ${this.downloaderName}`;
     }
   }
-  radarrButtonClass(id: number | undefined): string {
-    switch (this.radarrStatusOf(id)) {
+  sendButtonClass(id: number | undefined): string {
+    switch (this.sendStatusOf(id)) {
       case 'sent': return 'btn-success';
       case 'error': return 'btn-outline-danger';
       default: return 'btn-outline-primary';

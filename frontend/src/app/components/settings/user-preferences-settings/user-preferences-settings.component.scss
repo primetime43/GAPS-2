@@ -1,12 +1,97 @@
-/* .pref-card base is shared globally in src/styles.scss */
-.pref-card {
+/* Indent each section's settings so they read as children of the section
+   header above, with a left guide line reinforcing the grouping. */
+.pref-section-body {
+  margin-left: 10px;
+  padding-left: 22px;
+  border-left: 2px solid #333;
+}
+
+/* Compact setting rows: label + description on the left, right-sized control
+   on the right, divided by a thin rule (replaces the old full-width cards). */
+.pref-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 32px;
+  padding: 14px 4px;
+  border-bottom: 1px solid #333;
+
+  &:last-of-type {
+    border-bottom: none;
+  }
+}
+
+.pref-row-text {
+  flex: 1;
+  min-width: 0;
+
   h5 {
     color: #fff;
-    margin-bottom: 4px;
+    font-size: 15px;
+    font-weight: 600;
+    margin: 0 0 2px;
   }
 
   .small {
-    margin-bottom: 8px;
+    color: #888;
+    font-size: 13px;
+    margin: 0;
+  }
+}
+
+.pref-row-control {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+
+  .form-select { width: 230px; }
+  .form-control.pref-num { width: 110px; }
+}
+
+.pref-toggle {
+  width: 20px;
+  height: 20px;
+  accent-color: #00bc8c;
+  cursor: pointer;
+}
+
+/* Multiple inline checkboxes in one control cell (e.g. IMDb / TMDB). */
+.pref-checks {
+  gap: 20px;
+}
+
+/* Conditional sub-fields (e.g. quality-filter thresholds) shown under a row. */
+.pref-subrow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  padding: 4px 4px 16px 20px;
+  border-bottom: 1px solid #333;
+}
+
+.pref-subfield {
+  flex: 1;
+  min-width: 200px;
+
+  .form-control { width: 100%; }
+}
+
+/* Stack rows on narrow screens so controls don't get squeezed. */
+@media (max-width: 640px) {
+  .pref-section-body {
+    margin-left: 4px;
+    padding-left: 12px;
+  }
+
+  .pref-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .pref-row-control {
+    .form-select,
+    .form-control.pref-num { width: 100%; }
   }
 }
 
@@ -66,16 +151,3 @@
 }
 
 /* .dark-input and .dark-select are shared globally in src/styles.scss */
-
-.toggle-label {
-  display: flex;
-  align-items: center;
-  color: #ccc;
-  cursor: pointer;
-
-  input[type="checkbox"] {
-    width: 18px;
-    height: 18px;
-    accent-color: #00bc8c;
-  }
-}

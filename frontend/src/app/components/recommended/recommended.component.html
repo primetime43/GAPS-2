@@ -58,18 +58,10 @@
 
     <!-- Scan setup -->
     <div *ngIf="(mediaType === 'movie' || tvdbEnabled) && libraries.length > 0" class="scan-setup mb-3">
-      <!-- Compact toolbar: library + include + actions -->
+      <!-- Compact toolbar: libraries + actions -->
       <div class="d-flex flex-wrap align-items-center gap-3">
-        <div class="scan-library">
-          <select class="form-select dark-select" aria-label="Select a library"
-                  [(ngModel)]="selectedLibrary" (ngModelChange)="onLibrarySelect()">
-            <option value="" disabled hidden>Choose a library...</option>
-            <option *ngFor="let lib of libraries" [value]="lib.title">{{ lib.title }}</option>
-          </select>
-        </div>
-
-        <div *ngIf="libraries.length > 1 && selectedLibrary" class="d-flex align-items-center flex-wrap gap-2">
-          <span class="text-muted small">Include:</span>
+        <div class="d-flex align-items-center flex-wrap gap-2">
+          <span class="text-muted small">Libraries:</span>
           <div *ngFor="let lib of libraries" class="form-check form-check-inline m-0">
             <input
               class="form-check-input"
@@ -85,13 +77,22 @@
         <div class="d-flex gap-2 ms-auto">
           <button
             class="btn btn-primary"
-            [disabled]="!selectedLibrary || loadingItems || loadingGaps || items.length === 0"
-            (click)="scanLibrary(false)">
+            [disabled]="!selectedLibraries.length || loadingItems || loadingGaps || items.length === 0"
+            (click)="scanLibrary(false)"
+            title="Scan the selected libraries for missing titles, using cached data where available">
             Scan for Gaps
           </button>
           <button
+            *ngIf="mediaType !== 'tv'"
             class="btn btn-outline-secondary"
-            [disabled]="!selectedLibrary || loadingItems || loadingGaps || items.length === 0"
+            [disabled]="!selectedLibraries.length || loadingItems || loadingGaps || items.length === 0"
+            (click)="updateScan()"
+            title="Only look up movies added since the last scan, then merge into the previous results">
+            Update
+          </button>
+          <button
+            class="btn btn-outline-secondary"
+            [disabled]="!selectedLibraries.length || loadingItems || loadingGaps || items.length === 0"
             (click)="scanLibrary(true)"
             title="Clear cached data and re-fetch from scratch">
             Fresh Scan
@@ -180,7 +181,7 @@
         (ngModelChange)="currentPage = 1; prefetchNextPage()"
       >
       <div class="movie-grid">
-        <div *ngFor="let item of pagedItems" class="movie-card clickable" (click)="selectItem(item)">
+        <div *ngFor="let item of pagedItems; trackBy: trackByBrowseItem" class="movie-card clickable" (click)="selectItem(item)">
           <img
             *ngIf="item.posterUrl"
             [src]="item.posterUrl"
@@ -232,6 +233,9 @@
         </div>
         <div *ngIf="freshScanActive" class="fresh-scan-notice mt-2">
           Cache cleared — all data is being fetched fresh from {{ mediaType === 'tv' ? 'TheTVDB' : 'TMDB' }}.
+        </div>
+        <div *ngIf="incrementalActive" class="fresh-scan-notice mt-2">
+          Quick update — only checking movies added since the last scan.
         </div>
         <div class="text-center mt-3">
           <button class="btn btn-outline-danger btn-sm" (click)="stopScan()">Stop Scan</button>
@@ -289,8 +293,60 @@
                   <label class="form-check-label" for="recShowIgnored">Ignored ({{ ignoredIds.size }})</label>
                 </div>
               </li>
+              <li>
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" id="recShowImdb"
+                         [(ngModel)]="showImdbRatings" (ngModelChange)="onRatingPrefsChange()">
+                  <label class="form-check-label" for="recShowImdb">IMDb ratings</label>
+                </div>
+              </li>
+              <li>
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" id="recShowTmdb"
+                         [(ngModel)]="showTmdbRatings" (ngModelChange)="onRatingPrefsChange()">
+                  <label class="form-check-label" for="recShowTmdb">TMDB ratings</label>
+                </div>
+              </li>
+              <li><hr class="dropdown-divider"></li>
+              <li>
+                <label class="form-label small mb-1 d-block">Sort by</label>
+                <select class="form-select form-select-sm dark-select"
+                        [(ngModel)]="sortBy" (ngModelChange)="onResultFilterChange()">
+                  <option value="default">Default</option>
+                  <option value="rating">Rating</option>
+                  <option value="popularity">Popularity</option>
+                  <option value="year">Year (newest)</option>
+                  <option value="name">Title (A–Z)</option>
+                </select>
+              </li>
+              <li *ngIf="mediaType === 'movie' && availableGenres.length">
+                <label class="form-label small mb-1 mt-2 d-block">Genre</label>
+                <select class="form-select form-select-sm dark-select"
+                        [(ngModel)]="genreFilter" (ngModelChange)="onResultFilterChange()">
+                  <option [ngValue]="null">All genres</option>
+                  <option *ngFor="let gen of availableGenres" [ngValue]="gen.id">{{ gen.name }}</option>
+                </select>
+              </li>
+              <li *ngIf="mediaType === 'movie'"><hr class="dropdown-divider"></li>
+              <li *ngIf="mediaType === 'movie'">
+                <label class="form-label small mb-1 d-block">Open links in</label>
+                <select class="form-select form-select-sm dark-select"
+                        [(ngModel)]="externalLinkProvider" (ngModelChange)="onLinkProviderChange()">
+                  <option value="tmdb">TMDB</option>
+                  <option value="imdb">IMDb</option>
+                </select>
+              </li>
             </ul>
           </div>
+
+          <!-- Load IMDb ratings on demand (movies only; not auto-fetched) -->
+          <button *ngIf="mediaType === 'movie' && showImdbRatings && allGaps.length && !imdbRatingsLoaded"
+                  class="btn btn-sm btn-outline-warning"
+                  title="Fetch IMDb ratings for these titles. Not loaded automatically — each one is looked up from IMDb, so this can take a few seconds."
+                  (click)="loadImdbRatings()" [disabled]="loadingImdbRatings">
+            <span *ngIf="loadingImdbRatings" class="spinner-border spinner-border-sm me-1"></span>
+            {{ loadingImdbRatings ? 'Loading IMDb…' : 'Load IMDb ratings' }}
+          </button>
 
           <!-- Export -->
           <div class="dropdown">
@@ -317,8 +373,8 @@
                   class="form-check-input"
                   type="checkbox"
                   [id]="'cross-' + lib.title"
-                  [checked]="lib.title === selectedLibrary || crossCheckLibraries.includes(lib.title)"
-                  [disabled]="lib.title === selectedLibrary"
+                  [checked]="isLibrarySelected(lib.title) || crossCheckLibraries.includes(lib.title)"
+                  [disabled]="isLibrarySelected(lib.title)"
                   (change)="toggleCrossCheckLibrary(lib.title)"
                 >
                 <label class="form-check-label text-muted" [for]="'cross-' + lib.title">{{ lib.title }}</label>
@@ -345,7 +401,7 @@
       >
 
       <!-- Groups -->
-      <div *ngFor="let group of filteredGroups" class="collection-group mb-4">
+      <div *ngFor="let group of visibleGroups; trackBy: trackByGroupName" class="collection-group mb-4">
         <div class="d-flex align-items-center mb-2">
           <h6 class="collection-name mb-0">{{ group.name }}</h6>
           <button
@@ -364,7 +420,7 @@
           </button>
         </div>
         <div class="rec-grid">
-          <div *ngFor="let gap of group.gaps" class="rec-card" [class.owned]="gap.owned" [class.ignored]="isIgnored(gap)">
+          <div *ngFor="let gap of group.gaps; trackBy: trackByGapId" class="rec-card" [class.owned]="gap.owned" [class.ignored]="isIgnored(gap)">
             <div class="owned-badge" *ngIf="gap.owned">Owned</div>
             <div class="ignored-badge" *ngIf="isIgnored(gap)">Ignored</div>
             <button
@@ -389,9 +445,17 @@
                 {{ gap.name }}
               </a>
               <div class="rec-year">{{ gap.year }}</div>
+              <div class="card-ratings" *ngIf="(showImdbRatings && gap.imdbRating) || (showTmdbRatings && gap.tmdbRating)">
+                <span *ngIf="showImdbRatings && gap.imdbRating" class="rating-chip imdb" [title]="(gap.imdbVotes | number) + ' votes on IMDb'">
+                  <img class="rating-logo" src="assets/images/imdb-logo.svg" alt="IMDb"> {{ gap.imdbRating | number:'1.1-1' }}
+                </span>
+                <span *ngIf="showTmdbRatings && gap.tmdbRating" class="rating-chip tmdb" [title]="(gap.tmdbVotes | number) + ' votes on TMDB'">
+                  <img class="rating-logo" src="assets/images/tmdb-logo.svg" alt="TMDB"> {{ gap.tmdbRating | number:'1.1-1' }}
+                </span>
+              </div>
               <button
                 *ngIf="canSendToDownloader(gap)"
-                class="btn btn-sm radarr-btn mt-2"
+                class="btn btn-sm radarr-btn"
                 [ngClass]="downloaderButtonClass(gap.id)"
                 [disabled]="downloaderStatusOf(gap.id) === 'sending' || downloaderStatusOf(gap.id) === 'sent'"
                 [title]="downloaderErrorOf(gap.id) || downloaderAddHint"
@@ -401,6 +465,12 @@
             </div>
           </div>
         </div>
+      </div>
+
+      <!-- Progressive render: load more cards as this scrolls into view (auto),
+           with a manual fallback button. -->
+      <div *ngIf="hasMoreToRender" #renderSentinel class="text-center my-3">
+        <button class="btn btn-outline-light btn-sm" (click)="loadMore()">Show more</button>
       </div>
     </div>
 

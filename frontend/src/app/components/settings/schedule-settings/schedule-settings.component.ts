@@ -18,13 +18,13 @@ export class ScheduleSettingsComponent implements OnInit {
   activeServerName = '';
   loading = true;
 
-  // Per-media-type form selections.
+  // Per-media-type form selections. Libraries are multi-select (checkboxes).
   moviePreset = '';
-  movieLibrary = '';
+  selectedMovieLibraries: string[] = [];
   movieTime = '04:00';
   movieDayOfWeek = 'mon';
   tvPreset = '';
-  tvLibrary = '';
+  selectedTvLibraries: string[] = [];
   tvTime = '04:00';
   tvDayOfWeek = 'mon';
 
@@ -52,6 +52,21 @@ export class ScheduleSettingsComponent implements OnInit {
 
   get tvLibraries(): MediaLibrary[] {
     return this.libraries.filter(l => l.type === 'show' || l.type === 'tvshows');
+  }
+
+  isLibrarySelected(type: MediaType, title: string): boolean {
+    const arr = type === 'tv' ? this.selectedTvLibraries : this.selectedMovieLibraries;
+    return arr.includes(title);
+  }
+
+  toggleLibrary(type: MediaType, title: string): void {
+    const arr = type === 'tv' ? this.selectedTvLibraries : this.selectedMovieLibraries;
+    const i = arr.indexOf(title);
+    if (i >= 0) {
+      arr.splice(i, 1);
+    } else {
+      arr.push(title);
+    }
   }
 
   constructor(
@@ -84,11 +99,11 @@ export class ScheduleSettingsComponent implements OnInit {
   private applyConfig(config: ScheduleConfig): void {
     this.schedule = config;
     this.moviePreset = config.movie?.preset || '';
-    this.movieLibrary = config.movie?.library || '';
+    this.selectedMovieLibraries = [...(config.movie?.libraries || [])];
     this.movieTime = this.formatTime(config.movie?.hour ?? 4, config.movie?.minute ?? 0);
     this.movieDayOfWeek = config.movie?.dayOfWeek || 'mon';
     this.tvPreset = config.tv?.preset || '';
-    this.tvLibrary = config.tv?.library || '';
+    this.selectedTvLibraries = [...(config.tv?.libraries || [])];
     this.tvTime = this.formatTime(config.tv?.hour ?? 4, config.tv?.minute ?? 0);
     this.tvDayOfWeek = config.tv?.dayOfWeek || 'mon';
     if (config.source) {
@@ -110,9 +125,9 @@ export class ScheduleSettingsComponent implements OnInit {
 
   save(type: MediaType): void {
     const preset = type === 'tv' ? this.tvPreset : this.moviePreset;
-    const library = type === 'tv' ? this.tvLibrary : this.movieLibrary;
-    if (!preset || !library) {
-      this.showMessage(`Select a frequency and library for the ${type === 'tv' ? 'TV' : 'movie'} schedule.`, 'error');
+    const libraries = type === 'tv' ? this.selectedTvLibraries : this.selectedMovieLibraries;
+    if (!preset || !libraries.length) {
+      this.showMessage(`Select a frequency and at least one library for the ${type === 'tv' ? 'TV' : 'movie'} schedule.`, 'error');
       return;
     }
     const [hour, minute] = this.parseTime(type === 'tv' ? this.tvTime : this.movieTime);
@@ -120,7 +135,7 @@ export class ScheduleSettingsComponent implements OnInit {
     this.saving[type] = true;
     this.clearMessage();
     this.scheduleService.setSchedule({
-      mediaType: type, preset, library, source: this.activeSource, hour, minute, dayOfWeek,
+      mediaType: type, preset, libraries: [...libraries], source: this.activeSource, hour, minute, dayOfWeek,
     }).subscribe({
       next: (config) => {
         this.applyConfig(config);

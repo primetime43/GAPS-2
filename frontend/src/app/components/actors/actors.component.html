@@ -16,14 +16,27 @@
 
   <!-- Main content -->
   <div *ngIf="!loading && hasServer">
-    <h3 class="regular-text">Find Movies by Actor</h3>
+    <!-- Movies / TV toggle -->
+    <div class="btn-group btn-group-sm mb-3" role="group" aria-label="Media type">
+      <button type="button" class="btn"
+              [class.btn-primary]="mediaType === 'movie'"
+              [class.btn-outline-secondary]="mediaType !== 'movie'"
+              (click)="setMediaType('movie')">Movies</button>
+      <button type="button" class="btn"
+              [class.btn-primary]="mediaType === 'tv'"
+              [class.btn-outline-secondary]="mediaType !== 'tv'"
+              (click)="setMediaType('tv')">TV Shows</button>
+    </div>
+
+    <h3 class="regular-text">Find {{ mediaType === 'tv' ? 'TV Shows' : 'Movies' }} by Actor</h3>
     <p class="text-muted">
-      Search for an actor or actress to see which of their movies you own and which you're missing.
+      Search for an actor or actress to see which of their
+      {{ mediaType === 'tv' ? 'TV shows' : 'movies' }} you own and which you're missing.
     </p>
 
-    <!-- No movie libraries -->
+    <!-- No matching libraries -->
     <div *ngIf="libraries.length === 0" class="alert alert-info">
-      No movie libraries found on <strong>{{ activeServerName }}</strong>.
+      No {{ mediaType === 'tv' ? 'TV' : 'movie' }} libraries found on <strong>{{ activeServerName }}</strong>.
     </div>
 
     <div *ngIf="libraries.length > 0">
@@ -90,6 +103,28 @@
         No people found for "{{ query }}".
       </div>
 
+      <!-- Popular-actor suggestions (empty search box, nothing picked yet) -->
+      <div *ngIf="!searching && !searchPerformed && !selectedActor && !query.trim() && popularActors.length > 0"
+           class="mb-4">
+        <h6 class="text-muted mb-2">Popular {{ mediaType === 'tv' ? 'TV' : 'movie' }} actors</h6>
+        <div class="actor-results">
+          <div *ngFor="let person of popularActors" class="actor-card clickable" (click)="selectActor(person)">
+            <img
+              *ngIf="person.profileUrl"
+              [src]="person.profileUrl"
+              [alt]="person.name"
+              class="actor-photo"
+              loading="lazy"
+            >
+            <div *ngIf="!person.profileUrl" class="actor-photo-placeholder">No Photo</div>
+            <div class="actor-info">
+              <div class="actor-name">{{ person.name }}</div>
+              <div class="actor-known-for" *ngIf="person.knownFor">{{ person.knownFor }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Loading gaps -->
       <div *ngIf="loadingGaps" class="text-center mt-4">
         <div class="spinner"></div>
@@ -151,8 +186,60 @@
                     <label class="form-check-label" for="actorShowIgnored">Ignored ({{ ignoredIds.size }})</label>
                   </div>
                 </li>
+                <li>
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="actorShowImdb"
+                           [(ngModel)]="showImdbRatings" (ngModelChange)="onRatingPrefsChange()">
+                    <label class="form-check-label" for="actorShowImdb">IMDb ratings</label>
+                  </div>
+                </li>
+                <li>
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="actorShowTmdb"
+                           [(ngModel)]="showTmdbRatings" (ngModelChange)="onRatingPrefsChange()">
+                    <label class="form-check-label" for="actorShowTmdb">TMDB ratings</label>
+                  </div>
+                </li>
+                <li><hr class="dropdown-divider"></li>
+                <li>
+                  <label class="form-label small mb-1 d-block">Sort by</label>
+                  <select class="form-select form-select-sm dark-select"
+                          [(ngModel)]="sortBy" (ngModelChange)="applyFilter()">
+                    <option value="default">Default</option>
+                    <option value="rating">Rating</option>
+                    <option value="popularity">Popularity</option>
+                    <option value="year">Year (newest)</option>
+                    <option value="name">Title (A–Z)</option>
+                  </select>
+                </li>
+                <li *ngIf="availableGenres.length">
+                  <label class="form-label small mb-1 mt-2 d-block">Genre</label>
+                  <select class="form-select form-select-sm dark-select"
+                          [(ngModel)]="genreFilter" (ngModelChange)="applyFilter()">
+                    <option [ngValue]="null">All genres</option>
+                    <option *ngFor="let gen of availableGenres" [ngValue]="gen.id">{{ gen.name }}</option>
+                  </select>
+                </li>
+                <li><hr class="dropdown-divider"></li>
+                <li>
+                  <label class="form-label small mb-1 d-block">Open links in</label>
+                  <select class="form-select form-select-sm dark-select"
+                          [(ngModel)]="externalLinkProvider" (ngModelChange)="onLinkProviderChange()">
+                    <option value="tmdb">TMDB</option>
+                    <option value="imdb">IMDb</option>
+                  </select>
+                </li>
               </ul>
             </div>
+
+            <!-- Load IMDb ratings on demand (movies only; not auto-fetched) -->
+            <button *ngIf="mediaType === 'movie' && showImdbRatings && allGaps.length && !imdbRatingsLoaded"
+                    class="btn btn-sm btn-outline-warning"
+                    title="Fetch IMDb ratings for these titles. Not loaded automatically — each one is looked up from IMDb, so this can take a few seconds."
+                    (click)="loadImdbRatings()" [disabled]="loadingImdbRatings">
+              <span *ngIf="loadingImdbRatings" class="spinner-border spinner-border-sm me-1"></span>
+              {{ loadingImdbRatings ? 'Loading IMDb…' : 'Load IMDb ratings' }}
+            </button>
 
             <!-- Export -->
             <div class="dropdown">
@@ -167,6 +254,24 @@
           </div>
         </div>
 
+        <!-- Actor profile header -->
+        <div *ngIf="actorDetails" class="actor-profile mb-3">
+          <img *ngIf="actorDetails.profileUrl" [src]="actorDetails.profileUrl"
+               [alt]="actorDetails.name" class="actor-profile-photo" loading="lazy">
+          <div class="actor-profile-info">
+            <div class="actor-profile-meta">
+              <span *ngIf="actorDetails.knownForDepartment">{{ actorDetails.knownForDepartment }}</span>
+              <span *ngIf="actorDetails.birthday">Born {{ actorDetails.birthday }}<span *ngIf="actorDetails.placeOfBirth"> · {{ actorDetails.placeOfBirth }}</span></span>
+              <span *ngIf="actorDetails.deathday">Died {{ actorDetails.deathday }}</span>
+              <a *ngIf="actorDetails.imdbId" class="activeLink"
+                 [href]="'https://www.imdb.com/name/' + actorDetails.imdbId" target="_blank" rel="noopener noreferrer">IMDb</a>
+              <a *ngIf="actorDetails.id" class="activeLink"
+                 [href]="'https://www.themoviedb.org/person/' + actorDetails.id" target="_blank" rel="noopener noreferrer">TMDB</a>
+            </div>
+            <p *ngIf="actorDetails.biography" class="actor-profile-bio">{{ actorDetails.biography }}</p>
+          </div>
+        </div>
+
         <!-- Result filter -->
         <input
           class="form-control dark-input mb-3"
@@ -177,7 +282,7 @@
         >
 
         <!-- Groups (one per actor) -->
-        <div *ngFor="let group of filteredGroups" class="collection-group mb-4">
+        <div *ngFor="let group of visibleGroups; trackBy: trackByGroupName" class="collection-group mb-4">
           <div class="d-flex align-items-center mb-2">
             <h6 class="collection-name mb-0">{{ group.name }}</h6>
             <button
@@ -196,7 +301,7 @@
             </button>
           </div>
           <div class="rec-grid">
-            <div *ngFor="let gap of group.gaps" class="rec-card" [class.owned]="gap.owned" [class.ignored]="isIgnored(gap)">
+            <div *ngFor="let gap of group.gaps; trackBy: trackByGapId" class="rec-card" [class.owned]="gap.owned" [class.ignored]="isIgnored(gap)">
               <div class="owned-badge" *ngIf="gap.owned">Owned</div>
               <div class="ignored-badge" *ngIf="isIgnored(gap)">Ignored</div>
               <div class="missing-badge" *ngIf="!gap.owned && !isIgnored(gap)">Missing</div>
@@ -216,14 +321,22 @@
                   {{ gap.name }}
                 </a>
                 <div class="rec-year">{{ gap.year }}</div>
+                <div class="card-ratings" *ngIf="(showImdbRatings && gap.imdbRating) || (showTmdbRatings && gap.tmdbRating)">
+                  <span *ngIf="showImdbRatings && gap.imdbRating" class="rating-chip imdb" [title]="(gap.imdbVotes | number) + ' votes on IMDb'">
+                    <img class="rating-logo" src="assets/images/imdb-logo.svg" alt="IMDb"> {{ gap.imdbRating | number:'1.1-1' }}
+                  </span>
+                  <span *ngIf="showTmdbRatings && gap.tmdbRating" class="rating-chip tmdb" [title]="(gap.tmdbVotes | number) + ' votes on TMDB'">
+                    <img class="rating-logo" src="assets/images/tmdb-logo.svg" alt="TMDB"> {{ gap.tmdbRating | number:'1.1-1' }}
+                  </span>
+                </div>
                 <button
-                  *ngIf="canSendToRadarr(gap)"
-                  class="btn btn-sm radarr-btn mt-2"
-                  [ngClass]="radarrButtonClass(gap.id)"
-                  [disabled]="radarrStatusOf(gap.id) === 'sending' || radarrStatusOf(gap.id) === 'sent'"
-                  [title]="radarrErrorOf(gap.id) || 'Add this movie to Radarr'"
-                  (click)="sendToRadarr(gap, $event)">
-                  {{ radarrButtonLabel(gap.id) }}
+                  *ngIf="canSend(gap)"
+                  class="btn btn-sm radarr-btn"
+                  [ngClass]="sendButtonClass(gap.id)"
+                  [disabled]="sendStatusOf(gap.id) === 'sending' || sendStatusOf(gap.id) === 'sent'"
+                  [title]="sendErrorOf(gap.id) || ('Add this title to ' + downloaderName)"
+                  (click)="send(gap, $event)">
+                  {{ sendButtonLabel(gap.id) }}
                 </button>
               </div>
             </div>
@@ -231,11 +344,17 @@
         </div>
       </div>
 
+      <!-- Progressive render: load more cards as this scrolls into view (auto),
+           with a manual fallback button. -->
+      <div *ngIf="hasMoreToRender" #renderSentinel class="text-center my-3">
+        <button class="btn btn-outline-light btn-sm" (click)="loadMore()">Show more</button>
+      </div>
+
       <!-- No results after filtering -->
       <div *ngIf="!loadingGaps && selectedActor && collectionGroups.length === 0 && !errorMessage" class="mt-3">
         <button class="btn btn-sm btn-outline-light mb-2" (click)="clearActor()">&larr; Back</button>
         <p class="text-muted">
-          No movies to show for {{ selectedActor.name }} with the current filters.
+          No {{ mediaType === 'tv' ? 'TV shows' : 'movies' }} to show for {{ selectedActor.name }} with the current filters.
         </p>
       </div>
     </div>

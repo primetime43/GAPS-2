@@ -1,4 +1,5 @@
 import base64
+import copy
 import hashlib
 import json
 import logging
@@ -109,9 +110,23 @@ _active_key, _allow_legacy_migration = _resolve_key()
 _fernet = Fernet(_active_key)
 _legacy_fernet = Fernet(_legacy_machine_key())
 
+# In-memory cache of the decrypted config. config.enc is only written through
+# save() within this process, so the cache stays authoritative — we refresh it
+# on every write rather than expiring it. This avoids re-reading and
+# Fernet-decrypting the whole blob (which holds last_scan's full gap list and
+# scan_history) on every get(), a hot path during scans and per request.
+# `None` means "not loaded yet". `_cache_lock` guards the reference swap.
+_cache: dict | None = None
+_cache_lock = threading.Lock()
 
-def load() -> dict:
-    """Load and decrypt the persisted config, or return empty dict."""
+
+def _read_and_decrypt() -> dict:
+    """Read and decrypt config.enc from disk (no caching), or return {}.
+
+    Includes the one-time legacy-key migration. Uses `_encrypt_and_write`
+    (not the public `save`) for that rewrite so it never touches the cache or
+    re-enters `_cache_lock`.
+    """
     if not os.path.isfile(_CONFIG_FILE):
         return {}
     try:
@@ -140,7 +155,7 @@ def load() -> dict:
             )
             return {}
         logger.info("Migrated config.enc from legacy machine-bound key to keyfile.")
-        save(data)
+        _encrypt_and_write(data)
         return data
 
     logger.warning(
@@ -151,12 +166,8 @@ def load() -> dict:
     return {}
 
 
-def save(data: dict) -> None:
-    """Encrypt and save the full config dict to disk via atomic rename.
-
-    The temp-file + os.replace dance means a concurrent reader either sees
-    the pre-save file or the post-save file, never a half-written blob.
-    """
+def _encrypt_and_write(data: dict) -> None:
+    """Encrypt and atomically write the full config dict to disk (no caching)."""
     _ensure_dir()
     plaintext = json.dumps(data).encode()
     encrypted = _fernet.encrypt(plaintext)
@@ -175,11 +186,112 @@ def save(data: dict) -> None:
     os.replace(tmp, _CONFIG_FILE)
 
 
+def load() -> dict:
+    """Return the decrypted config, cached in memory after the first read.
+
+    Hands out a deep copy so callers can mutate their result freely (matching
+    the pre-cache behavior, where every load() re-parsed a fresh dict) without
+    corrupting the shared cache.
+    """
+    global _cache
+    with _cache_lock:
+        cached = _cache
+    if cached is None:
+        # Decrypt outside the lock (it may rewrite the file during migration);
+        # then publish, preferring any cache a concurrent save() already set.
+        fresh = _read_and_decrypt()
+        with _cache_lock:
+            if _cache is None:
+                _cache = fresh
+            cached = _cache
+    return copy.deepcopy(cached)
+
+
+def save(data: dict) -> None:
+    """Encrypt and save the full config dict to disk via atomic rename, then
+    refresh the in-memory cache.
+
+    The temp-file + os.replace dance means a concurrent reader either sees
+    the pre-save file or the post-save file, never a half-written blob.
+    """
+    global _cache
+    _encrypt_and_write(data)
+    with _cache_lock:
+        _cache = copy.deepcopy(data)
+
+
+# Large, non-secret blobs (scan results + history) live in their own plaintext
+# sidecar JSON files instead of inside the encrypted config, so that:
+#   * routine put('preferences') / get() don't re-encrypt and deep-copy MBs of
+#     gap data on every settings read/write, and
+#   * config.enc stays small (just credentials + settings).
+# These hold only titles / ids / library names — no secrets — matching the
+# existing plaintext tmdb_cache.json / tmdb_external_ids.json sidecars (and
+# written 0600 like config.enc). Installs predating the split migrate
+# transparently on first access (see _sidecar_get).
+_SIDECAR_KEYS = {'last_scan', 'last_tv_scan', 'scan_history'}
+
+
+def _sidecar_path(key: str) -> str:
+    return os.path.join(_DATA_DIR, f'{key}.json')
+
+
+def _sidecar_write(key: str, value) -> None:
+    """Atomically write a sidecar value as plaintext JSON (owner-only perms)."""
+    _ensure_dir()
+    path = _sidecar_path(key)
+    tmp = path + '.tmp'
+    try:
+        with open(tmp, 'w', encoding='utf-8') as f:
+            json.dump(value, f)
+        try:
+            os.chmod(tmp, 0o600)
+        except OSError:
+            pass  # best-effort on Windows
+        os.replace(tmp, path)
+    except OSError as e:
+        logger.warning("Failed to write sidecar %s: %s", path, e)
+
+
+def _strip_encrypted_key(key: str) -> None:
+    """Drop a key from the encrypted blob — used to migrate a sidecar key out of
+    config.enc on installs that predate the split."""
+    with _WRITE_LOCK:
+        data = load()
+        if key in data:
+            data.pop(key, None)
+            save(data)
+
+
+def _sidecar_get(key: str, default):
+    path = _sidecar_path(key)
+    if os.path.isfile(path):
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except (OSError, json.JSONDecodeError) as e:
+            logger.warning("Failed to read sidecar %s: %s", path, e)
+            return default
+    # No sidecar yet — migrate a legacy value still embedded in config.enc.
+    legacy = load().get(key)
+    if legacy is not None:
+        _sidecar_write(key, legacy)
+        _strip_encrypted_key(key)
+        logger.info("Migrated '%s' out of config.enc into %s", key, path)
+        return legacy
+    return default
+
+
 def get(key: str, default=None):
+    if key in _SIDECAR_KEYS:
+        return _sidecar_get(key, default)
     return load().get(key, default)
 
 
 def put(key: str, value) -> None:
+    if key in _SIDECAR_KEYS:
+        _sidecar_write(key, value)
+        return
     with _WRITE_LOCK:
         data = load()
         data[key] = value
@@ -187,6 +299,15 @@ def put(key: str, value) -> None:
 
 
 def remove(key: str) -> None:
+    if key in _SIDECAR_KEYS:
+        try:
+            os.remove(_sidecar_path(key))
+        except FileNotFoundError:
+            pass
+        except OSError as e:
+            logger.warning("Failed to remove sidecar %s: %s", _sidecar_path(key), e)
+        _strip_encrypted_key(key)  # also clear any pre-migration copy
+        return
     with _WRITE_LOCK:
         data = load()
         data.pop(key, None)

@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, ViewChild, ElementRef, NgZone } from '@angular/core';
 import { NavigationEnd, Router } from '@angular/router';
 import { forkJoin, Observable, Subject, Subscription, timer } from 'rxjs';
 import { catchError, filter, map, skip, switchMap, takeUntil } from 'rxjs/operators';
@@ -9,10 +9,13 @@ import { RecommendationService } from '../../services/recommendation.service';
 import { TvdbService } from '../../services/tvdb.service';
 import { Gap } from '../../models/recommendation.model';
 import { MediaLibrary } from '../../models/media-server.model';
-import { PreferencesService } from '../../services/preferences.service';
+import { PreferencesService, MissingFilters } from '../../services/preferences.service';
 import { ExportService, ExportFormat } from '../../services/export.service';
 import { RadarrService } from '../../services/radarr.service';
 import { SonarrService } from '../../services/sonarr.service';
+import { GapViewService } from '../../services/gap-view.service';
+import { TmdbService, TmdbGenre } from '../../services/tmdb/tmdb.service';
+import { environment } from '../../../environments/environment';
 
 type MediaType = 'movie' | 'tv';
 // "Downloaders" — the *arr integration a gap can be sent to. Movies → Radarr,
@@ -63,7 +66,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   mediaType: MediaType = 'movie';
 
   libraries: MediaLibrary[] = [];
-  selectedLibrary = '';
+  // The libraries to browse + scan + count as owned (single source of truth).
   selectedLibraries: string[] = [];
   items: BrowseItem[] = [];
   itemFilter = '';
@@ -84,9 +87,47 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   searchFilter = '';
   posterPrefetch = false;
 
+  // Where movie poster/title clicks go. IMDb links route through the backend,
+  // which resolves the IMDb ID lazily. TV always links to TheTVDB.
+  externalLinkProvider: 'tmdb' | 'imdb' = 'tmdb';
+
+  // Show IMDb/TMDB rating badges on cards, per provider (default from prefs,
+  // live-toggleable from the Filters menu).
+  showImdbRatings = false;
+  showTmdbRatings = true;
+  // IMDb ratings are pulled on demand (button), not auto-fetched — each title
+  // needs its own TMDB->IMDb lookup, slow across a full result set.
+  loadingImdbRatings = false;
+  imdbRatingsLoaded = false;
+
+  // Results sort + genre filter (reuse fields already on each gap).
+  sortBy: 'default' | 'rating' | 'popularity' | 'year' | 'name' = 'default';
+  genreFilter: number | null = null;
+  // True once preferences have been loaded and applied; gates saveMissingFilters
+  // so early/initial state changes don't clobber the persisted filters.
+  private filtersLoaded = false;
+  genres: TmdbGenre[] = [];
+  availableGenres: TmdbGenre[] = [];
+
+  // Memoized browse-item filter. `items` is only ever reassigned (never mutated
+  // in place), so caching against its reference + the query lets us skip the
+  // O(n) filter on every change-detection cycle, recomputing only when the item
+  // set or filter text actually changes. pagedItems/totalPages stay getters —
+  // once filteredItems is cached they're just a slice/count and cost nothing.
+  private _filteredItemsRef: BrowseItem[] | null = null;
+  private _filteredItemsQuery: string | null = null;
+  private _filteredItemsCache: BrowseItem[] = [];
+
   get filteredItems(): BrowseItem[] {
     const query = this.itemFilter.trim().toLowerCase();
-    return query ? this.items.filter(m => m.name.toLowerCase().includes(query)) : this.items;
+    if (this.items !== this._filteredItemsRef || query !== this._filteredItemsQuery) {
+      this._filteredItemsRef = this.items;
+      this._filteredItemsQuery = query;
+      this._filteredItemsCache = query
+        ? this.items.filter(m => m.name.toLowerCase().includes(query))
+        : this.items;
+    }
+    return this._filteredItemsCache;
   }
 
   get pagedItems(): BrowseItem[] {
@@ -98,10 +139,93 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     return Math.ceil(this.filteredItems.length / this.itemsPerPage);
   }
 
+  // trackBy helpers so large *ngFor lists reuse DOM nodes instead of re-creating
+  // every card each change-detection cycle.
+  trackByBrowseItem(_index: number, item: BrowseItem): string | number {
+    return item.tmdbId ?? `${item.name}|${item.year}`;
+  }
+
+  trackByGroupName(_index: number, group: GapGroup): string {
+    return group.name;
+  }
+
+  trackByGapId(_index: number, gap: Gap): number {
+    return gap.id;
+  }
+
+  // Memoized windowed view of filteredGroups capped at renderLimit cards.
+  // filteredGroups is only ever reassigned, so a reference + limit check lets us
+  // skip recomputing the window every change-detection cycle.
+  private _visibleRef: GapGroup[] | null = null;
+  private _visibleLimit = -1;
+  private _visibleGroups: GapGroup[] = [];
+  private _hasMore = false;
+
+  get visibleGroups(): GapGroup[] {
+    if (this.filteredGroups !== this._visibleRef || this.renderLimit !== this._visibleLimit) {
+      this._visibleRef = this.filteredGroups;
+      this._visibleLimit = this.renderLimit;
+      const out: GapGroup[] = [];
+      let shown = 0;
+      let total = 0;
+      for (const group of this.filteredGroups) total += group.gaps.length;
+      for (const group of this.filteredGroups) {
+        if (shown >= this.renderLimit) break;
+        const room = this.renderLimit - shown;
+        if (group.gaps.length <= room) {
+          out.push(group);
+          shown += group.gaps.length;
+        } else {
+          // Partially render this group; trackByGroupName keeps the DOM node so
+          // growing the window just appends cards to it.
+          out.push({ ...group, gaps: group.gaps.slice(0, room) });
+          shown += room;
+        }
+      }
+      this._visibleGroups = out;
+      this._hasMore = shown < total;
+    }
+    return this._visibleGroups;
+  }
+
+  get hasMoreToRender(): boolean {
+    this.visibleGroups;  // ensure the window (and _hasMore) is current
+    return this._hasMore;
+  }
+
+  /** Reveal the next chunk of gap cards. */
+  loadMore(): void {
+    this.renderLimit += this.RENDER_CHUNK;
+  }
+
+  // Auto-load the next chunk as the sentinel (rendered only while more remains)
+  // scrolls near the viewport. The observer fires outside Angular, so hop back
+  // into the zone to trigger change detection.
+  @ViewChild('renderSentinel') set renderSentinel(el: ElementRef<HTMLElement> | undefined) {
+    this.renderObserver?.disconnect();
+    if (!el) return;
+    this.renderObserver = new IntersectionObserver(
+      entries => {
+        if (entries.some(e => e.isIntersecting)) {
+          this.zone.run(() => this.loadMore());
+        }
+      },
+      { rootMargin: '600px' },
+    );
+    this.renderObserver.observe(el.nativeElement);
+  }
+
   // All gaps from backend (normalized; always includes owned)
   allGaps: Gap[] = [];
   collectionGroups: GapGroup[] = [];
   filteredGroups: GapGroup[] = [];
+  // Progressive rendering: only this many gap cards are in the DOM at once,
+  // grown on scroll (IntersectionObserver) or via the "Show more" button, so a
+  // large result set doesn't render thousands of nodes up front. Reset on every
+  // applyFilter (new scan / filter change).
+  private readonly RENDER_CHUNK = 60;
+  renderLimit = this.RENDER_CHUNK;
+  private renderObserver?: IntersectionObserver;
   // Ignored items (TMDB ids for movies, TheTVDB ids for shows — reloaded on toggle)
   ignoredIds: Set<number> = new Set();
   showIgnored = false;
@@ -129,6 +253,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   // Scan progress (normalized across movie/TV scans)
   scanProgress: UnifiedProgress | null = null;
   freshScanActive = false;
+  incrementalActive = false;
   showFreshScanConfirm = false;
 
   // Radarr (movies) / Sonarr (TV) send state, keyed by downloader.
@@ -154,10 +279,17 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     private exportService: ExportService,
     private radarrService: RadarrService,
     private sonarrService: SonarrService,
+    private gapView: GapViewService,
+    private tmdbService: TmdbService,
     private router: Router,
+    private zone: NgZone,
   ) {}
 
   ngOnInit(): void {
+    this.tmdbService.getGenres().pipe(catchError(() => of([] as TmdbGenre[]))).subscribe(g => {
+      this.genres = g;
+      this.availableGenres = this.gapView.availableGenres(this.allGaps, this.genres);
+    });
     this.loadContext(true);
 
     this.router.events.pipe(
@@ -170,6 +302,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.stopPolling();
+    this.renderObserver?.disconnect();
     this.destroy$.next();
     this.destroy$.complete();
   }
@@ -186,7 +319,6 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     }
     this.mediaType = type;
     this.stopPolling();
-    this.selectedLibrary = '';
     this.selectedLibraries = [];
     this.items = [];
     this.itemFilter = '';
@@ -201,6 +333,11 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     this.loadingItems = false;
     this.searchFilter = '';
     this.errorMessage = '';
+    // The genre filter is movie-only; clear it so it can't hide all TV results.
+    this.genreFilter = null;
+    this.availableGenres = [];
+    // Keep the remembered filters in step with the cleared genre.
+    this.saveMissingFilters();
     this.loadIgnored();
     this.applyLibraryFilter();
   }
@@ -230,7 +367,21 @@ export class RecommendedComponent implements OnInit, OnDestroy {
         this.qualityFilter = prefs.qualityFilterEnabled || false;
         this.minRating = prefs.minRating || 0;
         this.minVoteCount = prefs.minVoteCount || 0;
+        this.externalLinkProvider = prefs.externalLinkProvider || 'tmdb';
+        this.showImdbRatings = !!prefs.showImdbRatings;
+        this.showTmdbRatings = prefs.showTmdbRatings !== false;
+        // Remembered Missing-view filters override the seeded defaults above.
+        const mf = prefs.missingFilters;
+        if (mf) {
+          if (mf.view) this.view = mf.view;
+          if (mf.sortBy) this.sortBy = mf.sortBy;
+          this.genreFilter = mf.genreFilter ?? null;
+          if (typeof mf.showFuture === 'boolean') this.showFuture = mf.showFuture;
+        }
       }
+      // Enable persistence only after the initial state is applied, so the
+      // assignments above don't trigger a save that overwrites the saved value.
+      this.filtersLoaded = true;
       this.detectActiveServer(prefs, autoSelectLibrary);
     });
   }
@@ -293,9 +444,8 @@ export class RecommendedComponent implements OnInit, OnDestroy {
       const scanLibs = validScan ? (progress!.libraries || []) : [];
 
       if (scanLibs.length && this.libraries.some(l => scanLibs.includes(l.title))) {
-        this.selectedLibrary = scanLibs[0];
-        this.selectedLibraries = [...scanLibs];
-        this.onLibrarySelect();
+        this.selectedLibraries = scanLibs.filter((l: string) => this.libraries.some(x => x.title === l));
+        this.loadItems();
       } else {
         this.applyDefaultLibrary(prefs);
       }
@@ -305,6 +455,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
         this.totalOwned = progress!.total_owned;
         this.scanMode = true;
         this.applyFilter();
+        this.imdbRatingsLoaded = false;  // new result set → offer on-demand load again
         this.cacheCompletedScan(scanLibs, this.allGaps, progress!.total_owned);
       }
       this.loading = false;
@@ -313,19 +464,15 @@ export class RecommendedComponent implements OnInit, OnDestroy {
 
   private applyDefaultLibrary(prefs: any): void {
     if (prefs?.defaultLibrary && this.libraries.some(l => l.title === prefs.defaultLibrary)) {
-      this.selectedLibrary = prefs.defaultLibrary;
       this.selectedLibraries = [prefs.defaultLibrary];
-      this.onLibrarySelect();
+      this.loadItems();
     }
   }
 
   // -- Library selection / browse --
 
-  onLibrarySelect(): void {
-    if (!this.selectedLibrary) return;
-    if (!this.selectedLibraries.includes(this.selectedLibrary)) {
-      this.selectedLibraries = [this.selectedLibrary];
-    }
+  /** Load the browse list for the selected libraries, merged and de-duplicated. */
+  loadItems(): void {
     this.items = [];
     this.itemFilter = '';
     this.allGaps = [];
@@ -333,21 +480,28 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     this.selectedItem = null;
     this.scanMode = false;
     this.errorMessage = '';
+    this.currentPage = 1;
+
+    if (!this.selectedLibraries.length) {
+      this.loadingItems = false;
+      return;
+    }
 
     this.tryRestoreScanForCurrentSelection();
 
     this.loadingItems = !this.scanMode;
-    const load$: Observable<any> = this.mediaType === 'tv'
-      ? this.libraryService.getShows(this.selectedLibrary, this.activeSource)
-      : this.libraryService.getMovies(this.selectedLibrary, this.activeSource);
-    load$.subscribe({
-      next: (res: any) => {
-        if (res.error) {
-          this.errorMessage = this.friendlyError(res.error);
-          this.loadingItems = false;
-          return;
+    const loads = this.selectedLibraries.map(lib => this.mediaType === 'tv'
+      ? this.libraryService.getShows(lib, this.activeSource)
+      : this.libraryService.getMovies(lib, this.activeSource));
+    forkJoin(loads).subscribe({
+      next: (results: any[]) => {
+        const merged: BrowseItem[] = [];
+        for (const res of results) {
+          if (res?.error) continue;
+          const arr = Array.isArray(res) ? res : (res.movies || res.shows || []);
+          merged.push(...arr);
         }
-        this.items = Array.isArray(res) ? res : (res.movies || res.shows || []);
+        this.items = this.dedupeItems(merged);
         this.loadingItems = false;
         this.prefetchNextPage();
       },
@@ -356,6 +510,21 @@ export class RecommendedComponent implements OnInit, OnDestroy {
         this.loadingItems = false;
       }
     });
+  }
+
+  /** De-duplicate browse items that appear in more than one selected library. */
+  private dedupeItems(items: BrowseItem[]): BrowseItem[] {
+    const seen = new Set<string>();
+    const out: BrowseItem[] = [];
+    for (const it of items) {
+      const key = it.tmdbId ? `t:${it.tmdbId}`
+        : it.tvdbId ? `v:${it.tvdbId}`
+        : `n:${(it.name || '').toLowerCase()}|${it.year}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(it);
+    }
+    return out;
   }
 
   private tryRestoreScanForCurrentSelection(): void {
@@ -367,6 +536,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     this.totalOwned = cached.totalOwned;
     this.scanMode = true;
     this.applyFilter();
+    this.imdbRatingsLoaded = false;  // new result set → offer on-demand load again
   }
 
   private cacheCompletedScan(libraries: string[], gaps: Gap[], totalOwned: number): void {
@@ -387,6 +557,8 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     } else {
       this.selectedLibraries.push(libTitle);
     }
+    // The browse list, scan set, and ownership all follow the selection.
+    this.loadItems();
   }
 
   isLibrarySelected(libTitle: string): boolean {
@@ -403,6 +575,12 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     this.startScan(false);
   }
 
+  /** Quick update: only look up movies added since the last scan (movies only).
+   * Falls back to a full scan server-side if there's no compatible prior scan. */
+  updateScan(): void {
+    this.startScan(false, true);
+  }
+
   onFreshScanConfirm(): void {
     this.showFreshScanConfirm = false;
     this.startScan(true);
@@ -412,8 +590,9 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     this.showFreshScanConfirm = false;
   }
 
-  private startScan(freshScan: boolean): void {
+  private startScan(freshScan: boolean, incremental = false): void {
     this.freshScanActive = freshScan;
+    this.incrementalActive = incremental;
     this.scanMode = true;
     this.selectedItem = null;
     this.loadingGaps = true;
@@ -422,7 +601,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     this.scanProgress = null;
     this.errorMessage = '';
 
-    const scanLibraries = this.selectedLibraries.length > 0 ? this.selectedLibraries : [this.selectedLibrary];
+    const scanLibraries = [...this.selectedLibraries];
 
     if (this.mediaType === 'tv') {
       this.tvdb.startScan({
@@ -450,8 +629,13 @@ export class RecommendedComponent implements OnInit, OnDestroy {
       );
       forkJoin(loadRequests).subscribe({
         next: () => {
-          this.recommendationService.startScan(scanLibraries, true, freshScan, this.activeSource).subscribe({
-            next: () => this.startPolling(scanLibraries),
+          this.recommendationService.startScan(scanLibraries, true, freshScan, this.activeSource, incremental).subscribe({
+            next: (res) => {
+              // The server runs a full scan if there's no compatible prior scan
+              // to update from — keep the notice honest about what actually ran.
+              this.incrementalActive = res.mode === 'incremental';
+              this.startPolling(scanLibraries);
+            },
             error: (err) => {
               this.errorMessage = err.error?.error || 'Failed to start scan.';
               this.loadingGaps = false;
@@ -482,6 +666,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
             this.allGaps = this.normalizeGaps(progress.gaps);
             this.totalOwned = progress.total_owned;
             this.applyFilter();
+            this.imdbRatingsLoaded = false;  // new result set → offer on-demand load again
             this.loadingGaps = false;
             this.scanProgress = null;
             const scanLibs = progress.libraries?.length ? progress.libraries : [...scanLibraries];
@@ -585,7 +770,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
         this.loadingGaps = false;
         return;
       }
-      const libs = this.selectedLibraries.length ? this.selectedLibraries : [this.selectedLibrary];
+      const libs = [...this.selectedLibraries];
       this.tvdb.getGapsForShow(tvdbId, libs, true, this.activeSource).subscribe({
         next: (gaps) => {
           this.allGaps = this.normalizeGaps(gaps);
@@ -601,17 +786,21 @@ export class RecommendedComponent implements OnInit, OnDestroy {
       return;
     }
 
+    // Owned set = the libraries selected in the toolbar plus any extra the user
+    // ticked in this single-movie view.
+    const owned = [...new Set([...this.selectedLibraries, ...this.crossCheckLibraries])];
     this.recommendationService.getGapsForMovie(
       this.selectedItem as any,
-      this.selectedLibrary,
+      owned[0] || '',
       true,
       this.activeSource,
-      this.crossCheckLibraries
+      owned.slice(1)
     ).subscribe({
       next: (gaps) => {
         this.allGaps = this.normalizeGaps(gaps);
         if (this.allGaps.length > 0 && this.allGaps.every(g => g.owned)) this.view = 'all';
         this.applyFilter();
+        this.imdbRatingsLoaded = false;  // new result set → offer on-demand load again
         this.loadingGaps = false;
       },
       error: () => {
@@ -649,19 +838,91 @@ export class RecommendedComponent implements OnInit, OnDestroy {
       overview: g.overview || '',
       groupName: g.collectionName || 'Unknown Collection',
       owned: !!g.owned,
-      externalUrl: g.tmdbId ? `https://www.themoviedb.org/movie/${g.tmdbId}` : '',
+      externalUrl: this.movieExternalUrl(g.tmdbId),
       radarrEligible: !!g.tmdbId,
       sonarrEligible: false,
+      tmdbRating: g.voteAverage > 0 ? g.voteAverage : undefined,
+      tmdbVotes: g.voteCount || undefined,
+      genreIds: g.genreIds || [],
+      popularity: g.popularity || 0,
     }));
+  }
+
+  /** Build the poster/title link for a movie, honoring the IMDb preference. */
+  private movieExternalUrl(tmdbId: number | null | undefined): string {
+    if (!tmdbId) return '';
+    return this.externalLinkProvider === 'imdb'
+      ? `${environment.apiUrl}/tmdb/movie/${tmdbId}/imdb`
+      : `https://www.themoviedb.org/movie/${tmdbId}`;
+  }
+
+  /**
+   * Live results-page switch between TMDB/IMDb links. Recomputes movie links in
+   * place and persists the choice as the new default (mirrors the gap filters).
+   */
+  onLinkProviderChange(): void {
+    if (this.mediaType === 'movie') {
+      for (const gap of this.allGaps) gap.externalUrl = this.movieExternalUrl(gap.id);
+    }
+    this.preferencesService.save({ externalLinkProvider: this.externalLinkProvider })
+      .subscribe({ next: () => {}, error: () => {} });
+  }
+
+  /**
+   * On-demand fetch of IMDb ratings for the current movie gaps (triggered by the
+   * "Load IMDb ratings" button). Not called automatically — resolving each title's
+   * IMDb id is a per-movie TMDB lookup, slow across a large result set.
+   */
+  loadImdbRatings(): void {
+    if (this.mediaType !== 'movie' || !this.showImdbRatings) return;
+    this.loadingImdbRatings = true;
+    this.gapView.applyImdbRatings(this.allGaps).subscribe(() => {
+      this.loadingImdbRatings = false;
+      this.imdbRatingsLoaded = true;
+      this.applyFilter();  // reflect new ratings when sorting by rating
+    });
   }
 
   // -- Filters --
 
-  onFilterChange(): void { this.applyFilter(); }
+  onFilterChange(): void {
+    this.applyFilter();
+    this.saveMissingFilters();
+  }
+
+  /** Sort/genre dropdown change: re-filter and remember the choice. */
+  onResultFilterChange(): void {
+    this.applyFilter();
+    this.saveMissingFilters();
+  }
+
+  /** Persist the Missing-view display filters so they survive a refresh. Stored
+   * separately from the hideOwned/hideFuture scan defaults (see MissingFilters).
+   * Fire-and-forget; no-op until preferences have finished loading. */
+  private saveMissingFilters(): void {
+    if (!this.filtersLoaded) return;
+    const missingFilters: MissingFilters = {
+      view: this.view,
+      sortBy: this.sortBy,
+      genreFilter: this.genreFilter,
+      showFuture: this.showFuture,
+    };
+    this.preferencesService.save({ missingFilters }).subscribe({ next: () => {}, error: () => {} });
+  }
+
+  /** Persist the per-provider rating toggles so they stick as the new default. */
+  onRatingPrefsChange(): void {
+    this.preferencesService.save({
+      showImdbRatings: this.showImdbRatings,
+      showTmdbRatings: this.showTmdbRatings,
+    }).subscribe({ next: () => {}, error: () => {} });
+    // No auto-fetch — the "Load IMDb ratings" button pulls them on demand.
+  }
 
   setView(view: 'all' | 'owned' | 'missing'): void {
     this.view = view;
     this.applyFilter();
+    this.saveMissingFilters();
   }
 
   /**
@@ -711,9 +972,17 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     this.applyFilter();
   }
 
+  // The template renders windowed groups (progressive rendering), so the group
+  // handed to a per-group action may hold only the visible slice of cards. These
+  // resolve the full group by name so "Ignore All" etc. act on the whole group.
+  private groupByName = new Map<string, GapGroup>();
+  private fullGroupOf(group: GapGroup): GapGroup {
+    return this.groupByName.get(group.name) ?? group;
+  }
+
   ignoreCollection(group: GapGroup, event: Event): void {
     event.stopPropagation();
-    const ids = group.gaps.filter(g => !g.owned && !this.ignoredIds.has(g.id)).map(g => g.id);
+    const ids = this.fullGroupOf(group).gaps.filter(g => !g.owned && !this.ignoredIds.has(g.id)).map(g => g.id);
     if (!ids.length) return;
     for (const id of ids) this.ignoredIds.add(id);
     this.ignoreAddBulk(ids).subscribe({
@@ -724,7 +993,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
 
   unignoreCollection(group: GapGroup, event: Event): void {
     event.stopPropagation();
-    const ids = group.gaps.filter(g => this.ignoredIds.has(g.id)).map(g => g.id);
+    const ids = this.fullGroupOf(group).gaps.filter(g => this.ignoredIds.has(g.id)).map(g => g.id);
     if (!ids.length) return;
     for (const id of ids) this.ignoredIds.delete(id);
     this.ignoreRemoveBulk(ids).subscribe({
@@ -734,7 +1003,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   }
 
   collectionHasUnignoredGaps(group: GapGroup): boolean {
-    return group.gaps.some(g => !g.owned && !this.ignoredIds.has(g.id));
+    return this.fullGroupOf(group).gaps.some(g => !g.owned && !this.ignoredIds.has(g.id));
   }
 
   private ignoreAdd(id: number) {
@@ -762,7 +1031,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
 
   exportResults(format: ExportFormat): void {
     const gaps = this.filteredGroups.flatMap(g => g.gaps);
-    this.exportService.exportGaps(gaps, format);
+    this.exportService.exportGaps(gaps, format).catch(() => {});
   }
 
   private friendlyError(msg: string): string {
@@ -821,12 +1090,18 @@ export class RecommendedComponent implements OnInit, OnDestroy {
       && (this.showFuture || !this.isFutureRelease(g))
     ).length;
 
+    if (this.genreFilter != null) {
+      filtered = filtered.filter(g => (g.genreIds || []).includes(this.genreFilter as number));
+    }
+    filtered = this.gapView.sortGaps(filtered, this.sortBy);
+
     const groups = new Map<string, Gap[]>();
     for (const gap of filtered) {
       if (!groups.has(gap.groupName)) groups.set(gap.groupName, []);
       groups.get(gap.groupName)!.push(gap);
     }
     this.collectionGroups = Array.from(groups.entries()).map(([name, gaps]) => ({ name, gaps }));
+    this.availableGenres = this.gapView.availableGenres(this.allGaps, this.genres);
 
     const query = this.searchFilter.trim().toLowerCase();
     if (!query) {
@@ -842,6 +1117,10 @@ export class RecommendedComponent implements OnInit, OnDestroy {
         }))
         .filter(group => group.gaps.length > 0);
     }
+    // Index full groups by name for per-group actions (windowed rendering may
+    // hand a partial group to the template), and reset the render window.
+    this.groupByName = new Map(this.filteredGroups.map(g => [g.name, g]));
+    this.renderLimit = this.RENDER_CHUNK;
   }
 
   // -- Radarr (movies) / Sonarr (TV) --

@@ -4,7 +4,7 @@ import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { environment } from '../../environments/environment';
 import { CollectionGap } from '../models/recommendation.model';
-import { PersonResult } from '../models/actor.model';
+import { PersonResult, PersonDetails } from '../models/actor.model';
 
 /**
  * Actor/actress gap finding (issue #49). Unlike the movie/TV scans this is a
@@ -23,22 +23,35 @@ export class ActorService {
     ).pipe(map(res => res.results));
   }
 
+  /** Suggested actors for the empty-search grid, from popular movies or TV
+   * shows depending on the active tab. */
+  getPopular(mediaType: 'movie' | 'tv' = 'movie'): Observable<PersonResult[]> {
+    const params = new HttpParams().set('mediaType', mediaType);
+    return this.http.get<{ results: PersonResult[] }>(
+      `${environment.apiUrl}/actors/popular`, { params }
+    ).pipe(map(res => res.results));
+  }
+
   getActorGaps(
     personId: number,
     libraryNames: string[],
     source: string = 'plex',
     showExisting: boolean = true,
     includeMinor: boolean = false,
-  ): Observable<CollectionGap[]> {
+    mediaType: 'movie' | 'tv' = 'movie',
+    includeImdbRatings: boolean = false,
+  ): Observable<{ gaps: CollectionGap[]; actor: PersonDetails | null }> {
     let params = new HttpParams()
       .set('source', source)
       .set('showExisting', showExisting.toString())
-      .set('includeMinor', includeMinor.toString());
+      .set('includeMinor', includeMinor.toString())
+      .set('mediaType', mediaType)
+      .set('includeImdbRatings', includeImdbRatings.toString());
     for (const lib of libraryNames) {
       params = params.append('libraryNames', lib);
     }
-    return this.http.get<{ gaps: CollectionGap[] }>(
+    return this.http.get<{ gaps: CollectionGap[]; actor: PersonDetails | null }>(
       `${environment.apiUrl}/actors/${personId}/gaps`, { params }
-    ).pipe(map(res => res.gaps));
+    );
   }
 }

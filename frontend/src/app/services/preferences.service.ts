@@ -3,6 +3,15 @@ import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../environments/environment';
 
+/** Remembered Missing-view display filters (persisted as opaque UI state,
+ * separate from the scan-affecting hideOwned/hideFuture defaults). */
+export interface MissingFilters {
+  view: 'all' | 'owned' | 'missing';
+  sortBy: 'default' | 'rating' | 'popularity' | 'year' | 'name';
+  genreFilter: number | null;
+  showFuture: boolean;
+}
+
 export interface UserPreferences {
   defaultLibrary: string;
   moviesPerPage: number;
@@ -17,6 +26,10 @@ export interface UserPreferences {
   qualityFilterEnabled: boolean;
   minRating: number;
   minVoteCount: number;
+  externalLinkProvider: 'tmdb' | 'imdb';
+  showImdbRatings: boolean;
+  showTmdbRatings: boolean;
+  missingFilters: MissingFilters | null;
 }
 
 /**
@@ -39,6 +52,10 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   qualityFilterEnabled: false,
   minRating: 0,
   minVoteCount: 0,
+  externalLinkProvider: 'tmdb',
+  showImdbRatings: false,
+  showTmdbRatings: true,
+  missingFilters: null,
 };
 
 @Injectable({

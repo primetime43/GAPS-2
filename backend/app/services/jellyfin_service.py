@@ -18,6 +18,11 @@ class JellyfinService:
         self._movies_cache_lock = threading.Lock()
         self._shows_cache: dict[str, dict] = {}
         self._shows_cache_lock = threading.Lock()
+        # Cached library list. get_movies/get_shows resolve a library name -> id
+        # on every call; the list rarely changes, so cache it until the
+        # connection changes (None = not loaded yet).
+        self._libraries_cache: list | None = None
+        self._libraries_cache_lock = threading.Lock()
 
         # Restore persisted state
         saved = config_store.get('jellyfin', {})
@@ -56,6 +61,7 @@ class JellyfinService:
 
         self._server_url = server_url.rstrip('/')
         self._api_key = api_key
+        self.clear_libraries_cache()  # new connection → drop any cached list
 
         # Get first admin user ID
         try:
@@ -75,7 +81,15 @@ class JellyfinService:
 
     # -- Libraries --
 
-    def fetch_libraries(self) -> tuple[list | None, str | None]:
+    def clear_libraries_cache(self) -> None:
+        with self._libraries_cache_lock:
+            self._libraries_cache = None
+
+    def fetch_libraries(self, force: bool = False) -> tuple[list | None, str | None]:
+        if not force:
+            with self._libraries_cache_lock:
+                if self._libraries_cache is not None:
+                    return self._libraries_cache, None
         if not self._server_url or not self._api_key:
             return None, 'Not connected'
 
@@ -102,6 +116,8 @@ class JellyfinService:
                     'id': item.get('Id', item.get('ItemId', '')),
                 })
 
+            with self._libraries_cache_lock:
+                self._libraries_cache = libraries
             return libraries, None
         except Exception as e:
             return None, str(e)
@@ -121,7 +137,7 @@ class JellyfinService:
             return False, 'Could not reach server', None
         self.clear_movies_cache()
         self.clear_shows_cache()
-        libs, err = self.fetch_libraries()
+        libs, err = self.fetch_libraries(force=True)
         if err:
             return False, err, None
         if self._active_server:
@@ -144,6 +160,7 @@ class JellyfinService:
             'server_url': server_url,
             'libraries': libraries if isinstance(libraries, list) else [],
         }
+        self.clear_libraries_cache()  # creds may have changed → refetch on demand
         config_store.put('jellyfin', {
             'server_url': self._server_url,
             'api_key': api_key,
@@ -161,6 +178,7 @@ class JellyfinService:
         self._user_id = None
         self.clear_movies_cache()
         self.clear_shows_cache()
+        self.clear_libraries_cache()
         config_store.remove('jellyfin')
 
     # -- Movies --
@@ -168,6 +186,38 @@ class JellyfinService:
     def clear_movies_cache(self) -> None:
         with self._movies_cache_lock:
             self._movies_cache = {}
+
+    def _fetch_all_items(self, url: str, base_params: dict, timeout) -> tuple[list | None, int | None]:
+        """Fetch every item across pages. A single /Items response is capped, so a
+        library larger than the cap would otherwise be silently truncated; page via
+        StartIndex until TotalRecordCount is reached. Returns (items, None) on
+        success or (None, http_status) on a non-200. Network errors propagate to
+        the caller's try/except.
+        """
+        page_size = 10000   # large page so normal libraries are still one request
+        max_pages = 1000    # backstop against a server that ignores StartIndex
+        items: list = []
+        start = 0
+        for _ in range(max_pages):
+            params = {**base_params, 'StartIndex': str(start), 'Limit': str(page_size)}
+            resp = requests.get(url, headers=self._headers(), params=params, timeout=timeout)
+            if resp.status_code != 200:
+                return None, resp.status_code
+            data = resp.json()
+            page = data.get('Items', []) or []
+            items.extend(page)
+            if not page:
+                break
+            start += len(page)
+            total = data.get('TotalRecordCount')
+            if isinstance(total, int):
+                # TotalRecordCount is authoritative — keep paging even if the
+                # server returned a short page (some configs cap below our Limit).
+                if start >= total:
+                    break
+            elif len(page) < page_size:
+                break
+        return items, None
 
     def get_movies(self, library_name: str) -> tuple[list[dict] | None, str | None]:
         with self._movies_cache_lock:
@@ -193,14 +243,13 @@ class JellyfinService:
             return None, f'Library "{library_name}" not found'
 
         try:
-            params = {
+            base_params = {
                 'IncludeItemTypes': 'Movie',
                 'Fields': 'ProviderIds,Overview',
                 'Recursive': 'true',
-                'Limit': '10000',
             }
             if library_id:
-                params['ParentId'] = library_id
+                base_params['ParentId'] = library_id
 
             if self._user_id:
                 url = f"{self._base()}/Users/{self._user_id}/Items"
@@ -209,12 +258,9 @@ class JellyfinService:
 
             prefs = config_store.get('preferences', {})
             timeout = prefs.get('mediaServerTimeout', 30)
-            resp = requests.get(url, headers=self._headers(), params=params, timeout=timeout)
-            if resp.status_code != 200:
-                return None, f'Failed to fetch movies (HTTP {resp.status_code})'
-
-            data = resp.json()
-            items = data.get('Items', [])
+            items, status = self._fetch_all_items(url, base_params, timeout)
+            if status is not None:
+                return None, f'Failed to fetch movies (HTTP {status})'
 
             movie_data = []
             tmdb_ids = []
@@ -296,14 +342,13 @@ class JellyfinService:
             return None, f'Library "{library_name}" not found'
 
         try:
-            params = {
+            base_params = {
                 'IncludeItemTypes': 'Series',
                 'Fields': 'ProviderIds,Overview',
                 'Recursive': 'true',
-                'Limit': '10000',
             }
             if library_id:
-                params['ParentId'] = library_id
+                base_params['ParentId'] = library_id
 
             if self._user_id:
                 url = f"{self._base()}/Users/{self._user_id}/Items"
@@ -312,11 +357,9 @@ class JellyfinService:
 
             prefs = config_store.get('preferences', {})
             timeout = prefs.get('mediaServerTimeout', 30)
-            resp = requests.get(url, headers=self._headers(), params=params, timeout=timeout)
-            if resp.status_code != 200:
-                return None, f'Failed to fetch shows (HTTP {resp.status_code})'
-
-            items = resp.json().get('Items', [])
+            items, status = self._fetch_all_items(url, base_params, timeout)
+            if status is not None:
+                return None, f'Failed to fetch shows (HTTP {status})'
 
             show_data = []
             tvdb_ids = []

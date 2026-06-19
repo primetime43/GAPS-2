@@ -1,5 +1,4 @@
 import { Injectable } from '@angular/core';
-import * as XLSX from 'xlsx';
 import { Gap } from '../models/recommendation.model';
 
 export type ExportFormat = 'csv' | 'xlsx';
@@ -17,7 +16,13 @@ interface ExportRow {
 })
 export class ExportService {
 
-  exportGaps(gaps: Gap[], format: ExportFormat): void {
+  async exportGaps(gaps: Gap[], format: ExportFormat): Promise<void> {
+    // Load the heavy xlsx library only when an export actually runs (keeps it
+    // out of the main bundle). The await also yields the event loop, so the
+    // click handler returns before the synchronous sheet build/write below and
+    // the UI stays responsive.
+    const XLSX = await import('xlsx');
+
     const rows: ExportRow[] = gaps.map(g => ({
       'Group': g.groupName,
       'Title': g.name,

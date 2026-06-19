@@ -25,4 +25,12 @@ export interface Gap {
   externalUrl: string;   // TMDB or TheTVDB page for the title
   radarrEligible: boolean; // movies → Radarr
   sonarrEligible: boolean; // shows → Sonarr
+  imdbRating?: number;     // IMDb aggregate rating (movies, when enabled)
+  imdbVotes?: number;      // IMDb vote count
+  tmdbRating?: number;     // TMDB vote average (movies)
+  tmdbVotes?: number;      // TMDB vote count (movies)
+  genreIds?: number[];     // TMDB genre ids (movies) — used by the genre filter
+  popularity?: number;     // TMDB popularity — used by the sort control
+  tmdbId?: number;         // TMDB id (TV gaps key on tvdbId, so id alone isn't it)
+  imdbId?: string;         // IMDb id, when known (TV) — for building IMDb links
 }

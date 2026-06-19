@@ -153,6 +153,20 @@ hr.thin {
   padding: 16px 20px;
 }
 
+/* Inline checkbox + label, used by settings toggles. */
+.toggle-label {
+  display: flex;
+  align-items: center;
+  color: #ccc;
+  cursor: pointer;
+
+  input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: #00bc8c;
+  }
+}
+
 /* Gap / recommendation cards — shared by the Missing (recommended) and Actors
    views. Both render the same poster grid grouped by collection/franchise/actor,
    with owned / missing / ignored badges and a send-to-Radarr button. */
@@ -185,6 +199,11 @@ hr.thin {
   border: 1px solid #444;
   border-radius: 8px;
   overflow: hidden;
+  // Column layout + full row height so the action button can pin to the bottom
+  // regardless of how much info (ratings, etc.) sits above it.
+  display: flex;
+  flex-direction: column;
+  height: 100%;
 
   &.owned {
     opacity: 0.6;
@@ -277,6 +296,9 @@ hr.thin {
 
 .rec-info {
   padding: 10px;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
 }
 
 .rec-title,
@@ -303,10 +325,48 @@ hr.thin {
   font-size: 12px;
 }
 
+// IMDb (yellow) + TMDB (blue) rating chips shown together under the year.
+.card-ratings {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.rating-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+
+  &.imdb { color: #f5c518; }
+  &.tmdb { color: #01b4e4; }
+}
+
+.rating-logo {
+  height: 15px;
+  width: auto;
+  display: block;
+}
+
 .radarr-btn {
   font-size: 11px;
   padding: 2px 8px;
   width: 100%;
+  // Pin to the bottom of the card; the info column above grows to fill space.
+  margin-top: auto;
+}
+
+// The button's `auto` top margin collapses to 0 on the tallest card in a row,
+// so give the elements that can sit directly above it a bottom margin to
+// guarantee a gap. `year` covers cards with no ratings; `card-ratings` covers
+// the rest (and provides the gap below the year on rated cards).
+.rec-year {
+  margin-bottom: 6px;
+}
+.card-ratings {
+  margin-bottom: 8px;
 }
 
 /* "Filters" dropdown menu — checkbox list of view refinements, shared by the
