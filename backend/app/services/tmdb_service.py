@@ -702,6 +702,28 @@ class TmdbService:
         """Stop the running scan. Returns True if a scan was running."""
         return self._scan.cancel()
 
+    def persist_last_scan(
+        self,
+        gaps: list[dict] | None,
+        owned_movies: list[dict],
+        owned_tmdb_ids: set[int],
+        libraries: list[str],
+        completed_at: str,
+    ) -> None:
+        """Persist the `last_scan` blob (+ the owned-library fingerprint used for
+        incremental Update diffs). Shared by the manual background scan
+        (`_run_scan`) and the scheduled scan so both leave identical state."""
+        try:
+            config_store.put('last_scan', {
+                'gaps': gaps or [],
+                'total_owned': len(owned_tmdb_ids),
+                'libraries': list(libraries),
+                'completed_at': completed_at,
+                'owned_keys': [self._movie_key(m) for m in owned_movies],
+            })
+        except OSError as e:
+            logger.warning("Failed to persist last_scan: %s", e)
+
     def _run_scan(
         self,
         api_key: str,
@@ -726,18 +748,7 @@ class TmdbService:
             if not self._scan.finish(generation, gaps=final_gaps,
                                      total_owned=len(owned_tmdb_ids), completed_at=completed_at):
                 return
-            try:
-                config_store.put('last_scan', {
-                    'gaps': final_gaps,
-                    'total_owned': len(owned_tmdb_ids),
-                    'libraries': libraries,
-                    'completed_at': completed_at,
-                    # Fingerprint of the owned library so the next scan can run
-                    # incrementally (diff added/removed movies against this).
-                    'owned_keys': [self._movie_key(m) for m in owned_movies],
-                })
-            except OSError as e:
-                logger.warning("Failed to persist last_scan: %s", e)
+            self.persist_last_scan(final_gaps, owned_movies, owned_tmdb_ids, libraries, completed_at)
             missing_gaps = [g for g in final_gaps if not g.get('owned')]
             scan_history.record(
                 media_type='movie',

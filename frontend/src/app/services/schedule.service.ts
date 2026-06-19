@@ -16,7 +16,8 @@ export interface ScheduleLastRun {
 export interface ScheduleBlock {
   enabled: boolean;
   preset: string;
-  library: string;
+  libraries: string[];
+  library: string;       // joined label (back-compat / display)
   hour: number;
   minute: number;
   dayOfWeek: string;
@@ -42,7 +43,7 @@ export interface ScheduleConfig {
 export interface SetScheduleRequest {
   mediaType: 'movie' | 'tv';
   preset: string;
-  library: string;
+  libraries: string[];
   source: string;
   hour: number;
   minute: number;

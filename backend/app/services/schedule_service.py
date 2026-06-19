@@ -114,6 +114,16 @@ class ScheduleService:
     def _get_media_service(self, source: str):
         return media_service_for(self._app, source)
 
+    @staticmethod
+    def _block_libraries(block: dict) -> list[str]:
+        """The libraries a schedule block targets, with back-compat for the old
+        single-`library` field (pre multi-library)."""
+        libs = block.get('libraries')
+        if isinstance(libs, list) and libs:
+            return [str(x) for x in libs if x]
+        single = block.get('library')
+        return [single] if single else []
+
     # -- Job wrappers --
 
     def _run_movie_scan_job(self):
@@ -122,10 +132,10 @@ class ScheduleService:
             return
         with self._app.app_context():
             cfg = self._load_config()
-            library = cfg.get('movie', {}).get('library', '')
+            libraries = self._block_libraries(cfg.get('movie', {}))
             source = cfg.get('source', 'plex')
-            if library:
-                self._run_movie_scan(library, source)
+            if libraries:
+                self._run_movie_scan(libraries, source)
 
     def _run_tv_scan_job(self):
         if not self._app:
@@ -133,14 +143,15 @@ class ScheduleService:
             return
         with self._app.app_context():
             cfg = self._load_config()
-            library = cfg.get('tv', {}).get('library', '')
+            libraries = self._block_libraries(cfg.get('tv', {}))
             source = cfg.get('source', 'plex')
-            if library:
-                self._run_tv_scan(library, source)
+            if libraries:
+                self._run_tv_scan(libraries, source)
 
-    def _run_movie_scan(self, library_name: str, source: str):
+    def _run_movie_scan(self, library_names: list[str], source: str):
+        label = ', '.join(library_names)
         try:
-            logger.info("Scheduled movie scan started for library '%s' (source=%s)", library_name, source)
+            logger.info("Scheduled movie scan started for libraries %s (source=%s)", library_names, source)
             tmdb = self._app.tmdb_service
             media_service = self._get_media_service(source)
 
@@ -148,24 +159,36 @@ class ScheduleService:
             if not api_key:
                 logger.warning("Scheduled movie scan skipped: no TMDB API key configured")
                 self._record_last_run(
-                    status='skipped', library=library_name, message='no TMDB API key configured'
+                    status='skipped', libraries=library_names, message='no TMDB API key configured'
                 )
                 return
 
+            # Re-fetch every run so the scan sees titles added since the in-memory
+            # cache was loaded (it otherwise persists for the process lifetime).
+            # Merge owned movies across all selected libraries, deduped the same
+            # way the Missing-page scan does.
+            media_service.clear_movies_cache()
+            for name in library_names:
+                media_service.get_movies(name)
             cache = media_service.movies_cache
-            if library_name not in cache:
-                media_service.get_movies(library_name)
-                cache = media_service.movies_cache
 
-            library_data = cache.get(library_name, {})
-            owned_movies = library_data.get('movies', [])
-            owned_ids = set(library_data.get('tmdbIds', []))
+            owned_movies: list[dict] = []
+            owned_ids: set = set()
+            seen_keys: set = set()
+            for name in library_names:
+                data = cache.get(name, {})
+                for movie in data.get('movies', []):
+                    key = movie.get('tmdbId') or f"{movie.get('name')}|{movie.get('year')}"
+                    if key not in seen_keys:
+                        seen_keys.add(key)
+                        owned_movies.append(movie)
+                owned_ids.update(data.get('tmdbIds', []))
 
             if not owned_movies:
-                logger.warning("Scheduled movie scan skipped: library '%s' has no movies", library_name)
+                logger.warning("Scheduled movie scan skipped: libraries %s have no movies", library_names)
                 self._record_last_run(
-                    status='skipped', library=library_name,
-                    message='library has no movies (server unreachable or library empty)',
+                    status='skipped', libraries=library_names,
+                    message='libraries have no movies (server unreachable or empty)',
                 )
                 return
 
@@ -173,57 +196,75 @@ class ScheduleService:
                 api_key=api_key, owned_movies=owned_movies, owned_tmdb_ids=owned_ids, show_existing=True,
             )
             if error:
-                logger.error("Scheduled movie scan failed for '%s': %s", library_name, error)
-                self._record_last_run(status='error', library=library_name, message=str(error))
+                logger.error("Scheduled movie scan failed for %s: %s", library_names, error)
+                self._record_last_run(status='error', libraries=library_names, message=str(error))
                 return
+
+            # Persist last_scan the same way a manual scan does (shared helper), so
+            # the Missing page / incremental Update reflect scheduled runs too.
+            tmdb.persist_last_scan(
+                gaps or [], owned_movies, owned_ids, library_names,
+                datetime.now(timezone.utc).isoformat(),
+            )
 
             missing = [g for g in (gaps or []) if not g.get('owned')]
             missing = scan_history.actionable_missing('movie', missing)
             collections = len(set(g['collectionName'] for g in missing)) if missing else 0
             logger.info(
-                "Scheduled movie scan complete for '%s': %d missing across %d collections",
-                library_name, len(missing), collections,
+                "Scheduled movie scan complete for %s: %d missing across %d collections",
+                library_names, len(missing), collections,
             )
             self._record_last_run(
-                status='success', library=library_name, missing=len(missing),
+                status='success', libraries=library_names, missing=len(missing),
                 collections=collections, total_owned=len(owned_ids),
                 gaps=missing,
             )
             self._app.notification_service.notify_scan_results(
-                len(missing), collections, library_name, media_type='movie'
+                len(missing), collections, label, media_type='movie'
             )
         except Exception as e:
             logger.exception("Scheduled movie scan crashed unexpectedly")
-            self._record_last_run(status='error', library=library_name, message=str(e))
+            self._record_last_run(status='error', libraries=library_names, message=str(e))
 
-    def _run_tv_scan(self, tv_library: str, source: str):
+    def _run_tv_scan(self, library_names: list[str], source: str):
+        label = ', '.join(library_names)
         try:
-            logger.info("Scheduled TV scan started for library '%s' (source=%s)", tv_library, source)
+            logger.info("Scheduled TV scan started for libraries %s (source=%s)", library_names, source)
             tvdb = self._app.tvdb_service
             media_service = self._get_media_service(source)
 
             if not tvdb.is_configured:
                 logger.warning("Scheduled TV scan skipped: TheTVDB not configured")
                 self._record_last_run(
-                    status='skipped', library=tv_library,
+                    status='skipped', libraries=library_names,
                     message='TheTVDB not configured', media_type='tv',
                 )
                 return
 
+            # Re-fetch every run so the scan sees shows added since the cache was
+            # loaded; merge owned shows across all selected libraries.
+            media_service.clear_shows_cache()
+            for name in library_names:
+                media_service.get_shows(name)
             cache = media_service.shows_cache
-            if tv_library not in cache:
-                media_service.get_shows(tv_library)
-                cache = media_service.shows_cache
 
-            library_data = cache.get(tv_library, {})
-            owned_shows = library_data.get('shows', [])
-            owned_ids = set(library_data.get('tvdbIds', []))
+            owned_shows: list[dict] = []
+            owned_ids: set = set()
+            seen_keys: set = set()
+            for name in library_names:
+                data = cache.get(name, {})
+                for show in data.get('shows', []):
+                    key = show.get('tvdbId') or f"{show.get('name')}|{show.get('year')}"
+                    if key not in seen_keys:
+                        seen_keys.add(key)
+                        owned_shows.append(show)
+                owned_ids.update(data.get('tvdbIds', []))
 
             if not owned_ids:
-                logger.warning("Scheduled TV scan skipped: library '%s' has no shows with TheTVDB IDs", tv_library)
+                logger.warning("Scheduled TV scan skipped: libraries %s have no shows with TheTVDB IDs", library_names)
                 self._record_last_run(
-                    status='skipped', library=tv_library,
-                    message='library has no shows with TheTVDB IDs (server unreachable or library empty)',
+                    status='skipped', libraries=library_names,
+                    message='libraries have no shows with TheTVDB IDs (server unreachable or empty)',
                     media_type='tv',
                 )
                 return
@@ -233,7 +274,7 @@ class ScheduleService:
                 config_store.put('last_tv_scan', {
                     'gaps': gaps,
                     'total_owned': len(owned_ids),
-                    'libraries': [tv_library],
+                    'libraries': library_names,
                     'completed_at': datetime.now(timezone.utc).isoformat(),
                 })
             except OSError as e:
@@ -243,27 +284,27 @@ class ScheduleService:
             missing = scan_history.actionable_missing('tv', missing)
             franchises = len(set(g['franchiseName'] for g in missing)) if missing else 0
             logger.info(
-                "Scheduled TV scan complete for '%s': %d missing across %d franchises",
-                tv_library, len(missing), franchises,
+                "Scheduled TV scan complete for %s: %d missing across %d franchises",
+                library_names, len(missing), franchises,
             )
             self._record_last_run(
-                status='success', library=tv_library, missing=len(missing),
+                status='success', libraries=library_names, missing=len(missing),
                 collections=franchises, media_type='tv', total_owned=len(owned_ids),
                 gaps=missing,
             )
             self._app.notification_service.notify_scan_results(
-                len(missing), franchises, tv_library, media_type='tv'
+                len(missing), franchises, label, media_type='tv'
             )
         except Exception as e:
             logger.exception("Scheduled TV scan crashed unexpectedly")
-            self._record_last_run(status='error', library=tv_library, message=str(e), media_type='tv')
+            self._record_last_run(status='error', libraries=library_names, message=str(e), media_type='tv')
 
     # -- Run history --
 
     @staticmethod
     def _record_last_run(
         status: str,
-        library: str,
+        libraries: list[str],
         missing: int = 0,
         collections: int = 0,
         message: str = '',
@@ -275,7 +316,7 @@ class ScheduleService:
         entry = {
             'timestamp': timestamp,
             'status': status,
-            'library': library,
+            'library': ', '.join(libraries),  # joined label for the history table
             'missing': missing,
             'collections': collections,
             'message': message,
@@ -292,7 +333,7 @@ class ScheduleService:
         # runs alongside manual ones.
         scan_history.record(
             media_type=media_type,
-            libraries=[library] if library else [],
+            libraries=list(libraries),
             total_owned=total_owned,
             missing=missing,
             status=status,
@@ -329,7 +370,7 @@ class ScheduleService:
         self,
         media_type: str,
         preset: str,
-        library: str,
+        libraries: list[str],
         source: str = 'plex',
         hour: int = DEFAULT_HOUR,
         minute: int = DEFAULT_MINUTE,
@@ -337,6 +378,9 @@ class ScheduleService:
     ) -> bool:
         """Enable a per-media-type schedule with its own cadence and time."""
         if preset not in SCHEDULE_FREQUENCIES:
+            return False
+        libraries = [str(x) for x in (libraries or []) if x]
+        if not libraries:
             return False
         try:
             hour = int(hour)
@@ -354,7 +398,7 @@ class ScheduleService:
         cfg.setdefault('movie', {})
         cfg.setdefault('tv', {})
         cfg[key] = {
-            'enabled': True, 'preset': preset, 'library': library,
+            'enabled': True, 'preset': preset, 'libraries': libraries,
             'hour': hour, 'minute': minute, 'dayOfWeek': day_of_week,
         }
         config_store.put('schedule', cfg)
@@ -415,10 +459,12 @@ class ScheduleService:
         hour = int(block.get('hour', DEFAULT_HOUR))
         minute = int(block.get('minute', DEFAULT_MINUTE))
         day_of_week = block.get('dayOfWeek', DEFAULT_DOW)
+        libraries = ScheduleService._block_libraries(block)
         return {
             'enabled': block.get('enabled', False),
             'preset': preset,
-            'library': block.get('library', ''),
+            'libraries': libraries,
+            'library': ', '.join(libraries),  # legacy/joined label
             'hour': hour,
             'minute': minute,
             'dayOfWeek': day_of_week,

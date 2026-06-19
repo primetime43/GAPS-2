@@ -38,11 +38,16 @@
         </div>
 
         <div class="form-group mb-2">
-          <label class="form-label">Movie library</label>
-          <select class="form-select dark-select" [(ngModel)]="movieLibrary">
-            <option value="" disabled hidden>Select a library...</option>
-            <option *ngFor="let lib of movieLibraries" [value]="lib.title">{{ lib.title }}</option>
-          </select>
+          <label class="form-label">Movie libraries</label>
+          <div class="d-flex flex-wrap gap-3">
+            <div class="form-check" *ngFor="let lib of movieLibraries">
+              <input class="form-check-input" type="checkbox"
+                     [id]="'sched-mov-' + lib.title"
+                     [checked]="isLibrarySelected('movie', lib.title)"
+                     (change)="toggleLibrary('movie', lib.title)">
+              <label class="form-check-label" [for]="'sched-mov-' + lib.title">{{ lib.title }}</label>
+            </div>
+          </div>
         </div>
         <div class="form-group mb-3">
           <label class="form-label">Frequency</label>
@@ -65,7 +70,7 @@
         </div>
         <div class="d-flex gap-2">
           <button class="btn btn-primary" (click)="save('movie')"
-                  [disabled]="saving.movie || !moviePreset || !movieLibrary">
+                  [disabled]="saving.movie || !moviePreset || !selectedMovieLibraries.length">
             {{ saving.movie ? 'Saving...' : 'Save Movie Schedule' }}
           </button>
           <button class="btn btn-outline-secondary" (click)="disable('movie')"
@@ -89,11 +94,16 @@
         </div>
 
         <div class="form-group mb-2">
-          <label class="form-label">TV library</label>
-          <select class="form-select dark-select" [(ngModel)]="tvLibrary">
-            <option value="" disabled hidden>Select a library...</option>
-            <option *ngFor="let lib of tvLibraries" [value]="lib.title">{{ lib.title }}</option>
-          </select>
+          <label class="form-label">TV libraries</label>
+          <div class="d-flex flex-wrap gap-3">
+            <div class="form-check" *ngFor="let lib of tvLibraries">
+              <input class="form-check-input" type="checkbox"
+                     [id]="'sched-tv-' + lib.title"
+                     [checked]="isLibrarySelected('tv', lib.title)"
+                     (change)="toggleLibrary('tv', lib.title)">
+              <label class="form-check-label" [for]="'sched-tv-' + lib.title">{{ lib.title }}</label>
+            </div>
+          </div>
         </div>
         <div class="form-group mb-3">
           <label class="form-label">Frequency</label>
@@ -119,7 +129,7 @@
         </div>
         <div class="d-flex gap-2">
           <button class="btn btn-primary" (click)="save('tv')"
-                  [disabled]="saving.tv || !tvPreset || !tvLibrary">
+                  [disabled]="saving.tv || !tvPreset || !selectedTvLibraries.length">
             {{ saving.tv ? 'Saving...' : 'Save TV Schedule' }}
           </button>
           <button class="btn btn-outline-secondary" (click)="disable('tv')"
