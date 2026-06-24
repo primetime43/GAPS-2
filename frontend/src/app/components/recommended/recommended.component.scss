@@ -129,3 +129,36 @@
     transform: rotate(90deg);
   }
 }
+
+/* Active genre-filter chip shown above the results */
+.active-filter-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px 4px 10px;
+  font-size: 13px;
+  color: #fff;
+  background: rgba(0, 188, 140, 0.15);
+  border: 1px solid #00bc8c;
+  border-radius: 14px;
+}
+
+.filter-clear-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  font-size: 11px;
+  line-height: 1;
+  color: #fff;
+  background: transparent;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.15);
+  }
+}

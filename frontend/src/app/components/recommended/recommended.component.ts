@@ -925,6 +925,19 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     this.saveMissingFilters();
   }
 
+  /** Display name of the active genre filter, or null when none is set. */
+  get activeGenreName(): string | null {
+    if (this.genreFilter == null) return null;
+    return this.genres.find(g => g.id === this.genreFilter)?.name ?? null;
+  }
+
+  /** Clear the genre filter (from the results-page badge) and persist it. */
+  clearGenreFilter(): void {
+    this.genreFilter = null;
+    this.applyFilter();
+    this.saveMissingFilters();
+  }
+
   /**
    * Persist the quality-filter settings. This is a scan-time filter applied
    * server-side, so saving it (which reloads the TMDB service) makes the next
@@ -1083,15 +1096,22 @@ export class RecommendedComponent implements OnInit, OnDestroy {
       filtered = filtered.filter(g => g.owned || !this.isFutureRelease(g));
     }
 
-    this.ownedCount = this.allGaps.filter(g => g.owned).length;
+    // Counts respect the genre filter so the headline / view-toggle badges match
+    // what's actually shown — otherwise an active genre silently hides results
+    // while "Missing (N)" still reports the unfiltered total.
+    const matchesGenre = (g: Gap) =>
+      this.genreFilter == null || (g.genreIds || []).includes(this.genreFilter as number);
+
+    this.ownedCount = this.allGaps.filter(g => g.owned && matchesGenre(g)).length;
     this.missingCount = this.allGaps.filter(g =>
       !g.owned
       && !this.ignoredIds.has(g.id)
       && (this.showFuture || !this.isFutureRelease(g))
+      && matchesGenre(g)
     ).length;
 
     if (this.genreFilter != null) {
-      filtered = filtered.filter(g => (g.genreIds || []).includes(this.genreFilter as number));
+      filtered = filtered.filter(matchesGenre);
     }
     filtered = this.gapView.sortGaps(filtered, this.sortBy);
 
