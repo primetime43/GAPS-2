@@ -106,7 +106,22 @@
       <!-- Popular-actor suggestions (empty search box, nothing picked yet) -->
       <div *ngIf="!searching && !searchPerformed && !selectedActor && !query.trim() && popularActors.length > 0"
            class="mb-4">
-        <h6 class="text-muted mb-2">Popular {{ mediaType === 'tv' ? 'TV' : 'movie' }} actors</h6>
+        <div class="d-flex align-items-baseline flex-wrap gap-2 mb-2">
+          <h6 class="text-muted mb-0">Popular {{ mediaType === 'tv' ? 'TV' : 'movie' }} actors</h6>
+          <small *ngIf="popularRefreshedAt" class="text-muted"
+                 [title]="popularNextRefreshAt
+                   ? ('Auto-refreshes on first visit after ' + (popularNextRefreshAt | date:'medium'))
+                   : (popularRefreshedAt | date:'medium')">
+            Refreshed {{ popularRefreshedAt | date:'MMM d, y, h:mm a' }}
+          </small>
+          <button type="button" class="btn btn-link btn-sm p-0 activeLink"
+                  style="font-size: 13px;"
+                  (click)="refreshPopular()" [disabled]="refreshingPopular"
+                  title="Rebuild these suggestions now">
+            <span *ngIf="refreshingPopular" class="spinner-border spinner-border-sm me-1"></span>
+            {{ refreshingPopular ? 'Refreshing…' : 'Refresh' }}
+          </button>
+        </div>
         <div class="actor-results">
           <div *ngFor="let person of popularActors" class="actor-card clickable" (click)="selectActor(person)">
             <img

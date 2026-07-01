@@ -55,6 +55,12 @@ export class ActorsComponent implements OnInit, OnDestroy {
   searchPerformed = false;
   // Trending actors shown as clickable suggestions when the search box is empty.
   popularActors: PersonResult[] = [];
+  // When that suggestion list was last built server-side, and when it goes stale
+  // (ms epoch for the date pipe); null until loaded. Shown so the user knows how
+  // fresh the picks are. `refreshingPopular` guards the manual Refresh button.
+  popularRefreshedAt: number | null = null;
+  popularNextRefreshAt: number | null = null;
+  refreshingPopular = false;
   selectedActor: PersonResult | null = null;
 
   loadingGaps = false;
@@ -213,10 +219,25 @@ export class ActorsComponent implements OnInit, OnDestroy {
     }
   }
 
-  /** Load the empty-state suggestions for the active tab (best-effort). */
-  private loadPopular(): void {
-    this.actorService.getPopular(this.mediaType).pipe(catchError(() => of([] as PersonResult[])))
-      .subscribe(people => this.popularActors = people);
+  /** Load the empty-state suggestions for the active tab (best-effort).
+   * `force` bypasses the server cache (the manual Refresh button). */
+  private loadPopular(force = false): void {
+    if (force) this.refreshingPopular = true;
+    this.actorService.getPopular(this.mediaType, force)
+      .pipe(catchError(() => of({ people: [] as PersonResult[], refreshedAt: null, nextRefreshAt: null })))
+      .subscribe(res => {
+        this.popularActors = res.people;
+        // Backend sends seconds; the date pipe wants milliseconds.
+        this.popularRefreshedAt = res.refreshedAt != null ? res.refreshedAt * 1000 : null;
+        this.popularNextRefreshAt = res.nextRefreshAt != null ? res.nextRefreshAt * 1000 : null;
+        this.refreshingPopular = false;
+      });
+  }
+
+  /** Rebuild the popular-actor suggestions now, ignoring the cache TTL. */
+  refreshPopular(): void {
+    if (this.refreshingPopular) return;
+    this.loadPopular(true);
   }
 
   private loadIgnored(): void {

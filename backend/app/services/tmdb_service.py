@@ -1065,22 +1065,31 @@ class TmdbService:
             logger.warning("Failed to fetch %s %s credits: %s", media_type, title_id, e)
             return []
 
-    def get_popular_people(self, media_type: str = 'movie') -> list[dict]:
+    def get_popular_people(self, media_type: str = 'movie',
+                           force: bool = False) -> tuple[list[dict], float | None, float | None]:
         """Suggested actors for the empty search box, drawn from the top-billed
         cast of currently-popular *movies* or *TV shows* (matching the active tab),
         so the suggestions are on-topic and recognizable rather than TMDB's churny
         global `/person/popular` list. Ranked by how many popular titles a person
         appears in, then billing order, then popularity. `knownFor` shows the
         popular titles they're in. Cached in memory per media type for
-        `_POPULAR_CACHE_TTL_SECONDS`."""
+        `_POPULAR_CACHE_TTL_SECONDS`; `force=True` bypasses the cache and rebuilds
+        now (the manual "Refresh" button).
+
+        Returns `(people, refreshed_at, next_refresh_at)`: `refreshed_at` is the
+        Unix epoch the list was built and `next_refresh_at` when it becomes stale
+        (`refreshed_at + TTL`), so the UI can show both; both `None` when nothing
+        could be fetched. The cache is lazy — it rebuilds on the first request
+        after `next_refresh_at`, not on a timer."""
         media_type = 'tv' if str(media_type).lower() == 'tv' else 'movie'
         now = time.time()
-        with self._cache_lock:
-            entry = self._popular_people_cache.get(media_type)
-            if entry and now - entry['at'] < _POPULAR_CACHE_TTL_SECONDS:
-                return entry['people']
+        if not force:
+            with self._cache_lock:
+                entry = self._popular_people_cache.get(media_type)
+                if entry and now - entry['at'] < _POPULAR_CACHE_TTL_SECONDS:
+                    return entry['people'], entry['at'], entry['at'] + _POPULAR_CACHE_TTL_SECONDS
         if not self._api_key:
-            return []
+            return [], None, None
         try:
             resp = self._session.get(
                 f"{self._base_url}/{media_type}/popular",
@@ -1088,11 +1097,11 @@ class TmdbService:
                 timeout=10,
             )
             if resp.status_code != 200:
-                return []
+                return [], None, None
             titles = [t for t in resp.json().get("results", [])[:12] if t.get("id")]
         except (requests.exceptions.RequestException, ValueError) as e:
             logger.warning("TMDB popular %s fetch failed: %s", media_type, e)
-            return []
+            return [], None, None
 
         title_ids = [t["id"] for t in titles]
         title_names = {t["id"]: (t.get("title") or t.get("name") or "") for t in titles}
@@ -1135,7 +1144,7 @@ class TmdbService:
 
         with self._cache_lock:
             self._popular_people_cache[media_type] = {"people": people, "at": now}
-        return people
+        return people, now, now + _POPULAR_CACHE_TTL_SECONDS
 
     def _get_person_movie_credits(self, person_id: int) -> dict | None:
         """Fetch a person's profile + movie & TV cast credits in one call, cached.
