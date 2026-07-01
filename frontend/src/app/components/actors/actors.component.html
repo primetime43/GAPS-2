@@ -16,8 +16,8 @@
 
   <!-- Main content -->
   <div *ngIf="!loading && hasServer">
-    <!-- Movies / TV toggle -->
-    <div class="btn-group btn-group-sm mb-3" role="group" aria-label="Media type">
+    <!-- Movies / TV toggle (hidden on the results page — go Back to switch/search) -->
+    <div *ngIf="!selectedActor" class="btn-group btn-group-sm mb-3" role="group" aria-label="Media type">
       <button type="button" class="btn"
               [class.btn-primary]="mediaType === 'movie'"
               [class.btn-outline-secondary]="mediaType !== 'movie'"
@@ -28,8 +28,8 @@
               (click)="setMediaType('tv')">TV Shows</button>
     </div>
 
-    <h3 class="regular-text">Find {{ mediaType === 'tv' ? 'TV Shows' : 'Movies' }} by Actor</h3>
-    <p class="text-muted">
+    <h3 *ngIf="!selectedActor" class="regular-text">Find {{ mediaType === 'tv' ? 'TV Shows' : 'Movies' }} by Actor</h3>
+    <p *ngIf="!selectedActor" class="text-muted">
       Search for an actor or actress to see which of their
       {{ mediaType === 'tv' ? 'TV shows' : 'movies' }} you own and which you're missing.
     </p>
@@ -40,8 +40,8 @@
     </div>
 
     <div *ngIf="libraries.length > 0">
-      <!-- Search box -->
-      <div class="row mb-3">
+      <!-- Search box (hidden once an actor is picked — the results page has its own header) -->
+      <div class="row mb-3" *ngIf="!selectedActor">
         <div class="col-md-6">
           <label class="text-muted mb-1">Search for an actor or actress</label>
           <input
@@ -231,15 +231,6 @@
                 </li>
               </ul>
             </div>
-
-            <!-- Load IMDb ratings on demand (movies only; not auto-fetched) -->
-            <button *ngIf="mediaType === 'movie' && showImdbRatings && allGaps.length && !imdbRatingsLoaded"
-                    class="btn btn-sm btn-outline-warning"
-                    title="Fetch IMDb ratings for these titles. Not loaded automatically — each one is looked up from IMDb, so this can take a few seconds."
-                    (click)="loadImdbRatings()" [disabled]="loadingImdbRatings">
-              <span *ngIf="loadingImdbRatings" class="spinner-border spinner-border-sm me-1"></span>
-              {{ loadingImdbRatings ? 'Loading IMDb…' : 'Load IMDb ratings' }}
-            </button>
 
             <!-- Export -->
             <div class="dropdown">
