@@ -501,6 +501,34 @@ class TvdbService:
         gaps.sort(key=lambda g: (g['franchiseName'], str(g['year'])))
         return gaps, None
 
+    def hydrate_gaps(self, gaps: list[dict]) -> list[dict]:
+        """Re-attach display fields (poster/overview/slug/first-aired) to stored
+        TV gaps by reading the warm series cache — no network calls. The TV
+        analogue of `TmdbService.hydrate_gaps`, used to reopen a saved TV scan in
+        the Missing view. A series not in the cache keeps its stored fields.
+        """
+        out = []
+        with self._cache_lock:
+            for g in gaps:
+                sid = g.get('tvdbId')
+                meta = self._series_cache.get(sid) if sid is not None else None
+                if not meta:
+                    out.append(g)
+                    continue
+                first_aired = meta.get('firstAired') or ''
+                out.append({
+                    'tvdbId': sid,
+                    'name': meta.get('name') or g.get('name', 'Unknown'),
+                    'year': meta.get('year') or g.get('year') or 'N/A',
+                    'releaseDate': first_aired,
+                    'posterUrl': meta.get('image'),
+                    'overview': meta.get('overview', ''),
+                    'slug': meta.get('slug'),
+                    'franchiseName': g.get('franchiseName', ''),
+                    'owned': bool(g.get('owned', False)),
+                })
+        return out
+
     # -- Scan orchestration --
 
     @property

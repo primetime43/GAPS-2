@@ -1,5 +1,5 @@
 import { Component, OnInit, OnDestroy, ViewChild, ElementRef, NgZone } from '@angular/core';
-import { NavigationEnd, Router } from '@angular/router';
+import { ActivatedRoute, NavigationEnd, Router } from '@angular/router';
 import { forkJoin, Observable, Subject, Subscription, timer } from 'rxjs';
 import { catchError, filter, map, skip, switchMap, takeUntil } from 'rxjs/operators';
 import { of } from 'rxjs';
@@ -14,6 +14,7 @@ import { ExportService, ExportFormat } from '../../services/export.service';
 import { RadarrService } from '../../services/radarr.service';
 import { SonarrService } from '../../services/sonarr.service';
 import { GapViewService } from '../../services/gap-view.service';
+import { ScanHistoryService } from '../../services/scan-history.service';
 import { TmdbService, TmdbGenre } from '../../services/tmdb/tmdb.service';
 import { environment } from '../../../environments/environment';
 
@@ -270,6 +271,11 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   private pollSub: Subscription | null = null;
   private destroy$ = new Subject<void>();
 
+  // Reopening a saved scan (from the Scan History page): the id to load once the
+  // server context is ready, and the banner info shown while viewing it.
+  private pendingSavedScanId: string | null = null;
+  savedScanInfo: { timestamp: string; libraries: string[] } | null = null;
+
   constructor(
     private activeServerService: ActiveServerService,
     private libraryService: LibraryService,
@@ -281,6 +287,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     private sonarrService: SonarrService,
     private gapView: GapViewService,
     private tmdbService: TmdbService,
+    private scanHistoryService: ScanHistoryService,
     private router: Router,
     private zone: NgZone,
   ) {}
@@ -290,14 +297,32 @@ export class RecommendedComponent implements OnInit, OnDestroy {
       this.genres = g;
       this.availableGenres = this.gapView.availableGenres(this.allGaps, this.genres);
     });
+    this.captureSavedScanParam();
     this.loadContext(true);
 
+    // This route is reused (ReusableRouteStrategy), so navigating back into
+    // /recommended?scan=<id> doesn't re-run ngOnInit — re-read the param here too.
     this.router.events.pipe(
       filter((e): e is NavigationEnd => e instanceof NavigationEnd),
       filter(e => e.urlAfterRedirects.split(/[?#]/)[0] === '/recommended'),
       skip(1),
       takeUntil(this.destroy$),
-    ).subscribe(() => this.loadContext(false));
+    ).subscribe(() => {
+      this.captureSavedScanParam();
+      this.loadContext(false);
+    });
+  }
+
+  /** Stash a `?scan=<id>&type=<movie|tv>` request to reopen a saved scan once the
+   * server context is ready (see finishInitialization). Read from the live URL so
+   * it works whether or not the route component was reused. */
+  private captureSavedScanParam(): void {
+    const qp = this.router.parseUrl(this.router.url).queryParams || {};
+    const scanId = qp['scan'];
+    if (!scanId) return;
+    this.pendingSavedScanId = scanId;
+    const type = qp['type'];
+    if (type === 'tv' || type === 'movie') this.mediaType = type;
   }
 
   ngOnDestroy(): void {
@@ -318,6 +343,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
       cancel$.subscribe({ next: () => {}, error: () => {} });
     }
     this.mediaType = type;
+    this.savedScanInfo = null;
     this.stopPolling();
     this.selectedLibraries = [];
     this.items = [];
@@ -419,6 +445,16 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   }
 
   private finishInitialization(prefs: any, autoSelectLibrary: boolean): void {
+    // A saved scan was requested (Scan History → Missing view). Load it instead
+    // of the normal last-scan restore, regardless of autoSelectLibrary.
+    if (this.pendingSavedScanId) {
+      const id = this.pendingSavedScanId;
+      this.pendingSavedScanId = null;
+      this.loadSavedScan(id);
+      this.loading = false;
+      return;
+    }
+
     if (this.scanProgress || this.selectedItem) {
       if (autoSelectLibrary) this.applyDefaultLibrary(prefs);
       this.loading = false;
@@ -469,6 +505,50 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     }
   }
 
+  /**
+   * Reopen a saved scan (from Scan History) in the results view, like a manual
+   * scan. The backend rehydrates the stored gaps with posters/ratings from cache
+   * and returns them in the live-scan shape, so normalizeGaps/applyFilter render
+   * them through the same path. Note the saved set is missing-only (owned titles
+   * aren't stored), so the Owned toggle reads 0.
+   */
+  private loadSavedScan(id: string): void {
+    this.scanMode = true;
+    this.selectedItem = null;
+    this.loadingGaps = true;
+    this.allGaps = [];
+    this.collectionGroups = [];
+    this.filteredGroups = [];
+    this.errorMessage = '';
+
+    this.scanHistoryService.getGaps(id).subscribe({
+      next: (resp) => {
+        if ((resp.mediaType === 'tv' || resp.mediaType === 'movie') && resp.mediaType !== this.mediaType) {
+          this.mediaType = resp.mediaType;
+          this.applyLibraryFilter();
+          this.loadIgnored();
+        }
+        // Reflect the scan's libraries in the toolbar (browse list stays empty
+        // until a library is (re)selected — this is a read-only view of results).
+        this.selectedLibraries = (resp.libraries || []).filter(
+          l => this.libraries.some(x => x.title === l),
+        );
+        this.savedScanInfo = { timestamp: resp.timestamp, libraries: resp.libraries || [] };
+        this.allGaps = this.normalizeGaps(resp.gaps || []);
+        this.totalOwned = resp.totalOwned || 0;
+        this.imdbRatingsLoaded = false;
+        this.applyFilter();
+        this.loadingGaps = false;
+      },
+      error: (err) => {
+        this.errorMessage = err?.error?.error || 'Failed to load this saved scan.';
+        this.loadingGaps = false;
+        this.scanMode = false;
+        this.savedScanInfo = null;
+      },
+    });
+  }
+
   // -- Library selection / browse --
 
   /** Load the browse list for the selected libraries, merged and de-duplicated. */
@@ -479,6 +559,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     this.collectionGroups = [];
     this.selectedItem = null;
     this.scanMode = false;
+    this.savedScanInfo = null;
     this.errorMessage = '';
     this.currentPage = 1;
 
@@ -594,6 +675,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     this.freshScanActive = freshScan;
     this.incrementalActive = incremental;
     this.scanMode = true;
+    this.savedScanInfo = null;
     this.selectedItem = null;
     this.loadingGaps = true;
     this.allGaps = [];
@@ -735,6 +817,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
 
   selectItem(item: BrowseItem): void {
     this.selectedItem = item;
+    this.savedScanInfo = null;
     this.scanMode = false;
     this.loadingGaps = true;
     this.allGaps = [];
@@ -1035,6 +1118,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   clearResults(): void {
     this.selectedItem = null;
     this.scanMode = false;
+    this.savedScanInfo = null;
     this.allGaps = [];
     this.collectionGroups = [];
     this.filteredGroups = [];

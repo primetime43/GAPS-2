@@ -37,6 +37,16 @@ export interface ScanHistoryResponse {
   lastTv: ScanHistoryEntry | null;
 }
 
+// A saved scan's gaps rehydrated (posters/ratings pulled from cache) in the same
+// shape a live scan returns, so the Missing view can reopen it like a fresh scan.
+export interface ScanHistoryGapsResponse {
+  gaps: any[];
+  mediaType: 'movie' | 'tv';
+  libraries: string[];
+  totalOwned: number;
+  timestamp: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class ScanHistoryService {
   private readonly base = `${environment.apiUrl}/scan-history`;
@@ -52,5 +62,10 @@ export class ScanHistoryService {
 
   getById(id: string): Observable<ScanHistoryEntryDetail> {
     return this.http.get<ScanHistoryEntryDetail>(`${this.base}/${encodeURIComponent(id)}`);
+  }
+
+  /** Fetch a saved scan's gaps rehydrated from cache, for reopening in the Missing view. */
+  getGaps(id: string): Observable<ScanHistoryGapsResponse> {
+    return this.http.get<ScanHistoryGapsResponse>(`${this.base}/${encodeURIComponent(id)}/gaps`);
   }
 }

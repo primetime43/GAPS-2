@@ -3,7 +3,7 @@
     <div>
       <h3 class="regular-text mb-1">Scan History</h3>
       <p class="text-muted mb-0">
-        Recent movie and TV gap scans, manual and scheduled. Export the gap list for any scan from its row.
+        Recent movie and TV gap scans, manual and scheduled. Click a scan to reopen it in the Missing view, or export its gap list from the row.
       </p>
     </div>
     <a [routerLink]="['/']" class="back-link">&lsaquo; Back to dashboard</a>
@@ -62,6 +62,9 @@
           *ngFor="let entry of entries"
           [class.row-error]="entry.status === 'error'"
           [class.row-skipped]="entry.status === 'skipped'"
+          [class.clickable]="canOpen(entry)"
+          [title]="canOpen(entry) ? 'Open this scan in the Missing view' : null"
+          (click)="openScan(entry)"
         >
           <td>{{ entry.timestamp | date:'short' }}</td>
           <td>
@@ -80,7 +83,7 @@
               {{ entry.status }}
             </span>
           </td>
-          <td class="actions-col">
+          <td class="actions-col" (click)="$event.stopPropagation()">
             <div class="export-cell">
               <div class="export-buttons">
                 <button

@@ -633,6 +633,56 @@ class TmdbService:
             })
         return entries
 
+    def _cached_movie_part(self, tmdb_id: int | None) -> dict | None:
+        """The cached TMDB `part` dict for a movie (poster/ratings/genres), found
+        via the warm collection membership + collection caches, or None on a miss.
+        Caller holds `_cache_lock`."""
+        if tmdb_id is None:
+            return None
+        coll_id = self._movie_collection_cache.get(tmdb_id)
+        if coll_id is None:
+            return None
+        coll = self._collection_cache.get(coll_id)
+        if not coll:
+            return None
+        for part in coll.get("parts", []):
+            if part.get("id") == tmdb_id:
+                return part
+        return None
+
+    def hydrate_gaps(self, gaps: list[dict]) -> list[dict]:
+        """Re-attach display fields (poster, ratings, genres, release date) to a
+        list of stored/stripped movie gaps by reading the warm collection cache —
+        the same data a live scan builds, with no network calls. Used to reopen a
+        saved scan (scan history) in the Missing view. A gap whose movie isn't in
+        the cache is returned unchanged (just its stored fields, poster None).
+        """
+        out = []
+        with self._cache_lock:
+            for g in gaps:
+                tmdb_id = g.get("tmdbId")
+                part = self._cached_movie_part(tmdb_id)
+                if not part:
+                    out.append(g)
+                    continue
+                poster = part.get("poster_path")
+                release_date = part.get("release_date") or ""
+                out.append({
+                    "tmdbId": tmdb_id,
+                    "name": part.get("title") or g.get("name", "Unknown"),
+                    "year": release_date[:4] if release_date else g.get("year", "N/A"),
+                    "releaseDate": release_date,
+                    "posterUrl": f"{self._image_base_url}{poster}" if poster else None,
+                    "overview": part.get("overview", ""),
+                    "collectionName": g.get("collectionName", ""),
+                    "owned": bool(g.get("owned", False)),
+                    "voteAverage": part.get("vote_average") or 0,
+                    "voteCount": part.get("vote_count") or 0,
+                    "genreIds": part.get("genre_ids") or [],
+                    "popularity": part.get("popularity") or 0,
+                })
+        return out
+
     @property
     def scan_progress(self) -> dict:
         return self._scan.snapshot
