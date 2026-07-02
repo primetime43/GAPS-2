@@ -82,6 +82,19 @@ export class ScanHistoryComponent implements OnInit, OnDestroy {
     return !!entry.id && !!entry.hasGaps && entry.status === 'success';
   }
 
+  /** Whether a row can be opened in the Missing view (needs stored gaps). */
+  canOpen(entry: ScanHistoryEntry): boolean {
+    return this.canExport(entry);
+  }
+
+  /** Reopen this scan's gaps in the Missing view, like a manual scan. */
+  openScan(entry: ScanHistoryEntry): void {
+    if (!entry.id || !this.canOpen(entry)) return;
+    this.router.navigate(['/recommended'], {
+      queryParams: { scan: entry.id, type: entry.mediaType },
+    });
+  }
+
   exportTooltip(entry: ScanHistoryEntry, format: ExportFormat): string {
     if (!entry.id || !entry.hasGaps) {
       return 'No gap details stored for this scan — re-run the scan to enable export.';

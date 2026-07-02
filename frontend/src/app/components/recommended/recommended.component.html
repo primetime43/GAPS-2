@@ -163,6 +163,16 @@
       <a *ngIf="errorMessage.includes('Settings')" [routerLink]="['/settings']" class="alert-link ms-1">Go to Settings</a>
     </div>
 
+    <!-- Viewing a saved scan reopened from Scan History -->
+    <div *ngIf="savedScanInfo" class="alert alert-info d-flex flex-wrap align-items-center justify-content-between gap-2 mt-3">
+      <span>
+        Viewing a saved scan from <strong>{{ savedScanInfo.timestamp | date:'medium' }}</strong>
+        <span *ngIf="savedScanInfo.libraries.length"> · {{ savedScanInfo.libraries.join(', ') }}</span>.
+        Posters and ratings are loaded from cache where available. Scan again for live results.
+      </span>
+      <a [routerLink]="['/scan-history']" class="alert-link">&lsaquo; Back to Scan History</a>
+    </div>
+
     <!-- Item picker -->
     <div *ngIf="!loadingItems && items.length > 0 && !scanMode && !selectedItem && !loadingGaps">
       <p class="text-muted" *ngIf="mediaType === 'movie'">
@@ -399,6 +409,15 @@
         [(ngModel)]="searchFilter"
         (ngModelChange)="applyFilter()"
       >
+
+      <!-- Active genre filter — visible so it isn't silently hiding results -->
+      <div *ngIf="activeGenreName" class="mb-3">
+        <span class="active-filter-badge">
+          Genre: {{ activeGenreName }}
+          <button type="button" class="filter-clear-btn" title="Clear genre filter"
+                  (click)="clearGenreFilter()">✕</button>
+        </span>
+      </div>
 
       <!-- Groups -->
       <div *ngFor="let group of visibleGroups; trackBy: trackByGroupName" class="collection-group mb-4">

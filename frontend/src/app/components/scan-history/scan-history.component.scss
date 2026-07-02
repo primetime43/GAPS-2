@@ -183,6 +183,14 @@
     background: #262626;
   }
 
+  tbody tr.clickable {
+    cursor: pointer;
+
+    &:hover {
+      background: #2b2b2b;
+    }
+  }
+
   tbody tr:last-child td {
     border-bottom: none;
   }

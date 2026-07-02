@@ -9,6 +9,9 @@
     "test": "ng test"
   },
   "private": true,
+  "overrides": {
+    "http-proxy": "npm:http-proxy-3@^1.23.3"
+  },
   "dependencies": {
     "@angular/animations": "^19.2.19",
     "@angular/common": "^19.2.19",

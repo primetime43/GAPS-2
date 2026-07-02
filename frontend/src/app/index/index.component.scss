@@ -5,6 +5,9 @@
   border-radius: 8px;
   background-color: #2d2d2d;
   border: 1px solid #444;
+  // Fill the column so paired cards in a row stay the same height (the row's
+  // flex columns already stretch — this makes the card fill the taller one).
+  height: 100%;
 }
 
 .status-card.status-ok {

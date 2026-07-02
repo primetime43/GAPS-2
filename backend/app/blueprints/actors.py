@@ -31,7 +31,14 @@ def popular_actors():
     if not current_app.tmdb_service.api_key:
         return jsonify(error='No TMDB API key configured'), 400
     media_type = request.args.get('mediaType', default='movie', type=str).lower()
-    return jsonify(results=current_app.tmdb_service.get_popular_people(media_type))
+    # ?refresh=true bypasses the cache and rebuilds now (the manual Refresh button).
+    force = request.args.get('refresh', 'false').lower() == 'true'
+    people, refreshed_at, next_refresh_at = current_app.tmdb_service.get_popular_people(
+        media_type, force=force)
+    # Unix epoch seconds (or null): when the list was built and when it goes stale,
+    # so the UI can show both. The cache is lazy — it rebuilds on the first request
+    # after nextRefreshAt, not on a timer.
+    return jsonify(results=people, refreshedAt=refreshed_at, nextRefreshAt=next_refresh_at)
 
 
 @actors_bp.route('/<int:person_id>/gaps', methods=['GET'])

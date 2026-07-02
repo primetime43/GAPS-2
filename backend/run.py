@@ -16,4 +16,8 @@ if __name__ == '__main__':
     if auto_open and is_production:
         webbrowser.open(f'http://localhost:{port}')
 
-    app.run(host='0.0.0.0', port=port, debug=not is_production)
+    # threaded=True so the dev server handles the SPA's concurrent /api calls on
+    # separate connections instead of serializing them on one (single-threaded
+    # werkzeug resets overlapping connections, surfacing as proxy ECONNRESETs).
+    # Dev-only — production serves via gunicorn (wsgi.py).
+    app.run(host='0.0.0.0', port=port, debug=not is_production, threaded=True)

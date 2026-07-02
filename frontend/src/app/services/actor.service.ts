@@ -24,12 +24,20 @@ export class ActorService {
   }
 
   /** Suggested actors for the empty-search grid, from popular movies or TV
-   * shows depending on the active tab. */
-  getPopular(mediaType: 'movie' | 'tv' = 'movie'): Observable<PersonResult[]> {
-    const params = new HttpParams().set('mediaType', mediaType);
-    return this.http.get<{ results: PersonResult[] }>(
+   * shows depending on the active tab. `refreshedAt`/`nextRefreshAt` are Unix
+   * epochs (seconds) for when the list was built and when it goes stale (null if
+   * unavailable). `force=true` bypasses the server cache and rebuilds now. */
+  getPopular(mediaType: 'movie' | 'tv' = 'movie', force = false):
+    Observable<{ people: PersonResult[]; refreshedAt: number | null; nextRefreshAt: number | null }> {
+    let params = new HttpParams().set('mediaType', mediaType);
+    if (force) params = params.set('refresh', 'true');
+    return this.http.get<{ results: PersonResult[]; refreshedAt: number | null; nextRefreshAt: number | null }>(
       `${environment.apiUrl}/actors/popular`, { params }
-    ).pipe(map(res => res.results));
+    ).pipe(map(res => ({
+      people: res.results,
+      refreshedAt: res.refreshedAt ?? null,
+      nextRefreshAt: res.nextRefreshAt ?? null,
+    })));
   }
 
   getActorGaps(

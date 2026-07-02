@@ -55,6 +55,12 @@ export class ActorsComponent implements OnInit, OnDestroy {
   searchPerformed = false;
   // Trending actors shown as clickable suggestions when the search box is empty.
   popularActors: PersonResult[] = [];
+  // When that suggestion list was last built server-side, and when it goes stale
+  // (ms epoch for the date pipe); null until loaded. Shown so the user knows how
+  // fresh the picks are. `refreshingPopular` guards the manual Refresh button.
+  popularRefreshedAt: number | null = null;
+  popularNextRefreshAt: number | null = null;
+  refreshingPopular = false;
   selectedActor: PersonResult | null = null;
 
   loadingGaps = false;
@@ -89,11 +95,6 @@ export class ActorsComponent implements OnInit, OnDestroy {
   // live-toggleable from the Filters menu).
   showImdbRatings = false;
   showTmdbRatings = true;
-  // IMDb ratings are no longer fetched automatically (each title needs its own
-  // TMDB->IMDb lookup, which is slow on a full filmography). The user pulls them
-  // on demand via a button; these track that fetch per loaded filmography.
-  loadingImdbRatings = false;
-  imdbRatingsLoaded = false;
 
   // Fuller profile for the selected actor, shown as a header above the results.
   actorDetails: PersonDetails | null = null;
@@ -218,10 +219,25 @@ export class ActorsComponent implements OnInit, OnDestroy {
     }
   }
 
-  /** Load the empty-state suggestions for the active tab (best-effort). */
-  private loadPopular(): void {
-    this.actorService.getPopular(this.mediaType).pipe(catchError(() => of([] as PersonResult[])))
-      .subscribe(people => this.popularActors = people);
+  /** Load the empty-state suggestions for the active tab (best-effort).
+   * `force` bypasses the server cache (the manual Refresh button). */
+  private loadPopular(force = false): void {
+    if (force) this.refreshingPopular = true;
+    this.actorService.getPopular(this.mediaType, force)
+      .pipe(catchError(() => of({ people: [] as PersonResult[], refreshedAt: null, nextRefreshAt: null })))
+      .subscribe(res => {
+        this.popularActors = res.people;
+        // Backend sends seconds; the date pipe wants milliseconds.
+        this.popularRefreshedAt = res.refreshedAt != null ? res.refreshedAt * 1000 : null;
+        this.popularNextRefreshAt = res.nextRefreshAt != null ? res.nextRefreshAt * 1000 : null;
+        this.refreshingPopular = false;
+      });
+  }
+
+  /** Rebuild the popular-actor suggestions now, ignoring the cache TTL. */
+  refreshPopular(): void {
+    if (this.refreshingPopular) return;
+    this.loadPopular(true);
   }
 
   private loadIgnored(): void {
@@ -271,7 +287,6 @@ export class ActorsComponent implements OnInit, OnDestroy {
       next: (res) => {
         this.actorDetails = res.actor;
         this.allGaps = this.normalizeGaps(res.gaps);
-        this.imdbRatingsLoaded = false;  // fresh filmography → on-demand again
         this.applyFilter();
         this.loadingGaps = false;
       },
@@ -370,22 +385,6 @@ export class ActorsComponent implements OnInit, OnDestroy {
       .subscribe({ next: () => {}, error: () => {} });
   }
 
-  /**
-   * On-demand fetch of IMDb ratings for the loaded movie filmography (triggered
-   * by the "Load IMDb ratings" button). Not called automatically — resolving each
-   * title's IMDb id is a per-movie TMDB lookup, slow across a whole filmography.
-   * IMDb ratings are resolved from TMDB *movie* ids; TV gaps key on tvdbId.
-   */
-  loadImdbRatings(): void {
-    if (!this.showImdbRatings || this.mediaType !== 'movie') return;
-    this.loadingImdbRatings = true;
-    this.gapView.applyImdbRatings(this.allGaps).subscribe(() => {
-      this.loadingImdbRatings = false;
-      this.imdbRatingsLoaded = true;
-      this.applyFilter();  // reflect new ratings when sorting by rating
-    });
-  }
-
   // -- Filters --
 
   onFilterChange(): void { this.applyFilter(); }
@@ -396,7 +395,6 @@ export class ActorsComponent implements OnInit, OnDestroy {
       showImdbRatings: this.showImdbRatings,
       showTmdbRatings: this.showTmdbRatings,
     }).subscribe({ next: () => {}, error: () => {} });
-    // No auto-fetch — the "Load IMDb ratings" button pulls them on demand.
   }
 
   setView(view: 'all' | 'owned' | 'missing'): void {
