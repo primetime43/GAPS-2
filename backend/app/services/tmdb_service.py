@@ -655,7 +655,9 @@ class TmdbService:
         list of stored/stripped movie gaps by reading the warm collection cache —
         the same data a live scan builds, with no network calls. Used to reopen a
         saved scan (scan history) in the Missing view. A gap whose movie isn't in
-        the cache is returned unchanged (just its stored fields, poster None).
+        the cache (miss or expired TTL) is returned unchanged (its stored fields,
+        poster None); the frontend's future-release filter falls back to the
+        stored year, so the title still shows without a poster.
         """
         out = []
         with self._cache_lock:

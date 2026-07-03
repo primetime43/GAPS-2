@@ -24,20 +24,19 @@ MAX_HISTORY = 50
 _RECORD_LOCK = threading.Lock()
 
 
-def _is_future_release(gap: dict, is_movie: bool, today: str, current_year: int) -> bool:
+def _is_future_release(gap: dict, today: str, current_year: int) -> bool:
     """Whether a gap is an unreleased/future title.
 
     Mirror of `isFutureRelease` in
     frontend/src/app/components/recommended/recommended.component.ts — kept in
     sync so scheduled scans count gaps the same way the dashboard displays them.
-    Prefer an exact date (movie release / TV first-aired); a movie with no date
-    is treated as unannounced/future, while TV falls back to the year.
+    Prefer an exact date (movie release / TV first-aired); with no date, fall
+    back to the year, the same for movies and TV (an unparseable year counts as
+    released).
     """
     release_date = gap.get('releaseDate') or ''
     if release_date:
         return release_date[:10] > today
-    if is_movie:
-        return True
     try:
         year = int(str(gap.get('year'))[:4])
     except (TypeError, ValueError):
@@ -65,7 +64,7 @@ def actionable_missing(media_type: str, gaps: list[dict]) -> list[dict]:
     if prefs.get('hideFutureReleasesByDefault'):
         now = datetime.now(timezone.utc)
         today = now.strftime('%Y-%m-%d')
-        result = [g for g in result if not _is_future_release(g, is_movie, today, now.year)]
+        result = [g for g in result if not _is_future_release(g, today, now.year)]
     return result
 
 
