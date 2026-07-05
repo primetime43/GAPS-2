@@ -633,22 +633,21 @@ class TmdbService:
             })
         return entries
 
-    def _cached_movie_part(self, tmdb_id: int | None) -> dict | None:
-        """The cached TMDB `part` dict for a movie (poster/ratings/genres), found
-        via the warm collection membership + collection caches, or None on a miss.
-        Caller holds `_cache_lock`."""
-        if tmdb_id is None:
-            return None
-        coll_id = self._movie_collection_cache.get(tmdb_id)
-        if coll_id is None:
-            return None
-        coll = self._collection_cache.get(coll_id)
-        if not coll:
-            return None
-        for part in coll.get("parts", []):
-            if part.get("id") == tmdb_id:
-                return part
-        return None
+    def _cached_parts_by_id(self) -> dict[int, dict]:
+        """A {movie_id: part} index over every cached collection's `parts`.
+
+        A gap is a *missing* movie (a collection member the user doesn't own), so
+        its id is never a key in `_movie_collection_cache` (that maps *owned*
+        movies to their collection) — but it does appear in its collection's
+        `parts` list, poster and all. So hydration indexes the parts, not the
+        owned-membership map. Caller holds `_cache_lock`."""
+        parts: dict[int, dict] = {}
+        for coll in self._collection_cache.values():
+            for part in coll.get("parts", []):
+                pid = part.get("id")
+                if pid is not None:
+                    parts.setdefault(pid, part)
+        return parts
 
     def hydrate_gaps(self, gaps: list[dict]) -> list[dict]:
         """Re-attach display fields (poster, ratings, genres, release date) to a
@@ -661,9 +660,10 @@ class TmdbService:
         """
         out = []
         with self._cache_lock:
+            parts_by_id = self._cached_parts_by_id()
             for g in gaps:
                 tmdb_id = g.get("tmdbId")
-                part = self._cached_movie_part(tmdb_id)
+                part = parts_by_id.get(tmdb_id) if tmdb_id is not None else None
                 if not part:
                     out.append(g)
                     continue
