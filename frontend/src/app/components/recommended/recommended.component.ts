@@ -1046,8 +1046,9 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     const today = new Date().toISOString().slice(0, 10);
     // Prefer an exact date (movie release date or TV first-aired date).
     if (gap.releaseDate) return gap.releaseDate > today;
-    if (this.mediaType === 'movie') return true; // no date → unannounced/future
-    // TV with no first-aired date: fall back to the year.
+    // No exact date (e.g. a reopened saved scan whose gaps were stripped of the
+    // release date): fall back to the year, the same for movies and TV. An
+    // unparseable year counts as released so the title isn't hidden by default.
     const year = parseInt(String(gap.year), 10);
     return year ? year > new Date().getFullYear() : false;
   }
