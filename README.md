@@ -35,7 +35,7 @@ GAPS 2 connects to your Plex, Jellyfin, or Emby server, looks at what you own, a
 - Responsive dark-themed UI (Angular 19 + Bootstrap 5)
 - Dockerized deployment with persistent, encrypted configuration
 - Windows standalone executable (single .exe via PyInstaller)
-- Automated releases via GitHub Actions (Windows exe + Docker Hub)
+- Automated releases via GitHub Actions (Windows exe + Docker Hub + GitHub Container Registry)
 
 ## Quick Start
 
@@ -51,6 +51,12 @@ Pull from [Docker Hub](https://hub.docker.com/r/primetime43/gaps-2):
 docker run -d -p 4277:4277 -v gaps2-data:/app/data primetime43/gaps-2:latest
 ```
 
+The same image is also published to the [GitHub Container Registry](https://github.com/primetime43/GAPS-2/pkgs/container/gaps-2) if you prefer to pull from there:
+
+```bash
+docker run -d -p 4277:4277 -v gaps2-data:/app/data ghcr.io/primetime43/gaps-2:latest
+```
+
 Or use Docker Compose:
 
 ```bash
@@ -59,10 +65,12 @@ docker compose -f docker/docker-compose.yml up -d
 
 The app will be available at `http://localhost:4277`.
 
-**Development builds:** unreleased changes on the `develop` branch are published to Docker Hub on every push. Use these for testing upcoming features — they are not considered stable.
+**Development builds:** unreleased changes on the `develop` branch are published to both Docker Hub and the GitHub Container Registry on every push. Use these for testing upcoming features — they are not considered stable.
 
 ```bash
 docker pull primetime43/gaps-2:develop
+# or
+docker pull ghcr.io/primetime43/gaps-2:develop
 ```
 
 > **Persist `/app/data`.** GAPS encrypts saved settings (API keys, tokens, server URLs) in `backend/data/config.enc`. The encryption key lives next to it as `.config.key`, so both files must be on a persistent volume — otherwise every container recreation generates a fresh key and the old config becomes unreadable. The `docker run` example above and the Compose file already mount `/app/data`; if you write your own command (e.g. an unRAID template), make sure the mount is there. To override the key explicitly — for moving between hosts or sharing a config across replicas — set the `GAPS2_CONFIG_KEY` environment variable to a Fernet key (output of `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`).
