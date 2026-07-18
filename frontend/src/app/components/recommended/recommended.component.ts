@@ -229,6 +229,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   private renderObserver?: IntersectionObserver;
   // Ignored items (TMDB ids for movies, TheTVDB ids for shows — reloaded on toggle)
   ignoredIds: Set<number> = new Set();
+  pendingIgnoreGap: Gap | null = null;
   showIgnored = false;
   selectedItem: BrowseItem | null = null;
   scanMode = false;
@@ -1057,16 +1058,36 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     return this.ignoredIds.has(gap.id);
   }
 
+  get ignoreConfirmationMessage(): string {
+    return this.pendingIgnoreGap
+      ? `Are you sure you want to ignore "${this.pendingIgnoreGap.name}"?`
+      : '';
+  }
+
   toggleIgnore(gap: Gap, event: Event): void {
     event.stopPropagation();
     if (this.ignoredIds.has(gap.id)) {
       this.ignoredIds.delete(gap.id);
       this.ignoreRemove(gap.id).subscribe({ error: () => this.ignoredIds.add(gap.id) });
-    } else {
-      this.ignoredIds.add(gap.id);
-      this.ignoreAdd(gap.id).subscribe({ error: () => this.ignoredIds.delete(gap.id) });
+      this.applyFilter();
+      return;
     }
+
+    this.pendingIgnoreGap = gap;
+  }
+
+  onIgnoreConfirm(): void {
+    const gap = this.pendingIgnoreGap;
+    this.pendingIgnoreGap = null;
+    if (!gap || this.ignoredIds.has(gap.id)) return;
+
+    this.ignoredIds.add(gap.id);
+    this.ignoreAdd(gap.id).subscribe({ error: () => this.ignoredIds.delete(gap.id) });
     this.applyFilter();
+  }
+
+  onIgnoreCancel(): void {
+    this.pendingIgnoreGap = null;
   }
 
   // The template renders windowed groups (progressive rendering), so the group

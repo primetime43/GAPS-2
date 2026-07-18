@@ -73,6 +73,7 @@ export class ActorsComponent implements OnInit, OnDestroy {
   renderLimit = this.RENDER_CHUNK;
   private renderObserver?: IntersectionObserver;
   ignoredIds: Set<number> = new Set();
+  pendingIgnoreGap: Gap | null = null;
 
   // Primary owned/missing selector — the whole point of the page.
   view: 'all' | 'owned' | 'missing' = 'all';
@@ -554,11 +555,31 @@ export class ActorsComponent implements OnInit, OnDestroy {
     if (this.ignoredIds.has(gap.id)) {
       this.ignoredIds.delete(gap.id);
       this.ignoreRemove(gap.id).subscribe({ error: () => this.ignoredIds.add(gap.id) });
-    } else {
-      this.ignoredIds.add(gap.id);
-      this.ignoreAdd(gap.id).subscribe({ error: () => this.ignoredIds.delete(gap.id) });
+      this.applyFilter();
+      return;
     }
+
+    this.pendingIgnoreGap = gap;
+  }
+
+  get ignoreConfirmationMessage(): string {
+    return this.pendingIgnoreGap
+      ? `Are you sure you want to ignore "${this.pendingIgnoreGap.name}"?`
+      : '';
+  }
+
+  onIgnoreConfirm(): void {
+    const gap = this.pendingIgnoreGap;
+    this.pendingIgnoreGap = null;
+    if (!gap || this.ignoredIds.has(gap.id)) return;
+
+    this.ignoredIds.add(gap.id);
+    this.ignoreAdd(gap.id).subscribe({ error: () => this.ignoredIds.delete(gap.id) });
     this.applyFilter();
+  }
+
+  onIgnoreCancel(): void {
+    this.pendingIgnoreGap = null;
   }
 
   // Windowed rendering may hand a partial group to the template; resolve the
