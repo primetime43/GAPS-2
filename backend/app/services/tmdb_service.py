@@ -1039,6 +1039,75 @@ class TmdbService:
         results.sort(key=lambda r: r["year"])
         return results, None
 
+    def find_similar_movies(
+        self,
+        api_key: str,
+        tmdb_id: int,
+        owned_tmdb_ids: set[int],
+        owned_title_year: set[str] | None = None,
+        pages: int = 3,
+    ) -> tuple[list[dict] | None, str | None]:
+        """Return relevance-ranked TMDB recommendations with ownership metadata."""
+        entries: list[dict] = []
+        seen_ids = {tmdb_id}
+        page_count = max(1, min(pages, 5))
+
+        for page in range(1, page_count + 1):
+            try:
+                resp = self._session.get(
+                    f"{self._base_url}/movie/{tmdb_id}/similar",
+                    params={
+                        "api_key": api_key,
+                        "language": self._language,
+                        "page": page,
+                    },
+                    timeout=10,
+                )
+                if resp.status_code != 200:
+                    if page == 1:
+                        return None, f"TMDB similar-movies request failed ({resp.status_code})"
+                    break
+                payload = resp.json()
+            except (requests.exceptions.RequestException, ValueError) as e:
+                logger.warning("TMDB similar lookup failed for %s: %s", tmdb_id, e)
+                if page == 1:
+                    return None, "Failed to fetch similar movies from TMDB"
+                break
+
+            for movie in payload.get("results", []):
+                movie_id = movie.get("id")
+                if not movie_id or movie_id in seen_ids:
+                    continue
+                seen_ids.add(movie_id)
+
+                release_date = movie.get("release_date") or ""
+                title = movie.get("title") or "Unknown"
+                title_year = f"{title.strip().lower()}|{release_date[:4]}"
+                is_owned = movie_id in owned_tmdb_ids
+                if not is_owned and owned_title_year:
+                    is_owned = title_year in owned_title_year
+
+                poster = movie.get("poster_path")
+                entries.append({
+                    "tmdbId": movie_id,
+                    "name": title,
+                    "year": release_date[:4] if release_date else "N/A",
+                    "releaseDate": release_date,
+                    "posterUrl": f"{self._image_base_url}{poster}" if poster else None,
+                    "overview": movie.get("overview", ""),
+                    "collectionName": "Similar Movies",
+                    "owned": is_owned,
+                    "voteAverage": movie.get("vote_average") or 0,
+                    "voteCount": movie.get("vote_count") or 0,
+                    "genreIds": movie.get("genre_ids") or [],
+                    "popularity": movie.get("popularity") or 0,
+                })
+
+            if page >= int(payload.get("total_pages") or 1):
+                break
+
+        return entries, None
+
     # -- Actor / actress gaps (issue #49) --
     # Unlike collection gaps (a background scan of the whole library), an actor
     # lookup is search-driven and synchronous: search a person, fetch their

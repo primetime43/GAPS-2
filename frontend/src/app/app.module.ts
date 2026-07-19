@@ -13,6 +13,7 @@ import { ReusableRouteStrategy } from './reusable-route.strategy';
 import { HeaderComponent } from './components/header/header.component';
 import { RecommendedComponent } from './components/recommended/recommended.component';
 import { ActorsComponent } from './components/actors/actors.component';
+import { SimilarComponent } from './components/similar/similar.component';
 import { AboutComponent } from './components/about/about.component';
 import { IndexComponent } from './index/index.component';
 import { PlexSettingsComponent } from './components/settings/plex-settings/plex-settings.component';
@@ -39,6 +40,7 @@ import { CompactNumberPipe } from './pipes/compact-number.pipe';
         ScanHistoryComponent,
         RecommendedComponent,
         ActorsComponent,
+        SimilarComponent,
         AboutComponent,
         IndexComponent,
         PlexSettingsComponent,

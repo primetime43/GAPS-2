@@ -18,6 +18,7 @@ GAPS 2 connects to your Plex, Jellyfin, or Emby server, looks at what you own, a
 **Find what's missing**
 - **Multi-server support** — Plex (OAuth), Jellyfin, and Emby
 - **Find missing movies** from TMDB collections, and **missing TV shows** from TheTVDB's official franchise lists
+- **Discover similar movies** from a title you own, with owned/missing status powered by TMDB IDs
 - **Unified "Missing" view** with a Movies / TV Shows toggle — browse a library, scan it for gaps, or click a single title to check just its collection/franchise
 - **Find gaps by actor/actress** — search a performer (e.g. *Will Smith*) on the **Actors** page and see their full filmography split into what you own and what you're missing
 

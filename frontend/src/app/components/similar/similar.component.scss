@@ -1,0 +1,84 @@
+/* Result cards, badges, inputs, and Radarr buttons are shared in src/styles.scss. */
+
+.seed-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+}
+
+.seed-card {
+  padding: 0;
+  overflow: hidden;
+  color: inherit;
+  text-align: left;
+  background: #2d2d2d;
+  border: 1px solid #444;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color 0.2s, transform 0.2s;
+
+  &:hover,
+  &:focus {
+    border-color: #00bc8c;
+    transform: translateY(-2px);
+  }
+
+  img {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+}
+
+.seed-placeholder {
+  display: flex;
+  height: 180px;
+  align-items: center;
+  justify-content: center;
+  color: #666;
+  background: #1a1a1a;
+}
+
+.seed-info {
+  display: block;
+  padding: 8px;
+}
+
+.seed-title,
+.seed-year {
+  display: block;
+}
+
+.seed-title {
+  overflow: hidden;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.seed-year {
+  color: #999;
+  font-size: 12px;
+}
+
+.result-sort {
+  width: 190px;
+}
+
+@media (max-width: 767px) {
+  .result-toolbar,
+  .result-controls {
+    align-items: stretch !important;
+    flex-direction: column;
+  }
+
+  .result-toolbar .btn-group {
+    margin-left: 0 !important;
+  }
+
+  .result-sort {
+    width: 100%;
+  }
+}

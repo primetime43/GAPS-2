@@ -7,6 +7,10 @@ export interface CollectionGap {
   overview: string;
   collectionName: string;
   owned: boolean;
+  voteAverage?: number;
+  voteCount?: number;
+  genreIds?: number[];
+  popularity?: number;
 }
 
 /**
