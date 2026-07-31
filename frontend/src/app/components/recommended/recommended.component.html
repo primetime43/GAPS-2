@@ -10,6 +10,16 @@
   (cancelled)="onFreshScanCancel()"
 ></app-confirm-modal>
 
+<app-confirm-modal
+  [visible]="pendingIgnoreGap !== null"
+  title="Ignore Item"
+  [message]="ignoreConfirmationMessage"
+  confirmText="Ignore"
+  type="warning"
+  (confirmed)="onIgnoreConfirm()"
+  (cancelled)="onIgnoreCancel()"
+></app-confirm-modal>
+
 <div class="container top-margin pb-5">
   <!-- Movies / TV Shows toggle -->
   <div class="btn-group media-type-toggle mb-3" role="group">

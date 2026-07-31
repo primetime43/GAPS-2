@@ -61,6 +61,23 @@ export class RecommendationService {
     ).pipe(map(res => res.gaps));
   }
 
+  getSimilarMovies(
+    tmdbId: number,
+    libraryNames: string[],
+    source: string = 'plex'
+  ): Observable<CollectionGap[]> {
+    let params = new HttpParams()
+      .set('movieId', tmdbId.toString())
+      .set('source', source);
+    for (const libraryName of libraryNames) {
+      params = params.append('libraryNames', libraryName);
+    }
+    return this.http.get<{ gaps: CollectionGap[] }>(
+      environment.apiUrl + '/recommendations/similar',
+      { params }
+    ).pipe(map(res => res.gaps));
+  }
+
   startScan(
     libraryNames: string[],
     showExisting: boolean,

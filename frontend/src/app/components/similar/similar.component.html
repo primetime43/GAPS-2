@@ -1,0 +1,169 @@
+<div class="container top-margin pb-5">
+  <div *ngIf="loading" class="text-center mt-4">
+    <div class="spinner"></div>
+    <p class="text-muted mt-2">Loading...</p>
+  </div>
+
+  <div *ngIf="!loading && !hasServer" class="text-center mt-4">
+    <h4 class="text-muted">No Active Server</h4>
+    <p class="text-muted">
+      Configure a media server first.
+      <a [routerLink]="['/settings']" class="activeLink">Go to Settings</a>
+    </p>
+  </div>
+
+  <div *ngIf="!loading && hasServer">
+    <h3 class="regular-text">Similar If You Liked</h3>
+    <p class="text-muted">
+      Pick a movie you own and discover similar titles from TMDB. Results show what is already in your selected libraries.
+    </p>
+
+    <div *ngIf="libraries.length === 0" class="alert alert-info">
+      No movie libraries found on <strong>{{ activeServerName }}</strong>.
+    </div>
+
+    <div *ngIf="libraries.length > 0" class="pref-card mb-3">
+      <div class="d-flex align-items-center flex-wrap gap-2">
+        <span class="text-muted small me-1">Check ownership in:</span>
+        <div *ngFor="let library of libraries" class="form-check form-check-inline m-0">
+          <input
+            class="form-check-input"
+            type="checkbox"
+            [id]="'similar-lib-' + library.title"
+            [checked]="isLibrarySelected(library.title)"
+            (change)="toggleLibrarySelection(library.title)"
+          >
+          <label class="form-check-label text-muted small" [for]="'similar-lib-' + library.title">
+            {{ library.title }}
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <div *ngIf="loadingMovies || loadingSimilar" class="text-center mt-4">
+      <div class="spinner"></div>
+      <p class="text-muted mt-2">{{ loadingSimilar ? 'Finding similar movies on TMDB...' : 'Loading your movies...' }}</p>
+    </div>
+
+    <div *ngIf="errorMessage" class="alert alert-danger mt-3">{{ errorMessage }}</div>
+
+    <div *ngIf="!loadingMovies && !loadingSimilar && selectedLibraries.length === 0" class="alert alert-info">
+      Select at least one movie library to continue.
+    </div>
+
+    <div *ngIf="!loadingMovies && !loadingSimilar && selectedLibraries.length > 0 && movies.length === 0" class="alert alert-info">
+      No movies with TMDB IDs were found in the selected libraries.
+    </div>
+
+    <div *ngIf="!loadingMovies && !loadingSimilar && movies.length > 0 && !selectedMovie">
+      <h5 class="regular-text">Choose a movie you liked</h5>
+      <input
+        class="form-control dark-input mb-3"
+        type="text"
+        placeholder="Filter your movies by name..."
+        [(ngModel)]="movieFilter"
+        (ngModelChange)="currentPage = 1"
+      >
+
+      <div class="seed-grid">
+        <button
+          *ngFor="let movie of pagedMovies; trackBy: trackByMovie"
+          type="button"
+          class="seed-card"
+          (click)="selectMovie(movie)">
+          <img *ngIf="movie.posterUrl" [src]="movie.posterUrl" [alt]="movie.name" loading="lazy">
+          <span *ngIf="!movie.posterUrl" class="seed-placeholder">No Image</span>
+          <span class="seed-info">
+            <span class="seed-title">{{ movie.name }}</span>
+            <span class="seed-year">{{ movie.year }}</span>
+          </span>
+        </button>
+      </div>
+
+      <div *ngIf="totalPages > 1" class="mt-3 d-flex align-items-center justify-content-center gap-3">
+        <button class="btn btn-sm btn-outline-light" [disabled]="currentPage === 1" (click)="onPageChange(-1)">
+          &larr; Prev
+        </button>
+        <span class="text-muted">Page {{ currentPage }} of {{ totalPages }}</span>
+        <button class="btn btn-sm btn-outline-light" [disabled]="currentPage === totalPages" (click)="onPageChange(1)">
+          Next &rarr;
+        </button>
+      </div>
+    </div>
+
+    <div *ngIf="!loadingSimilar && selectedMovie">
+      <div class="result-toolbar d-flex align-items-center gap-3 mb-3">
+        <button class="btn btn-sm btn-outline-light" (click)="clearResults()">&larr; Back</button>
+        <h5 class="regular-text mb-0">
+          Because you liked {{ selectedMovie.name }} ({{ selectedMovie.year }})
+        </h5>
+        <div class="btn-group btn-group-sm ms-auto" role="group" aria-label="Owned or missing">
+          <button type="button" class="btn"
+                  [class.btn-primary]="view === 'all'"
+                  [class.btn-outline-secondary]="view !== 'all'"
+                  (click)="setView('all')">All ({{ allSimilar.length }})</button>
+          <button type="button" class="btn"
+                  [class.btn-primary]="view === 'owned'"
+                  [class.btn-outline-secondary]="view !== 'owned'"
+                  (click)="setView('owned')">Owned ({{ ownedCount }})</button>
+          <button type="button" class="btn"
+                  [class.btn-primary]="view === 'missing'"
+                  [class.btn-outline-secondary]="view !== 'missing'"
+                  (click)="setView('missing')">Missing ({{ missingCount }})</button>
+        </div>
+      </div>
+
+      <div class="result-controls d-flex gap-2 mb-3">
+        <input
+          class="form-control dark-input"
+          type="text"
+          placeholder="Filter similar movies..."
+          [(ngModel)]="resultFilter"
+          (ngModelChange)="applyFilter()"
+        >
+        <select class="form-select dark-select result-sort" [(ngModel)]="sortBy" (ngModelChange)="applyFilter()">
+          <option value="relevance">TMDB relevance</option>
+          <option value="rating">Rating</option>
+          <option value="year">Year (newest)</option>
+          <option value="name">Title (A-Z)</option>
+        </select>
+      </div>
+
+      <div *ngIf="filteredSimilar.length > 0" class="rec-grid">
+        <article *ngFor="let movie of filteredSimilar; trackBy: trackByGap" class="rec-card" [class.owned]="movie.owned">
+          <div class="owned-badge" *ngIf="movie.owned">Owned</div>
+          <div class="missing-badge" *ngIf="!movie.owned">Missing</div>
+          <a [href]="movie.externalUrl" target="_blank" rel="noopener noreferrer">
+            <img *ngIf="movie.posterUrl" [src]="movie.posterUrl" [alt]="movie.name" class="rec-poster" loading="lazy">
+            <div *ngIf="!movie.posterUrl" class="rec-poster-placeholder">No Image</div>
+          </a>
+          <div class="rec-info">
+            <a [href]="movie.externalUrl" target="_blank" rel="noopener noreferrer" class="rec-title-link">
+              {{ movie.name }}
+            </a>
+            <div class="rec-year">{{ movie.year }}</div>
+            <div class="card-ratings" *ngIf="movie.tmdbRating">
+              <span class="rating-chip tmdb" [title]="(movie.tmdbVotes | number) + ' votes on TMDB'">
+                <img class="rating-logo" src="assets/images/tmdb-logo.svg" alt="TMDB">
+                {{ movie.tmdbRating | number:'1.1-1' }}
+              </span>
+            </div>
+            <button
+              *ngIf="canSendToRadarr(movie)"
+              class="btn btn-sm radarr-btn"
+              [ngClass]="radarrButtonClass(movie.id)"
+              [disabled]="radarrStatus(movie.id) === 'sending' || radarrStatus(movie.id) === 'sent'"
+              [title]="radarrError(movie.id) || 'Add this movie to Radarr'"
+              (click)="sendToRadarr(movie, $event)">
+              {{ radarrLabel(movie.id) }}
+            </button>
+          </div>
+        </article>
+      </div>
+
+      <p *ngIf="filteredSimilar.length === 0 && !errorMessage" class="text-muted">
+        {{ allSimilar.length === 0 ? 'TMDB did not return any similar movies for this title.' : 'No movies match the current filters.' }}
+      </p>
+    </div>
+  </div>
+</div>

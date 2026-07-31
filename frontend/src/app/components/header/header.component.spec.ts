@@ -21,13 +21,14 @@ describe('HeaderComponent', () => {
     expect(component).toBeTruthy();
   });
 
-  it('should render navigation links for Dashboard, Missing, Settings, Logs, and About', () => {
+  it('should render the primary navigation links', () => {
     const el = fixture.nativeElement as HTMLElement;
     const linkTexts = Array.from(el.querySelectorAll('a.nav-link'))
       .map(a => a.textContent?.trim());
 
     expect(linkTexts.some(t => t?.includes('Dashboard'))).toBeTrue();
     expect(linkTexts.some(t => t?.includes('Missing'))).toBeTrue();
+    expect(linkTexts.some(t => t?.includes('Similar'))).toBeTrue();
     expect(linkTexts.some(t => t?.includes('Settings'))).toBeTrue();
     expect(linkTexts.some(t => t?.includes('Logs'))).toBeTrue();
     expect(linkTexts.some(t => t?.includes('About'))).toBeTrue();

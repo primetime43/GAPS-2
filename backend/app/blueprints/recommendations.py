@@ -58,6 +58,45 @@ def get_gaps_for_movie():
     return jsonify(gaps=gaps)
 
 
+@recommendations_bp.route('/similar', methods=['GET'])
+def get_similar_movies():
+    """Find TMDB movies similar to one owned movie and mark library ownership."""
+    movie_id = request.args.get('movieId', type=int)
+    library_names = request.args.getlist('libraryNames')
+    source = request.args.get('source', default='plex', type=str)
+
+    if not movie_id:
+        return jsonify(error='movieId (TMDB ID) parameter is required'), 400
+    if not library_names:
+        return jsonify(error='At least one libraryNames parameter is required'), 400
+
+    api_key = current_app.tmdb_service.api_key
+    if not api_key:
+        return jsonify(error='No TMDB API key configured'), 400
+
+    cache = _get_movies_cache(source)
+    owned_ids: set[int] = set()
+    owned_title_year: set[str] = set()
+    for name in library_names:
+        library_data = cache.get(name, {})
+        owned_ids.update(library_data.get('tmdbIds', []))
+        for movie in library_data.get('movies', []):
+            title = (movie.get('name') or '').strip().lower()
+            year = str(movie.get('year') or '')
+            if title:
+                owned_title_year.add(f"{title}|{year}")
+
+    movies, error = current_app.tmdb_service.find_similar_movies(
+        api_key=api_key,
+        tmdb_id=movie_id,
+        owned_tmdb_ids=owned_ids,
+        owned_title_year=owned_title_year,
+    )
+    if error:
+        return jsonify(error=error), 502
+    return jsonify(gaps=movies)
+
+
 @recommendations_bp.route('/scan', methods=['POST'])
 def scan_library_gaps():
     """Start a library scan in the background."""

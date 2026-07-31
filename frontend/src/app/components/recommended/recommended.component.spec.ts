@@ -271,19 +271,51 @@ describe('RecommendedComponent', () => {
     expect(component.missingCount).toBe(1);
   });
 
-  it('toggleIgnore should add/remove from ignored set', () => {
+  it('toggleIgnore should request confirmation before ignoring an item', () => {
     const g = gap({ id: 42, name: 'Test', groupName: 'C', owned: false });
     component.allGaps = [g];
     component.ignoredIds = new Set();
     recommendationService.addIgnored.and.returnValue(of({}));
+
+    const event = new Event('click');
+    component.toggleIgnore(g, event);
+
+    expect(component.pendingIgnoreGap).toBe(g);
+    expect(component.ignoreConfirmationMessage).toContain('Test');
+    expect(component.ignoredIds.has(42)).toBeFalse();
+    expect(recommendationService.addIgnored).not.toHaveBeenCalled();
+
+    component.onIgnoreConfirm();
+
+    expect(component.pendingIgnoreGap).toBeNull();
+    expect(component.ignoredIds.has(42)).toBeTrue();
+    expect(recommendationService.addIgnored).toHaveBeenCalledWith(42);
+  });
+
+  it('onIgnoreCancel should leave the item unignored', () => {
+    const g = gap({ id: 42, name: 'Test', groupName: 'C', owned: false });
+    component.pendingIgnoreGap = g;
+    component.ignoredIds = new Set();
+
+    component.onIgnoreCancel();
+
+    expect(component.pendingIgnoreGap).toBeNull();
+    expect(component.ignoredIds.has(42)).toBeFalse();
+    expect(recommendationService.addIgnored).not.toHaveBeenCalled();
+  });
+
+  it('toggleIgnore should unignore an ignored item without confirmation', () => {
+    const g = gap({ id: 42, name: 'Test', groupName: 'C', owned: false });
+    component.allGaps = [g];
+    component.ignoredIds = new Set([42]);
     recommendationService.removeIgnored.and.returnValue(of({}));
 
     const event = new Event('click');
     component.toggleIgnore(g, event);
-    expect(component.ignoredIds.has(42)).toBeTrue();
 
-    component.toggleIgnore(g, event);
+    expect(component.pendingIgnoreGap).toBeNull();
     expect(component.ignoredIds.has(42)).toBeFalse();
+    expect(recommendationService.removeIgnored).toHaveBeenCalledWith(42);
   });
 
   it('toggleLibrarySelection should add/remove from selectedLibraries', () => {

@@ -1,3 +1,13 @@
+<app-confirm-modal
+  [visible]="pendingIgnoreGap !== null"
+  title="Ignore Item"
+  [message]="ignoreConfirmationMessage"
+  confirmText="Ignore"
+  type="warning"
+  (confirmed)="onIgnoreConfirm()"
+  (cancelled)="onIgnoreCancel()"
+></app-confirm-modal>
+
 <div class="container top-margin pb-5">
   <!-- Loading -->
   <div *ngIf="loading" class="text-center mt-4">
