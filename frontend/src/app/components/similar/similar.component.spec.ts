@@ -13,8 +13,10 @@ import { Movie } from '../../models/movie.model';
 describe('SimilarComponent', () => {
   let component: SimilarComponent;
   let fixture: ComponentFixture<SimilarComponent>;
+  let activeServerService: jasmine.SpyObj<ActiveServerService>;
   let libraryService: jasmine.SpyObj<LibraryService>;
   let recommendationService: jasmine.SpyObj<RecommendationService>;
+  const librarySelectionsKey = 'gaps2.similar.librarySelections';
 
   const seed: Movie = {
     name: 'Alien',
@@ -25,7 +27,8 @@ describe('SimilarComponent', () => {
   };
 
   beforeEach(async () => {
-    const activeServerService = jasmine.createSpyObj<ActiveServerService>('ActiveServerService', ['getActive']);
+    localStorage.removeItem(librarySelectionsKey);
+    activeServerService = jasmine.createSpyObj<ActiveServerService>('ActiveServerService', ['getActive']);
     libraryService = jasmine.createSpyObj<LibraryService>('LibraryService', ['getMovies']);
     const preferencesService = jasmine.createSpyObj<PreferencesService>('PreferencesService', ['load']);
     recommendationService = jasmine.createSpyObj<RecommendationService>('RecommendationService', ['getSimilarMovies']);
@@ -38,11 +41,17 @@ describe('SimilarComponent', () => {
       source: 'plex',
       typeLabel: 'Plex',
       server: 'Test Plex',
-      libraries: [{ title: 'Movies', type: 'movie' }],
+      libraries: [
+        { title: 'Movies', type: 'movie' },
+        { title: '4K Movies', type: 'movie' },
+      ],
       response: {
         server: 'Test Plex',
         token: '',
-        libraries: [{ title: 'Movies', type: 'movie' }],
+        libraries: [
+          { title: 'Movies', type: 'movie' },
+          { title: '4K Movies', type: 'movie' },
+        ],
       },
     };
     activeServerService.getActive.and.returnValue(of(active));
@@ -67,6 +76,8 @@ describe('SimilarComponent', () => {
     component = fixture.componentInstance;
   });
 
+  afterEach(() => localStorage.removeItem(librarySelectionsKey));
+
   it('loads TMDB-backed movies from the default movie library', fakeAsync(() => {
     fixture.detectChanges();
     tick();
@@ -74,6 +85,30 @@ describe('SimilarComponent', () => {
     expect(component.selectedLibraries).toEqual(['Movies']);
     expect(libraryService.getMovies).toHaveBeenCalledWith('Movies', 'plex');
     expect(component.movies).toEqual([seed]);
+  }));
+
+  it('restores the selected libraries for the active media server', fakeAsync(() => {
+    localStorage.setItem(librarySelectionsKey, JSON.stringify({
+      'plex:Test Plex': ['4K Movies'],
+    }));
+
+    fixture.detectChanges();
+    tick();
+
+    expect(component.selectedLibraries).toEqual(['4K Movies']);
+    expect(libraryService.getMovies).toHaveBeenCalledWith('4K Movies', 'plex');
+  }));
+
+  it('persists library checkbox changes for the active media server', fakeAsync(() => {
+    fixture.detectChanges();
+    tick();
+
+    component.toggleLibrarySelection('4K Movies');
+    tick();
+
+    expect(JSON.parse(localStorage.getItem(librarySelectionsKey) || '{}')).toEqual({
+      'plex:Test Plex': ['Movies', '4K Movies'],
+    });
   }));
 
   it('uses the selected movie TMDB ID and marks owned and missing results', fakeAsync(() => {

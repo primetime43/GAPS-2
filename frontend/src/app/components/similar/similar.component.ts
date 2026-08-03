@@ -21,6 +21,8 @@ type SendState = 'sending' | 'sent' | 'error';
   standalone: false,
 })
 export class SimilarComponent implements OnInit {
+  private static readonly LIBRARY_SELECTIONS_KEY = 'gaps2.similar.librarySelections';
+
   loading = true;
   loadingMovies = false;
   loadingSimilar = false;
@@ -75,11 +77,7 @@ export class SimilarComponent implements OnInit {
       this.itemsPerPage = prefs?.moviesPerPage || 50;
 
       if (this.libraries.length) {
-        const preferred = prefs?.defaultLibrary;
-        const initial = preferred && this.libraries.some(lib => lib.title === preferred)
-          ? preferred
-          : this.libraries[0].title;
-        this.selectedLibraries = [initial];
+        this.restoreLibrarySelection(prefs?.defaultLibrary);
         this.loadMovies();
       }
       this.loading = false;
@@ -109,11 +107,59 @@ export class SimilarComponent implements OnInit {
     } else {
       this.selectedLibraries.push(title);
     }
+    this.saveLibrarySelection();
     this.loadMovies();
   }
 
   isLibrarySelected(title: string): boolean {
     return this.selectedLibraries.includes(title);
+  }
+
+  private restoreLibrarySelection(defaultLibrary?: string): void {
+    const selections = this.loadLibrarySelections();
+    const saved = selections[this.librarySelectionContext()];
+    if (Array.isArray(saved)) {
+      const available = new Set(this.libraries.map(library => library.title));
+      const valid = saved.filter((title, index) =>
+        typeof title === 'string' && available.has(title) && saved.indexOf(title) === index
+      );
+      if (valid.length || saved.length === 0) {
+        this.selectedLibraries = valid;
+        return;
+      }
+    }
+
+    const initial = defaultLibrary && this.libraries.some(lib => lib.title === defaultLibrary)
+      ? defaultLibrary
+      : this.libraries[0].title;
+    this.selectedLibraries = [initial];
+  }
+
+  private saveLibrarySelection(): void {
+    try {
+      const selections = this.loadLibrarySelections();
+      selections[this.librarySelectionContext()] = [...this.selectedLibraries];
+      localStorage.setItem(
+        SimilarComponent.LIBRARY_SELECTIONS_KEY,
+        JSON.stringify(selections),
+      );
+    } catch {
+      // Selection persistence is non-critical when browser storage is unavailable.
+    }
+  }
+
+  private loadLibrarySelections(): Record<string, string[]> {
+    try {
+      const raw = localStorage.getItem(SimilarComponent.LIBRARY_SELECTIONS_KEY);
+      const parsed = raw ? JSON.parse(raw) : null;
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+
+  private librarySelectionContext(): string {
+    return `${this.activeSource}:${this.activeServerName}`;
   }
 
   loadMovies(): void {
