@@ -67,6 +67,15 @@
   width: 190px;
 }
 
+.rating-filter-button,
+.imdb-load-button {
+  white-space: nowrap;
+}
+
+.rating-filter-menu {
+  min-width: 260px;
+}
+
 @media (max-width: 767px) {
   .result-toolbar,
   .result-controls {
@@ -79,6 +88,12 @@
   }
 
   .result-sort {
+    width: 100%;
+  }
+
+  .rating-filter-button,
+  .imdb-load-button,
+  .result-controls .dropdown {
     width: 100%;
   }
 }
