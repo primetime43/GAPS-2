@@ -340,9 +340,11 @@
                 <div class="card-ratings" *ngIf="(showImdbRatings && gap.imdbRating) || (showTmdbRatings && gap.tmdbRating)">
                   <span *ngIf="showImdbRatings && gap.imdbRating" class="rating-chip imdb" [title]="(gap.imdbVotes | number) + ' votes on IMDb'">
                     <img class="rating-logo" src="assets/images/imdb-logo.svg" alt="IMDb"> {{ gap.imdbRating | number:'1.1-1' }}
+                    <span class="rating-votes">({{ gap.imdbVotes | compactNumber }})</span>
                   </span>
                   <span *ngIf="showTmdbRatings && gap.tmdbRating" class="rating-chip tmdb" [title]="(gap.tmdbVotes | number) + ' votes on TMDB'">
                     <img class="rating-logo" src="assets/images/tmdb-logo.svg" alt="TMDB"> {{ gap.tmdbRating | number:'1.1-1' }}
+                    <span class="rating-votes">({{ gap.tmdbVotes | compactNumber }})</span>
                   </span>
                 </div>
                 <button

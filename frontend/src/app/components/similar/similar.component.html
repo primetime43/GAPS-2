@@ -113,7 +113,7 @@
         </div>
       </div>
 
-      <div class="result-controls d-flex gap-2 mb-3">
+      <div class="result-controls d-flex align-items-start gap-2 mb-3">
         <input
           class="form-control dark-input"
           type="text"
@@ -127,6 +127,42 @@
           <option value="year">Year (newest)</option>
           <option value="name">Title (A-Z)</option>
         </select>
+
+        <div class="dropdown">
+          <button class="btn btn-outline-secondary dropdown-toggle rating-filter-button" type="button"
+                  data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
+            Rating filters
+          </button>
+          <div class="dropdown-menu dropdown-menu-dark dropdown-menu-end p-3 rating-filter-menu">
+            <div class="form-check mb-2">
+              <input class="form-check-input" type="checkbox" id="similarShowImdb"
+                     [(ngModel)]="showImdbRatings" (ngModelChange)="onRatingPrefsChange()">
+              <label class="form-check-label" for="similarShowImdb">IMDb ratings</label>
+            </div>
+            <div class="form-check mb-3">
+              <input class="form-check-input" type="checkbox" id="similarShowTmdb"
+                     [(ngModel)]="showTmdbRatings" (ngModelChange)="onRatingPrefsChange()">
+              <label class="form-check-label" for="similarShowTmdb">TMDB ratings</label>
+            </div>
+            <label class="form-label small mb-1" for="similarMinRating">Minimum rating</label>
+            <input id="similarMinRating" class="form-control form-control-sm dark-input mb-2" type="number"
+                   min="0" max="10" step="0.1" [(ngModel)]="minRating" (ngModelChange)="applyFilter()">
+            <label class="form-label small mb-1" for="similarMinVotes">Minimum votes</label>
+            <input id="similarMinVotes" class="form-control form-control-sm dark-input" type="number"
+                   min="0" step="1" [(ngModel)]="minVoteCount" (ngModelChange)="applyFilter()">
+            <p class="text-muted small mt-2 mb-0">
+              Uses IMDb after those ratings are loaded; otherwise TMDB. Set either value to 0 to ignore it.
+            </p>
+          </div>
+        </div>
+
+        <button *ngIf="showImdbRatings && allSimilar.length && !imdbRatingsLoaded"
+                class="btn btn-outline-warning imdb-load-button"
+                title="Fetch official IMDb ratings and vote counts for these titles."
+                (click)="loadImdbRatings()" [disabled]="loadingImdbRatings">
+          <span *ngIf="loadingImdbRatings" class="spinner-border spinner-border-sm me-1"></span>
+          {{ loadingImdbRatings ? 'Loading IMDb…' : 'Load IMDb ratings' }}
+        </button>
       </div>
 
       <div *ngIf="filteredSimilar.length > 0" class="rec-grid">
@@ -142,10 +178,18 @@
               {{ movie.name }}
             </a>
             <div class="rec-year">{{ movie.year }}</div>
-            <div class="card-ratings" *ngIf="movie.tmdbRating">
-              <span class="rating-chip tmdb" [title]="(movie.tmdbVotes | number) + ' votes on TMDB'">
+            <div class="card-ratings" *ngIf="(showImdbRatings && movie.imdbRating) || (showTmdbRatings && movie.tmdbRating)">
+              <span *ngIf="showImdbRatings && movie.imdbRating" class="rating-chip imdb"
+                    [title]="(movie.imdbVotes | number) + ' votes on IMDb'">
+                <img class="rating-logo" src="assets/images/imdb-logo.svg" alt="IMDb">
+                {{ movie.imdbRating | number:'1.1-1' }}
+                <span class="rating-votes">({{ movie.imdbVotes | compactNumber }})</span>
+              </span>
+              <span *ngIf="showTmdbRatings && movie.tmdbRating" class="rating-chip tmdb"
+                    [title]="(movie.tmdbVotes | number) + ' votes on TMDB'">
                 <img class="rating-logo" src="assets/images/tmdb-logo.svg" alt="TMDB">
                 {{ movie.tmdbRating | number:'1.1-1' }}
+                <span class="rating-votes">({{ movie.tmdbVotes | compactNumber }})</span>
               </span>
             </div>
             <button

@@ -22,6 +22,11 @@ export class GapViewService {
     return g.imdbRating ?? g.tmdbRating ?? 0;
   }
 
+  /** Vote count paired with the rating returned by ratingOf. */
+  votesOf(g: Gap): number {
+    return g.imdbRating != null ? (g.imdbVotes ?? 0) : (g.tmdbVotes ?? 0);
+  }
+
   yearNum(g: Gap): number {
     const y = parseInt(String(g.year), 10);
     return isNaN(y) ? 0 : y;
