@@ -1,0 +1,12 @@
+# Keep text files consistent across operating systems.
+* text=auto eol=lf
+
+# Windows command scripts require Windows-style line endings.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Never perform line-ending conversion on binary assets.
+*.ico binary -eol
+*.jpg binary -eol
+*.jpeg binary -eol
+*.png binary -eol
