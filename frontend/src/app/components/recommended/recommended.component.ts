@@ -358,6 +358,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     this.itemsChanged$.next();
     this.mediaChanged$.next();
     this.mediaType = type;
+    this.pendingIgnoreGap = null;
     this.savedScanInfo = null;
     this.stopPolling();
     this.selectedLibraries = [];
@@ -549,6 +550,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
         if ((resp.mediaType === 'tv' || resp.mediaType === 'movie') && resp.mediaType !== this.mediaType) {
           this.mediaType = resp.mediaType;
           this.mediaChanged$.next();
+          this.pendingIgnoreGap = null;
           this.applyLibraryFilter();
           this.loadIgnored();
         }
@@ -1091,7 +1093,13 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     event.stopPropagation();
     if (this.ignoredIds.has(gap.id)) {
       this.ignoredIds.delete(gap.id);
-      this.ignoreRemove(gap.id).subscribe({ error: () => this.ignoredIds.add(gap.id) });
+      this.ignoreRemove(gap.id).pipe(takeUntil(this.mediaChanged$), takeUntil(this.destroy$)).subscribe({
+        error: () => {
+          this.ignoredIds.add(gap.id);
+          this.errorMessage = 'Could not update the ignore list. Please try again.';
+          this.applyFilter();
+        },
+      });
       this.applyFilter();
       return;
     }
@@ -1105,7 +1113,13 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     if (!gap || this.ignoredIds.has(gap.id)) return;
 
     this.ignoredIds.add(gap.id);
-    this.ignoreAdd(gap.id).subscribe({ error: () => this.ignoredIds.delete(gap.id) });
+    this.ignoreAdd(gap.id).pipe(takeUntil(this.mediaChanged$), takeUntil(this.destroy$)).subscribe({
+      error: () => {
+        this.ignoredIds.delete(gap.id);
+        this.errorMessage = 'Could not update the ignore list. Please try again.';
+        this.applyFilter();
+      },
+    });
     this.applyFilter();
   }
 
@@ -1126,8 +1140,12 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     const ids = this.fullGroupOf(group).gaps.filter(g => !g.owned && !this.ignoredIds.has(g.id)).map(g => g.id);
     if (!ids.length) return;
     for (const id of ids) this.ignoredIds.add(id);
-    this.ignoreAddBulk(ids).subscribe({
-      error: () => { for (const id of ids) this.ignoredIds.delete(id); this.applyFilter(); }
+    this.ignoreAddBulk(ids).pipe(takeUntil(this.mediaChanged$), takeUntil(this.destroy$)).subscribe({
+      error: () => {
+        for (const id of ids) this.ignoredIds.delete(id);
+        this.errorMessage = 'Could not update the ignore list. Please try again.';
+        this.applyFilter();
+      }
     });
     this.applyFilter();
   }
@@ -1137,8 +1155,12 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     const ids = this.fullGroupOf(group).gaps.filter(g => this.ignoredIds.has(g.id)).map(g => g.id);
     if (!ids.length) return;
     for (const id of ids) this.ignoredIds.delete(id);
-    this.ignoreRemoveBulk(ids).subscribe({
-      error: () => { for (const id of ids) this.ignoredIds.add(id); this.applyFilter(); }
+    this.ignoreRemoveBulk(ids).pipe(takeUntil(this.mediaChanged$), takeUntil(this.destroy$)).subscribe({
+      error: () => {
+        for (const id of ids) this.ignoredIds.add(id);
+        this.errorMessage = 'Could not update the ignore list. Please try again.';
+        this.applyFilter();
+      }
     });
     this.applyFilter();
   }

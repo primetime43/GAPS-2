@@ -478,4 +478,36 @@ describe('RecommendedComponent', () => {
     component.selectItem({ tvdbId: 123, name: 'TV title' } as any);
     expect(component.allGaps[0].externalUrl).toBe('https://thetvdb.com/dereferrer/series/123');
   });
+
+  it('restores visible results when an ignore request fails', () => {
+    const pending = new Subject<any>();
+    recommendationService.addIgnored.and.returnValue(pending);
+    const movie = gap({ id: 123, name: 'Movie', groupName: 'Collection' });
+    component.allGaps = [movie];
+    component.pendingIgnoreGap = movie;
+    component.onIgnoreConfirm();
+    expect(component.filteredGroups).toEqual([]);
+    pending.error(new Error('offline'));
+    expect(component.ignoredIds.has(123)).toBeFalse();
+    expect(component.filteredGroups[0].gaps[0].id).toBe(123);
+    expect(component.errorMessage).toContain('ignore');
+  });
+
+  it('does not apply a failed movie unignore to the TV ignore list', () => {
+    const pending = new Subject<any>();
+    recommendationService.removeIgnored.and.returnValue(pending);
+    component.ignoredIds.add(123);
+    component.toggleIgnore(gap({ id: 123 }), new Event('click'));
+    component.setMediaType('tv');
+    pending.error(new Error('offline'));
+    expect(component.ignoredIds.has(123)).toBeFalse();
+  });
+
+  it('dismisses a movie ignore confirmation when switching to TV', () => {
+    component.pendingIgnoreGap = gap({ id: 123 });
+    component.setMediaType('tv');
+    expect(component.pendingIgnoreGap).toBeNull();
+    component.onIgnoreConfirm();
+    expect(tvdbService.addIgnored).not.toHaveBeenCalled();
+  });
 });
