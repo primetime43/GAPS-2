@@ -205,26 +205,40 @@ class PlexService:
 
     # -- Libraries --
 
-    def fetch_libraries(self, server_name: str) -> tuple[list | None, str | None, str | None]:
-        server = self._get_server(server_name)
-
-        if server is None:
-            # Fall back to stored libraries if the server can't be reached
-            if self._active_server and self._active_server.get('server') == server_name and self._active_server.get('libraries'):
-                logger.info("Using stored libraries for '%s' (server unreachable)", server_name)
-                return self._active_server['libraries'], self._token, None
-            return None, None, 'Server not found'
-
-        libraries = [
-            {'title': section.title, 'type': section.type}
-            for section in server.library.sections()
-        ]
-
-        return libraries, self._token, None
+    def fetch_libraries(self, server_name: str, server_url: str | None = None) -> tuple[list | None, str | None, str | None]:
+        # A setup preview must test the selected connection, not reuse an earlier
+        # connection or report saved libraries as a successful live connection.
+        self._server_conn = None
+        self._server_conn_name = None
+        try:
+            if server_url:
+                if server_url not in {c['url'] for c in self.get_connections(server_name)}:
+                    return None, None, 'Choose a connection listed for this server.'
+                server = PlexServer(server_url, self._token, timeout=self._timeout())
+            else:
+                server = self._get_server(server_name)
+            if server is None:
+                return None, None, 'Server not found'
+            libraries = [
+                {'title': section.title, 'type': section.type}
+                for section in server.library.sections()
+            ]
+            self._server_conn = server
+            self._server_conn_name = server_name
+            return libraries, self._token, None
+        except Exception as e:
+            self._server_conn = None
+            self._server_conn_name = None
+            logger.warning("Could not load Plex libraries for '%s': %s", server_name, e)
+            return None, None, 'Could not load libraries. Check the connection and Plex account access.'
 
     # -- Active Server --
 
     def save_active_server(self, server: str, token: str, libraries: list | None = None, server_url: str | None = None) -> tuple[bool, str | None]:
+        if not server or not token:
+            return False, 'Connect to a Plex server before saving.'
+        if not server_url and self._server_conn_name == server and self._server_conn:
+            server_url = getattr(self._server_conn, '_baseurl', None)
         self.clear_movies_cache()
         self.clear_shows_cache()
         self._server_conn = None

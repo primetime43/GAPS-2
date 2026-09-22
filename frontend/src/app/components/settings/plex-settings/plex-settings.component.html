@@ -1,5 +1,34 @@
 <div class="plex-settings">
 
+  <ng-template #availableLibraries>
+    <section class="library-preview mb-3" *ngIf="librariesLoaded" aria-label="Available Plex libraries">
+      <h5>Available libraries</h5>
+      <p class="text-muted small">Save this server to make its movie and TV libraries available in GAPS. Choose which library to scan on the Missing page or in Schedule.</p>
+      <div class="lib-group">
+        <span class="lib-group-label">Movie libraries ({{ movieLibraries.length }})</span>
+        <div class="libraries-row">
+          <span *ngFor="let lib of movieLibraries" class="lib-tag lib-tag-movie">{{ lib.title }}</span>
+          <span *ngIf="movieLibraries.length === 0" class="text-muted small">No movie libraries available to this Plex account.</span>
+        </div>
+      </div>
+      <div class="lib-group">
+        <span class="lib-group-label">TV libraries ({{ tvLibraries.length }})</span>
+        <div class="libraries-row">
+          <span *ngFor="let lib of tvLibraries" class="lib-tag lib-tag-tv">{{ lib.title }}</span>
+          <span *ngIf="tvLibraries.length === 0" class="text-muted small">No TV libraries available to this Plex account.</span>
+        </div>
+      </div>
+      <div class="lib-group" *ngIf="otherLibraries.length > 0">
+        <span class="lib-group-label">Other libraries ({{ otherLibraries.length }})</span>
+        <div class="libraries-row">
+          <span *ngFor="let lib of otherLibraries" class="lib-tag">{{ lib.title }} ({{ lib.type }})</span>
+        </div>
+        <p class="text-muted small mt-2 mb-0">GAPS scans movies and TV shows. Other library types are listed for reference.</p>
+      </div>
+      <p *ngIf="libraries.length === 0" class="text-muted mb-0">Connected, but Plex returned no libraries. Check this account's library access in Plex, then connect again.</p>
+    </section>
+  </ng-template>
+
   <!-- Current active server (accordion) -->
   <div class="server-accordion" *ngIf="hasActiveServer">
     <div class="server-accordion-header" (click)="serverExpanded = !serverExpanded">
@@ -7,7 +36,7 @@
         <div class="active-badge">Connected</div>
         <div class="active-details">
           <span class="server-name">{{ activeServer }}</span>
-          <span class="lib-count">{{ activeLibraryCount }} libraries</span>
+          <span class="lib-count">{{ activeMovieLibraries.length }} movie · {{ activeTvLibraries.length }} TV · {{ activeOtherLibraries.length }} other libraries</span>
         </div>
       </div>
       <div class="accordion-right">
@@ -17,6 +46,7 @@
 
     <div class="server-accordion-body" *ngIf="serverExpanded">
       <!-- All libraries grouped by type -->
+      <p *ngIf="activeLibraries.length === 0" class="text-muted">No saved libraries. Refresh to check what is available.</p>
       <div class="lib-group" *ngIf="activeMovieLibraries.length > 0">
         <span class="lib-group-label">Movie Libraries</span>
         <div class="libraries-row">
@@ -34,6 +64,7 @@
         <div class="libraries-row">
           <span *ngFor="let lib of activeOtherLibraries" class="lib-tag">{{ lib.title }}</span>
         </div>
+        <p class="text-muted small mt-2 mb-0">Other library types are not scanned by GAPS.</p>
       </div>
 
       <!-- Token -->
@@ -49,10 +80,16 @@
         <button class="btn btn-sm btn-outline-info" (click)="testConnection(); $event.stopPropagation()" [disabled]="testing || refreshing">
           {{ testing ? 'Testing...' : 'Test Connection' }}
         </button>
-        <button class="btn btn-sm btn-outline-primary" (click)="refreshConnection(); $event.stopPropagation()" [disabled]="testing">
-          Reconnect
+        <button class="btn btn-sm btn-outline-info" (click)="refreshLibraries(); $event.stopPropagation()" [disabled]="testing || refreshing">
+          {{ refreshing ? 'Refreshing...' : 'Refresh Libraries' }}
         </button>
-        <button class="btn btn-sm btn-outline-danger" (click)="removeServer(); $event.stopPropagation()">Remove</button>
+        <button class="btn btn-sm btn-outline-primary" (click)="refreshConnection(); $event.stopPropagation()" [disabled]="testing || refreshing">
+          Sign in Again
+        </button>
+        <button class="btn btn-sm btn-outline-secondary" (click)="disconnect(); $event.stopPropagation()" [disabled]="testing || refreshing">
+          Change Server
+        </button>
+        <button class="btn btn-sm btn-outline-danger" (click)="removeServer(); $event.stopPropagation()" [disabled]="testing || refreshing">Remove</button>
       </div>
     </div>
   </div>
@@ -76,6 +113,7 @@
       <button class="btn btn-outline-primary" (click)="connectionMode = 'manual'">
         Connect Manually
       </button>
+      <button *ngIf="activeServer" class="btn btn-outline-secondary ms-2" (click)="cancelSetup()">Keep Current Server</button>
     </div>
 
     <!-- Manual connection form -->
@@ -85,12 +123,12 @@
       </p>
       <div class="mb-3">
         <label class="form-label text-muted">Server URL</label>
-        <input type="text" class="form-control dark-input" [(ngModel)]="manualServerUrl" placeholder="http://192.168.1.100:32400">
+        <input type="text" class="form-control dark-input" [(ngModel)]="manualServerUrl" [disabled]="isLoading" placeholder="http://192.168.1.100:32400">
       </div>
       <div class="mb-3">
         <label class="form-label text-muted">Plex Token</label>
         <div class="input-group">
-          <input [type]="tokenVisible ? 'text' : 'password'" class="form-control dark-input" [(ngModel)]="manualToken" placeholder="Enter Plex token">
+          <input [type]="tokenVisible ? 'text' : 'password'" class="form-control dark-input" [(ngModel)]="manualToken" [disabled]="isLoading" placeholder="Enter Plex token">
           <button class="btn btn-outline-secondary" type="button" (click)="togglePlexTokenVisibility()">
             {{ tokenVisible ? 'Hide' : 'Show' }}
           </button>
@@ -99,32 +137,28 @@
       <button class="btn btn-primary" (click)="connectManual()" [disabled]="!manualServerUrl || !manualToken || step === 'manual-connecting'">
         {{ step === 'manual-connecting' ? 'Connecting...' : 'Connect' }}
       </button>
-      <button class="btn btn-outline-secondary ms-2" (click)="connectionMode = 'choose'; step = 'idle'">Back</button>
+      <button class="btn btn-outline-secondary ms-2" (click)="cancelSetup()">Cancel</button>
     </div>
 
     <!-- Manual connected - show libraries and save -->
     <div class="step-card" *ngIf="step === 'manual-connected' || (connectionMode === 'manual' && step === 'saving')">
       <h5 class="text-success mb-3">Connected to {{ manualServerName }}</h5>
-      <div class="libraries-row mb-3" *ngIf="movieLibraries.length > 0">
-        <span class="text-muted lib-label">Movie libraries:</span>
-        <span *ngFor="let lib of movieLibraries" class="lib-tag lib-tag-movie">{{ lib.title }}</span>
-      </div>
-      <div *ngIf="libraries.length > 0 && movieLibraries.length === 0" class="text-muted mb-3">
-        No movie libraries found on this server.
-      </div>
+      <ng-container *ngTemplateOutlet="availableLibraries"></ng-container>
       <button class="btn btn-success" (click)="saveManual()" [disabled]="step === 'saving'">
         {{ step === 'saving' ? 'Saving...' : 'Save as Active Server' }}
       </button>
-      <button class="btn btn-outline-secondary ms-2" (click)="connectionMode = 'manual'; step = 'idle'">Back</button>
+      <button class="btn btn-outline-secondary ms-2" (click)="onConnectionChange(); step = 'idle'" [disabled]="isLoading">Back</button>
     </div>
 
     <!-- OAuth: Waiting for auth (auto-polling) -->
     <div class="step-card text-center" *ngIf="step === 'waiting'">
       <div class="spinner"></div>
       <p class="text-muted mt-2 mb-0">Waiting for Plex sign-in to complete...</p>
+      <p class="mt-2" *ngIf="oauthUrl"><a [href]="oauthUrl" target="_blank" rel="noopener noreferrer">Open Plex sign-in</a> if the new tab did not open.</p>
       <button class="btn btn-outline-secondary btn-sm mt-3" (click)="connectPlex()">
         Retry Authentication
       </button>
+      <button class="btn btn-outline-secondary btn-sm mt-3 ms-2" (click)="cancelSetup()">Cancel</button>
     </div>
 
     <!-- Loading state -->
@@ -151,7 +185,7 @@
       <!-- Connection URL -->
       <div class="mb-3" *ngIf="connections.length > 0">
         <label class="form-label text-muted">Connection</label>
-        <select class="form-select dark-select" [(ngModel)]="selectedConnectionUrl">
+        <select class="form-select dark-select" [(ngModel)]="selectedConnectionUrl" (ngModelChange)="onConnectionChange()">
           <option value="">Auto (try all)</option>
           <option *ngFor="let conn of connections" [value]="conn.url">{{ conn.label }}</option>
         </select>
@@ -164,14 +198,7 @@
         </button>
       </div>
 
-      <!-- Movie libraries found -->
-      <div class="libraries-row mb-3" *ngIf="movieLibraries.length > 0">
-        <span class="text-muted lib-label">Movie libraries:</span>
-        <span *ngFor="let lib of movieLibraries" class="lib-tag lib-tag-movie">{{ lib.title }}</span>
-      </div>
-      <div *ngIf="libraries.length > 0 && movieLibraries.length === 0" class="text-muted mb-3">
-        No movie libraries found on this server.
-      </div>
+      <ng-container *ngTemplateOutlet="availableLibraries"></ng-container>
 
       <!-- Token (collapsible) -->
       <div class="token-row mb-3" *ngIf="plexToken">
@@ -182,10 +209,10 @@
       </div>
 
       <!-- Save -->
-      <button *ngIf="libraries.length > 0" class="btn btn-success" (click)="setAsActive()" [disabled]="isLoading">
+      <button *ngIf="librariesLoaded" class="btn btn-success" (click)="setAsActive()" [disabled]="isLoading">
         Save as Active Server
       </button>
-      <button class="btn btn-outline-secondary" [class.ms-2]="libraries.length > 0" (click)="connectionMode = 'choose'; step = 'idle'">Cancel</button>
+      <button class="btn btn-outline-secondary" [class.ms-2]="librariesLoaded" (click)="cancelSetup()">Cancel</button>
     </div>
   </div>
 </div>
