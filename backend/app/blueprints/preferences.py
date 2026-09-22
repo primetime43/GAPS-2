@@ -27,6 +27,7 @@ DEFAULTS = {
     # links resolve lazily through the backend (TMDB list responses don't carry
     # IMDb IDs); TV titles always link to TheTVDB regardless of this setting.
     'externalLinkProvider': 'tmdb',
+    'actorTvLinkProvider': 'tvdb',
     # Show rating badges on cards, per provider. TMDB ratings are free (captured
     # at scan time); IMDb ratings require the local dataset, so they default off.
     'showImdbRatings': False,

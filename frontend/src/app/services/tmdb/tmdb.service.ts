@@ -34,8 +34,8 @@ export class TmdbService {
     return this.http.post<ApiMessage>(`${environment.apiUrl}/tmdb/save-key`, { key });
   }
 
-  getGenres(): Observable<TmdbGenre[]> {
-    return this.http.get<{ genres: TmdbGenre[] }>(`${environment.apiUrl}/tmdb/genres`)
+  getGenres(mediaType: 'movie' | 'tv' = 'movie'): Observable<TmdbGenre[]> {
+    return this.http.get<{ genres: TmdbGenre[] }>(`${environment.apiUrl}/tmdb/genres`, { params: { mediaType } })
       .pipe(map(res => res.genres || []));
   }
 }

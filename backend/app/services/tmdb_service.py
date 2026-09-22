@@ -87,8 +87,8 @@ class TmdbService:
         # IMDb ratings). Persisted like _imdb_id_cache; a fully-empty result
         # ({tvdbId: None, imdbId: None}) is a negative and not persisted.
         self._tv_external_cache: dict[int, dict] = {}
-        # TMDB movie genre id→name list (small, static); fetched once on demand.
-        self._genre_cache: list[dict] | None = None
+        # Movie/TV genre lists, cached separately per language on demand.
+        self._genre_cache: dict[tuple[str, str], list[dict]] = {}
         # Suggested actors for the empty-search grid, keyed by media type
         # ('movie'/'tv') -> {'people': [...], 'at': float}. Cached briefly
         # (see _POPULAR_CACHE_TTL_SECONDS). In-memory only.
@@ -1322,26 +1322,34 @@ class TmdbService:
         return credits.get("details") if credits else None
 
     def get_movie_genres(self) -> list[dict]:
-        """TMDB's movie genre id→name list, cached in-memory (small, static)."""
+        return self.get_genres('movie')
+
+    def get_genres(self, media_type: str = 'movie') -> list[dict]:
+        """Genre IDs differ between movies and TV; cache each language/type."""
+        if media_type not in ('movie', 'tv'):
+            return []
+        key = (media_type, self._language)
         with self._cache_lock:
-            if self._genre_cache is not None:
-                return self._genre_cache
+            if key in self._genre_cache:
+                return self._genre_cache[key]
         if not self._api_key:
             return []
         genres: list[dict] = []
         try:
             resp = self._session.get(
-                f"{self._base_url}/genre/movie/list",
+                f"{self._base_url}/genre/{media_type}/list",
                 params={"api_key": self._api_key, "language": self._language},
                 timeout=10,
             )
             if resp.status_code == 200:
                 genres = resp.json().get("genres", [])
+            else:
+                return []
         except Exception as e:
             logger.warning("Failed to fetch TMDB genres: %s", e)
             return []
         with self._cache_lock:
-            self._genre_cache = genres
+            self._genre_cache[key] = genres
         return genres
 
     def _is_minor_credit(self, credit: dict, release_date: str) -> bool:

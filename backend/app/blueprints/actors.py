@@ -85,7 +85,9 @@ def _movie_gaps(tmdb, service, names, person_id, show_existing, include_minor):
     # from the snapshot and every movie would look un-owned.
     for name in names:
         if name not in service.movies_cache:
-            service.get_movies(name)
+            _, error = service.get_movies(name)
+            if error:
+                return None, f'Could not load library "{name}": {error}'
     cache = service.movies_cache
 
     owned_movies = []
@@ -113,7 +115,9 @@ def _tv_gaps(tmdb, service, names, person_id, show_existing, include_minor,
              include_imdb_ratings=False):
     for name in names:
         if name not in service.shows_cache:
-            service.get_shows(name)
+            _, error = service.get_shows(name)
+            if error:
+                return None, f'Could not load library "{name}": {error}'
     cache = service.shows_cache
 
     owned_shows = []

@@ -36,5 +36,6 @@ export interface Gap {
   genreIds?: number[];     // TMDB genre ids (movies) — used by the genre filter
   popularity?: number;     // TMDB popularity — used by the sort control
   tmdbId?: number;         // TMDB id (TV gaps key on tvdbId, so id alone isn't it)
+  tvdbId?: number;         // Explicit TV ID; actor credits may only have a TMDB ID
   imdbId?: string;         // IMDb id, when known (TV) — for building IMDb links
 }

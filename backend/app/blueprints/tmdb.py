@@ -19,8 +19,11 @@ def movie_imdb_redirect(tmdb_id):
 
 @tmdb_bp.route('/genres', methods=['GET'])
 def get_genres():
-    """TMDB movie genre id→name list, for the results-page genre filter."""
-    return jsonify(genres=current_app.tmdb_service.get_movie_genres())
+    """Genre id→name list for the selected media type."""
+    media_type = request.args.get('mediaType', 'movie')
+    if media_type not in ('movie', 'tv'):
+        return jsonify(error='mediaType must be movie or tv'), 400
+    return jsonify(genres=current_app.tmdb_service.get_genres(media_type))
 
 
 @tmdb_bp.route('/status', methods=['GET'])

@@ -254,8 +254,10 @@ describe('RecommendedComponent', () => {
     component.allGaps = [
       gap({ id: 1, name: 'Released', year: '1999', releaseDate: past, groupName: 'C', owned: false }),
       gap({ id: 2, name: 'Future', year: '2099', releaseDate: future, groupName: 'C', owned: false }),
-      gap({ id: 3, name: 'Unannounced', year: 'N/A', releaseDate: '', groupName: 'C', owned: false }),
+      gap({ id: 3, name: 'Unknown date', year: 'N/A', releaseDate: '', groupName: 'C', owned: false }),
       gap({ id: 4, name: 'Owned future', year: '2099', releaseDate: future, groupName: 'C', owned: true }),
+      gap({ id: 5, name: 'Future year only', year: '2099', groupName: 'C', owned: false }),
+      gap({ id: 6, name: 'Past year only', year: '1999', groupName: 'C', owned: false }),
     ];
     component.ignoredIds = new Set();
     component.view = 'all';
@@ -267,8 +269,10 @@ describe('RecommendedComponent', () => {
     expect(titles).toContain('Released');
     expect(titles).toContain('Owned future');
     expect(titles).not.toContain('Future');
-    expect(titles).not.toContain('Unannounced');
-    expect(component.missingCount).toBe(1);
+    expect(titles).toContain('Unknown date');
+    expect(titles).toContain('Past year only');
+    expect(titles).not.toContain('Future year only');
+    expect(component.missingCount).toBe(3);
   });
 
   it('toggleIgnore should request confirmation before ignoring an item', () => {

@@ -65,7 +65,7 @@
         </div>
 
         <!-- Library cross-check selector -->
-        <div class="col-md-6" *ngIf="libraries.length > 1">
+        <div class="col-md-6">
           <label class="text-muted mb-1">Count as owned if in:</label>
           <div class="d-flex flex-wrap gap-2">
             <div *ngFor="let lib of libraries" class="form-check form-check-inline">
@@ -74,6 +74,7 @@
                 type="checkbox"
                 [id]="'actor-lib-' + lib.title"
                 [checked]="isLibrarySelected(lib.title)"
+                [disabled]="selectedLibraries.length === 1 && isLibrarySelected(lib.title)"
                 (change)="toggleLibrarySelection(lib.title)"
               >
               <label class="form-check-label text-muted" [for]="'actor-lib-' + lib.title" style="font-size: 13px;">
@@ -160,7 +161,7 @@
       <div *ngIf="errorMessage" class="alert alert-danger mt-3">{{ errorMessage }}</div>
 
       <!-- Results -->
-      <div *ngIf="!loadingGaps && selectedActor && collectionGroups.length > 0">
+      <div *ngIf="!loadingGaps && selectedActor">
         <div class="d-flex align-items-center mb-3 flex-wrap gap-2">
           <button class="btn btn-sm btn-outline-light me-2" (click)="clearActor()">&larr; Back</button>
           <h5 class="regular-text mb-0">{{ selectedActor.name }}</h5>
@@ -211,14 +212,14 @@
                     <label class="form-check-label" for="actorShowIgnored">Ignored ({{ ignoredIds.size }})</label>
                   </div>
                 </li>
-                <li>
+                <li *ngIf="mediaType === 'tv'">
                   <div class="form-check">
                     <input class="form-check-input" type="checkbox" id="actorShowImdb"
                            [(ngModel)]="showImdbRatings" (ngModelChange)="onRatingPrefsChange()">
                     <label class="form-check-label" for="actorShowImdb">IMDb ratings</label>
                   </div>
                 </li>
-                <li>
+                <li *ngIf="mediaType === 'movie'">
                   <div class="form-check">
                     <input class="form-check-input" type="checkbox" id="actorShowTmdb"
                            [(ngModel)]="showTmdbRatings" (ngModelChange)="onRatingPrefsChange()">
@@ -248,9 +249,14 @@
                 <li><hr class="dropdown-divider"></li>
                 <li>
                   <label class="form-label small mb-1 d-block">Open links in</label>
-                  <select class="form-select form-select-sm dark-select"
+                  <select *ngIf="mediaType === 'movie'" class="form-select form-select-sm dark-select"
                           [(ngModel)]="externalLinkProvider" (ngModelChange)="onLinkProviderChange()">
                     <option value="tmdb">TMDB</option>
+                    <option value="imdb">IMDb</option>
+                  </select>
+                  <select *ngIf="mediaType === 'tv'" class="form-select form-select-sm dark-select"
+                          [(ngModel)]="tvLinkProvider" (ngModelChange)="onLinkProviderChange()">
+                    <option value="tvdb">TheTVDB</option>
                     <option value="imdb">IMDb</option>
                   </select>
                 </li>
@@ -322,7 +328,7 @@
               <div class="ignored-badge" *ngIf="isIgnored(gap)">Ignored</div>
               <div class="missing-badge" *ngIf="!gap.owned && !isIgnored(gap)">Missing</div>
               <button
-                *ngIf="!gap.owned"
+                *ngIf="!gap.owned && canIgnore(gap)"
                 class="ignore-btn"
                 [title]="isIgnored(gap) ? 'Unignore' : 'Ignore'"
                 (click)="toggleIgnore(gap, $event)">
@@ -337,12 +343,12 @@
                   {{ gap.name }}
                 </a>
                 <div class="rec-year">{{ gap.year }}</div>
-                <div class="card-ratings" *ngIf="(showImdbRatings && gap.imdbRating) || (showTmdbRatings && gap.tmdbRating)">
-                  <span *ngIf="showImdbRatings && gap.imdbRating" class="rating-chip imdb" [title]="(gap.imdbVotes | number) + ' votes on IMDb'">
+                <div class="card-ratings" *ngIf="(mediaType === 'tv' && showImdbRatings && gap.imdbRating) || (mediaType === 'movie' && showTmdbRatings && gap.tmdbRating)">
+                  <span *ngIf="mediaType === 'tv' && showImdbRatings && gap.imdbRating" class="rating-chip imdb" [title]="(gap.imdbVotes | number) + ' votes on IMDb'">
                     <img class="rating-logo" src="assets/images/imdb-logo.svg" alt="IMDb"> {{ gap.imdbRating | number:'1.1-1' }}
                     <span class="rating-votes">({{ gap.imdbVotes | compactNumber }})</span>
                   </span>
-                  <span *ngIf="showTmdbRatings && gap.tmdbRating" class="rating-chip tmdb" [title]="(gap.tmdbVotes | number) + ' votes on TMDB'">
+                  <span *ngIf="mediaType === 'movie' && showTmdbRatings && gap.tmdbRating" class="rating-chip tmdb" [title]="(gap.tmdbVotes | number) + ' votes on TMDB'">
                     <img class="rating-logo" src="assets/images/tmdb-logo.svg" alt="TMDB"> {{ gap.tmdbRating | number:'1.1-1' }}
                     <span class="rating-votes">({{ gap.tmdbVotes | compactNumber }})</span>
                   </span>
@@ -369,8 +375,7 @@
       </div>
 
       <!-- No results after filtering -->
-      <div *ngIf="!loadingGaps && selectedActor && collectionGroups.length === 0 && !errorMessage" class="mt-3">
-        <button class="btn btn-sm btn-outline-light mb-2" (click)="clearActor()">&larr; Back</button>
+      <div *ngIf="!loadingGaps && selectedActor && filteredGroups.length === 0 && !errorMessage" class="mt-3">
         <p class="text-muted">
           No {{ mediaType === 'tv' ? 'TV shows' : 'movies' }} to show for {{ selectedActor.name }} with the current filters.
         </p>

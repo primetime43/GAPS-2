@@ -8,6 +8,8 @@ describe('UpdatesComponent', () => {
   let httpMock: HttpTestingController;
 
   beforeEach(async () => {
+    // Load the real lazy chunk before fakeAsync starts controlling timers.
+    await import('marked');
     await TestBed.configureTestingModule({
       imports: [HttpClientTestingModule],
       declarations: [UpdatesComponent],
