@@ -32,6 +32,8 @@ def connect():
         return jsonify(error=error), 400
 
     libs, lib_err = current_app.jellyfin_service.fetch_libraries()
+    if lib_err:
+        return jsonify(connected=False, error=lib_err), 502
     libraries = libs or []
 
     return jsonify(

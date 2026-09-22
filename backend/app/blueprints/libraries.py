@@ -1,4 +1,5 @@
 import logging
+import hashlib
 import threading
 import time
 from collections import OrderedDict
@@ -91,17 +92,6 @@ def image_proxy():
     prefs = config_store.get('preferences', {})
     use_cache = prefs.get('imageCacheEnabled', False)
 
-    cache_key = f"{source}:{item_id or thumb}"
-
-    if use_cache:
-        cached = _cache_get(cache_key)
-        if cached:
-            return Response(
-                cached[0],
-                content_type=cached[1],
-                headers={'Cache-Control': 'public, max-age=86400'},
-            )
-
     try:
         if source == 'plex':
             service = current_app.plex_service
@@ -128,6 +118,15 @@ def image_proxy():
         else:
             return jsonify(error='Unknown source'), 400
 
+        # Item IDs are only unique within a server. Scope cached artwork to the
+        # connection/credentials as well, without keeping credentials in keys.
+        cache_key = hashlib.sha256(f'{source}:{url}:{headers}'.encode()).hexdigest()
+        if use_cache:
+            cached = _cache_get(cache_key)
+            if cached:
+                return Response(cached[0], content_type=cached[1],
+                                headers={'Cache-Control': 'private, no-cache'})
+
         resp = http_requests.get(url, headers=headers, timeout=10, stream=True)
         if resp.status_code != 200:
             resp.close()
@@ -139,15 +138,18 @@ def image_proxy():
         # buffer once. Otherwise stream the upstream response straight through
         # without holding the full poster in memory.
         if use_cache:
-            image_data = resp.content
+            try:
+                image_data = resp.content
+            finally:
+                resp.close()
             _cache_put(cache_key, image_data, content_type)
             return Response(
                 image_data,
                 content_type=content_type,
-                headers={'Cache-Control': 'public, max-age=86400'},
+                headers={'Cache-Control': 'private, no-cache'},
             )
 
-        resp_headers = {'Cache-Control': 'public, max-age=86400'}
+        resp_headers = {'Cache-Control': 'private, no-cache'}
         content_length = resp.headers.get('Content-Length')
         if content_length:
             resp_headers['Content-Length'] = content_length
