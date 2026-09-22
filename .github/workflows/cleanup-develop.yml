@@ -1,0 +1,51 @@
+name: Clean up old Develop tags
+
+# Docker Hub: DOCKERHUB_TOKEN needs Read, Write, Delete access.
+# GHCR: grant this repository Admin under the package's Manage Actions access.
+# Manual runs preview by default; enable apply to retry a failed cleanup.
+on:
+  workflow_call:
+    inputs:
+      apply:
+        type: boolean
+        default: false
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: Delete old develop-<commit> tags (unchecked previews only)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: cleanup-develop-tags
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    if: github.repository == 'primetime43/GAPS-2'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        registry: [dockerhub, ghcr]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test cleanup safeguards
+        run: python3 -m unittest discover -s .github/scripts -p 'test_*.py'
+      - name: Remove old Develop tags
+        env:
+          REGISTRY: ${{ matrix.registry }}
+          APPLY: ${{ inputs.apply }}
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          args=()
+          if [[ "$APPLY" == "true" ]]; then args+=(--apply); fi
+          python3 .github/scripts/cleanup_develop_tags.py "$REGISTRY" "${args[@]}"

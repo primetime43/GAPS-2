@@ -30,7 +30,6 @@ jobs:
             ghcr.io/primetime43/gaps-2
           tags: |
             type=raw,value=develop
-            type=sha,prefix=develop-,format=short
 
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
@@ -57,3 +56,13 @@ jobs:
             APP_COMMIT=${{ github.sha }}
             APP_CHANNEL=develop
             APP_BUILD_SOURCE=github-actions
+
+  cleanup:
+    needs: build-docker
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/cleanup-develop.yml
+    with:
+      apply: true
+    secrets: inherit
