@@ -1,4 +1,5 @@
 import { Component, OnInit } from '@angular/core';
+import { forkJoin } from 'rxjs';
 import { RadarrService, RadarrConfig, RadarrQualityProfile, RadarrRootFolder } from '../../../services/radarr.service';
 
 @Component({
@@ -79,19 +80,18 @@ export class RadarrSettingsComponent implements OnInit {
 
   loadMeta(): void {
     this.loadingMeta = true;
-    this.radarr.getProfiles().subscribe({
-      next: (profiles) => {
+    this.profiles = [];
+    this.rootFolders = [];
+    forkJoin({ profiles: this.radarr.getProfiles(), folders: this.radarr.getRootFolders() }).subscribe({
+      next: ({ profiles, folders }) => {
         this.profiles = profiles;
+        this.rootFolders = folders;
         this.loadingMeta = false;
       },
       error: (err) => {
         this.loadingMeta = false;
-        this.showMessage(err.error?.error || 'Could not load quality profiles', 'error');
+        this.showMessage(err.error?.error || 'Could not load quality profiles or root folders', 'error');
       },
-    });
-    this.radarr.getRootFolders().subscribe({
-      next: (folders) => (this.rootFolders = folders),
-      error: () => {},
     });
   }
 
@@ -126,7 +126,7 @@ export class RadarrSettingsComponent implements OnInit {
         this.config = cfg;
         this.showMessage('Radarr settings saved.', 'success');
         this.saving = false;
-        if (cfg.enabled && this.profiles.length === 0) {
+        if (cfg.enabled) {
           this.loadMeta();
         }
       },
