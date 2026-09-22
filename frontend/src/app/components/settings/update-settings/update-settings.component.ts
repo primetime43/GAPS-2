@@ -9,6 +9,7 @@ const BUSY = ['queued', 'pulling', 'backing-up', 'restarting', 'checking', 'roll
 @Component({
   selector: 'app-update-settings',
   templateUrl: './update-settings.component.html',
+  styleUrls: ['./update-settings.component.scss'],
   standalone: false,
 })
 export class UpdateSettingsComponent implements OnInit, OnDestroy {
@@ -31,12 +32,22 @@ export class UpdateSettingsComponent implements OnInit, OnDestroy {
   }
 
   get canApply(): boolean {
-    return !!this.status?.updater.available && !this.busy &&
+    return !!this.status?.updater.available && !this.busy && !this.reconnecting &&
       (this.choice.channel !== 'version' || /^v?\d+\.\d+\.\d+$/.test(this.choice.version.trim()));
   }
 
   get targetLabel(): string {
     return this.choice.channel === 'version' ? `version ${this.choice.version}` : this.choice.channel;
+  }
+
+  get actionLabel(): string {
+    return this.choice.channel === 'develop' ? 'Get latest Develop' : 'Apply and restart';
+  }
+
+  get confirmationMessage(): string {
+    return this.choice.channel === 'develop'
+      ? 'Pull the latest Develop image from the registry? If a newer build is available, GAPS will back up settings and restart. Active scans will stop. If you are already up to date, GAPS will keep running.'
+      : `Switch to ${this.targetLabel}? GAPS will restart and any active scans will stop. Settings are backed up first.`;
   }
 
   ngOnInit(): void {

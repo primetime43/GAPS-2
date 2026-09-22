@@ -27,7 +27,7 @@ def updater_status():
     result = dict(status) if isinstance(status, dict) else {}
     result['available'] = available
     result['reason'] = '' if available else (
-        'The Docker updater is not connected. Follow the one-time setup in the project README.'
+        'The Docker updater is not connected. Follow the one-time setup in the release switching guide.'
         if get_build_info()['installType'] == 'docker' else
         'This is a source checkout. In-app switching is available with the optional Docker updater.'
     )

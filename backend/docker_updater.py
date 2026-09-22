@@ -225,7 +225,8 @@ class Updater:
             new_image = self.docker.image(pinned_image or image)
             if (new_image.get('Config', {}).get('Labels') or {}).get('io.gaps.updater.protocol') != '1':
                 raise DockerError('This release predates in-app switching. Install it manually or choose a newer build.')
-            if current['Image'] != new_image['Id']:
+            changed = current['Image'] != new_image['Id']
+            if changed:
                 previous = self.docker.image(current['Image'])
                 journal = {'id': uuid.uuid4().hex, 'requestId': request_id,
                            'previousSpec': create_spec(current, current['Image']), 'backupReady': False,
@@ -243,7 +244,10 @@ class Updater:
                 self.wait_healthy()
             write_json(self.state / 'selection.json', {'selection': choice, 'image': image, 'imageId': new_image['Id']})
             (self.state / 'transaction.json').unlink(missing_ok=True)
-            self.report(state='done', message='The selected build is running.', selection=choice,
+            message = 'The selected build is running.'
+            if choice['channel'] == 'develop' and not pinned_image:
+                message = 'Updated to the latest Develop build.' if changed else 'Develop is already up to date.'
+            self.report(state='done', message=message, selection=choice,
                         currentImage=image, imageId=new_image['Id'], registry=self.repository.split('/')[0]
                         if self.repository.startswith('ghcr.io/') else 'Docker Hub')
             try:

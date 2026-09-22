@@ -132,6 +132,31 @@ class DockerUpdaterTests(unittest.TestCase):
         self.docker.stop.assert_not_called()
         self.docker.remove.assert_not_called()
 
+    def test_develop_request_pulls_again_even_when_saved_selection_is_develop(self):
+        self.current['Config']['Image'] = 'primetime43/gaps-2:develop'
+        write_json(self.updater.state / 'selection.json', {
+            'selection': {'channel': 'develop', 'version': ''},
+            'image': 'primetime43/gaps-2:develop', 'imageId': 'sha256:old',
+        })
+        write_json(self.updater.control / 'request.json', {'id': 'a' * 32, 'selection': {'channel': 'develop'}})
+        self.updater.tick()
+        self.docker.pull.assert_called_once_with('primetime43/gaps-2:develop')
+        self.assertEqual(self.docker.create.call_args.args[1]['Image'], 'sha256:new')
+        self.assertEqual(self.updater.status['message'], 'Updated to the latest Develop build.')
+        self.assertFalse((self.updater.control / 'request.json').exists())
+
+    def test_repeated_develop_checks_pull_but_do_not_restart_an_up_to_date_app(self):
+        self.current['Image'] = 'sha256:new'
+        self.current['Config']['Image'] = 'primetime43/gaps-2:develop'
+        for request_id in ('a' * 32, 'b' * 32):
+            self.assertTrue(self.updater.switch({'channel': 'develop'}, request_id))
+        self.assertEqual(self.docker.pull.call_count, 2)
+        self.docker.pull.assert_called_with('primetime43/gaps-2:develop')
+        self.docker.stop.assert_not_called()
+        self.docker.create.assert_not_called()
+        self.assertEqual(self.updater.status['state'], 'done')
+        self.assertEqual(self.updater.status['message'], 'Develop is already up to date.')
+
     def test_failed_start_restores_previous_image_and_settings(self):
         def health():
             if self.updater.wait_healthy.call_count == 1:

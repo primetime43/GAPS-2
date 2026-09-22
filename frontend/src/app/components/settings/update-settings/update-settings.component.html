@@ -12,11 +12,14 @@
     <p class="text-muted text-break" *ngIf="current.updater.currentImage">Image: {{ current.updater.currentImage }}</p>
     <p *ngIf="!current.updater.available" class="alert alert-info">
       {{ current.updater.reason }}
-      <a href="https://github.com/primetime43/GAPS-2#in-app-release-switching" target="_blank" rel="noopener">Setup instructions</a>
+      <a href="https://github.com/primetime43/GAPS-2/blob/develop/docs/release-switching.md" target="_blank" rel="noopener">Setup instructions</a>
     </p>
-    <p *ngIf="current.updater.message" role="status" class="alert"
-       [class.alert-danger]="current.updater.state === 'error'"
-       [class.alert-info]="current.updater.state !== 'error'">{{ current.updater.message }}</p>
+    <p *ngIf="current.updater.available && current.updater.message && !reconnecting" role="status" class="update-status"
+       [class.text-danger]="current.updater.state === 'error'">
+      <span *ngIf="busy" class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+      <span *ngIf="!busy" class="status-dot" aria-hidden="true"></span>
+      {{ current.updater.message }}
+    </p>
   </div>
   <p *ngIf="reconnecting" role="status" class="alert alert-info">
     {{ busy ? 'Waiting for GAPS to restart. This page will reconnect automatically.' : 'Could not reach GAPS. Retrying…' }}
@@ -38,12 +41,13 @@
     <p *ngIf="releasesError" class="text-muted">{{ releasesError }}</p>
   </div>
   <p *ngIf="choice.channel === 'develop'" class="text-warning">Development builds contain unreleased changes and may be less stable.</p>
+  <p *ngIf="choice.channel === 'develop'" class="text-muted small">Get latest Develop checks the registry even when you already use Develop. A newer build is downloaded and applied automatically.</p>
   <p class="text-muted">Updates run when you apply them. Your choice is kept across restarts.</p>
   <button class="btn btn-primary" [disabled]="!canApply" (click)="confirmVisible = true">
-    {{ busy ? 'Update in progress…' : 'Apply and restart' }}
+    {{ busy ? 'Update in progress…' : actionLabel }}
   </button>
 </div>
-<app-confirm-modal [visible]="confirmVisible" title="Switch release"
-  [message]="'Switch to ' + targetLabel + '? GAPS will restart and any active scans will stop. Settings are backed up first.'"
-  confirmText="Apply and restart" (confirmed)="apply()" (cancelled)="confirmVisible = false">
+<app-confirm-modal [visible]="confirmVisible" [title]="choice.channel === 'develop' ? 'Get latest Develop' : 'Switch release'"
+  [message]="confirmationMessage"
+  [confirmText]="actionLabel" (confirmed)="apply()" (cancelled)="confirmVisible = false">
 </app-confirm-modal>
