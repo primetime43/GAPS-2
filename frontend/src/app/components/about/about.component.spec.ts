@@ -87,4 +87,18 @@ describe('AboutComponent', () => {
     expect(component.shortCommit).toBe('a1b2c3d');
     expect(component.commitUrl).toBe('https://github.com/primetime43/GAPS-2/commit/a1b2c3d4e5f6');
   }));
+
+  it('shows the install type, registry, and builder alongside release history', fakeAsync(() => {
+    fixture.detectChanges();
+    httpMock.expectOne('/api/about').flush({ version: '2.11.0', commit: 'abc123', installType: 'docker',
+      channel: 'develop', registry: 'GitHub Container Registry', buildSource: 'github-actions' });
+    httpMock.expectOne('https://api.github.com/repos/primetime43/GAPS-2/releases').flush([]);
+    tick();
+    fixture.detectChanges();
+    const text = fixture.nativeElement.textContent;
+    expect(text).toContain('Docker');
+    expect(text).toContain('GitHub Container Registry');
+    expect(text).toContain('Built by GitHub Actions');
+    expect(text).toContain('Release History');
+  }));
 });

@@ -12,6 +12,16 @@
     </ng-container>
   </p>
 
+  <p class="text-muted" *ngIf="build?.installType">
+    {{ build?.installType === 'docker' ? 'Docker' : 'Source checkout' }}
+    <span *ngIf="build?.registry"> · {{ build?.registry }}</span>
+    · {{ build?.channel | titlecase }}
+    <span *ngIf="build?.buildSource === 'github-actions'"> · Built by GitHub Actions</span>
+    <span *ngIf="build?.branch"> · Branch: {{ build?.branch }}</span>
+  </p>
+  <p class="text-muted text-break" *ngIf="build?.image">Image: {{ build?.image }}</p>
+  <a routerLink="/settings/updates">Manage updates</a>
+
   <p class="text-muted">
     <a class="activeLink" href="https://github.com/primetime43/GAPS-2" target="_blank">GAPS 2</a> is a rewrite of the original
     <a class="activeLink" href="https://github.com/JasonHHouse/gaps" target="_blank">GAPS project</a>, now written in Python instead of

@@ -1,0 +1,49 @@
+<div class="pref-card mb-4">
+  <h4>Updates</h4>
+  <p *ngIf="!status && !reconnecting" class="text-muted">Loading build information…</p>
+  <div *ngIf="status as current">
+    <p>
+      <strong>{{ current.build.installType === 'docker' ? 'Docker' : 'Source checkout' }}</strong>
+      <span *ngIf="current.build.registry"> · {{ current.build.registry }}</span>
+      · {{ current.build.version }} · {{ current.build.channel | titlecase }}
+      <code *ngIf="current.build.commit !== 'dev'"> · {{ current.build.commit | slice:0:7 }}</code>
+    </p>
+    <p class="text-muted" *ngIf="current.build.buildSource === 'github-actions'">Built by GitHub Actions</p>
+    <p class="text-muted text-break" *ngIf="current.updater.currentImage">Image: {{ current.updater.currentImage }}</p>
+    <p *ngIf="!current.updater.available" class="alert alert-info">
+      {{ current.updater.reason }}
+      <a href="https://github.com/primetime43/GAPS-2#in-app-release-switching" target="_blank" rel="noopener">Setup instructions</a>
+    </p>
+    <p *ngIf="current.updater.message" role="status" class="alert"
+       [class.alert-danger]="current.updater.state === 'error'"
+       [class.alert-info]="current.updater.state !== 'error'">{{ current.updater.message }}</p>
+  </div>
+  <p *ngIf="reconnecting" role="status" class="alert alert-info">
+    {{ busy ? 'Waiting for GAPS to restart. This page will reconnect automatically.' : 'Could not reach GAPS. Retrying…' }}
+  </p>
+  <p *ngIf="error" role="alert" class="alert alert-danger">{{ error }}</p>
+
+  <label for="update-channel" class="form-label">Release channel</label>
+  <select id="update-channel" class="form-select dark-select mb-3" [(ngModel)]="choice.channel" [disabled]="busy">
+    <option value="stable">Stable — latest release</option>
+    <option value="develop">Develop — latest development build</option>
+    <option value="version">Specific version</option>
+  </select>
+  <div *ngIf="choice.channel === 'version'">
+    <label for="update-version" class="form-label">Release version</label>
+    <input id="update-version" class="form-control dark-input mb-2" list="release-versions"
+           [(ngModel)]="choice.version" [disabled]="busy" placeholder="2.11.0">
+    <datalist id="release-versions"><option *ngFor="let version of versions" [value]="version"></option></datalist>
+    <p class="text-muted">Releases from before in-app switching was introduced need a manual install.</p>
+    <p *ngIf="releasesError" class="text-muted">{{ releasesError }}</p>
+  </div>
+  <p *ngIf="choice.channel === 'develop'" class="text-warning">Development builds contain unreleased changes and may be less stable.</p>
+  <p class="text-muted">Updates run when you apply them. Your choice is kept across restarts.</p>
+  <button class="btn btn-primary" [disabled]="!canApply" (click)="confirmVisible = true">
+    {{ busy ? 'Update in progress…' : 'Apply and restart' }}
+  </button>
+</div>
+<app-confirm-modal [visible]="confirmVisible" title="Switch release"
+  [message]="'Switch to ' + targetLabel + '? GAPS will restart and any active scans will stop. Settings are backed up first.'"
+  confirmText="Apply and restart" (confirmed)="apply()" (cancelled)="confirmVisible = false">
+</app-confirm-modal>

@@ -1,10 +1,9 @@
 import os
-import sys
 import webbrowser
 from app import create_app
 from app.services import config_store
 
-is_production = os.environ.get('FLASK_ENV') == 'production' or getattr(sys, 'frozen', False)
+is_production = os.environ.get('FLASK_ENV') == 'production'
 config = 'production' if is_production else None
 app = create_app(config)
 

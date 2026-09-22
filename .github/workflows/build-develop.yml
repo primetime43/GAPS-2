@@ -13,6 +13,7 @@ concurrency:
 
 jobs:
   build-docker:
+    if: github.ref == 'refs/heads/develop'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -54,3 +55,5 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             APP_COMMIT=${{ github.sha }}
+            APP_CHANNEL=develop
+            APP_BUILD_SOURCE=github-actions

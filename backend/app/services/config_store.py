@@ -5,7 +5,6 @@ import json
 import logging
 import os
 import platform
-import sys
 import threading
 import uuid
 
@@ -25,9 +24,7 @@ _SIDECAR_LOCK = threading.Lock()
 
 
 def _get_base_dir():
-    """Return the backend root, works both normally and in a PyInstaller bundle."""
-    if getattr(sys, 'frozen', False):
-        return os.path.dirname(sys.executable)
+    """Return the backend root for source and Docker installs."""
     return os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 
 

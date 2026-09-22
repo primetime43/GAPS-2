@@ -32,6 +32,7 @@ import { ConfirmModalComponent } from './components/confirm-modal/confirm-modal.
 import { ScanHistoryComponent } from './components/scan-history/scan-history.component';
 import { LogsComponent } from './components/logs/logs.component';
 import { CompactNumberPipe } from './pipes/compact-number.pipe';
+import { UpdateSettingsComponent } from './components/settings/update-settings/update-settings.component';
 
 @NgModule({ declarations: [
         AppComponent,
@@ -56,7 +57,8 @@ import { CompactNumberPipe } from './pipes/compact-number.pipe';
         TvdbSettingsComponent,
         SettingsComponent,
         LogsComponent,
-        CompactNumberPipe
+        CompactNumberPipe,
+        UpdateSettingsComponent
     ],
     bootstrap: [AppComponent], imports: [BrowserModule,
         AppRoutingModule,

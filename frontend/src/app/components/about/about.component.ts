@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { environment } from '../../../environments/environment';
+import { BuildInfo } from '../../services/update.service';
 
 interface GitHubRelease {
   tag_name: string;
@@ -20,6 +21,7 @@ interface GitHubRelease {
 export class AboutComponent implements OnInit {
   version = environment.version;
   commit = '';
+  build: BuildInfo | null = null;
   releases: GitHubRelease[] = [];
   releasesLoading = true;
   releasesError = '';
@@ -37,8 +39,9 @@ export class AboutComponent implements OnInit {
   }
 
   ngOnInit(): void {
-    this.http.get<{ version: string; commit: string }>('/api/about').subscribe({
+    this.http.get<BuildInfo>('/api/about').subscribe({
       next: (res) => {
+        this.build = res;
         this.version = res.version || this.version;
         this.commit = res.commit || '';
       },
