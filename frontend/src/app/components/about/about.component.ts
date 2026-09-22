@@ -25,6 +25,8 @@ export class AboutComponent implements OnInit {
   releases: GitHubRelease[] = [];
   releasesLoading = true;
   releasesError = '';
+  readonly releasesPerPage = 5;
+  releasePage = 1;
 
   constructor(private http: HttpClient) {}
 
@@ -36,6 +38,20 @@ export class AboutComponent implements OnInit {
     return this.commit && this.commit !== 'dev'
       ? `https://github.com/primetime43/GAPS-2/commit/${this.commit}`
       : '';
+  }
+
+  get releasePageCount(): number {
+    return Math.ceil(this.releases.length / this.releasesPerPage);
+  }
+
+  get visibleReleases(): GitHubRelease[] {
+    const start = (this.releasePage - 1) * this.releasesPerPage;
+    return this.releases.slice(start, start + this.releasesPerPage);
+  }
+
+  setReleasePage(page: number): void {
+    if (page < 1 || page > this.releasePageCount) return;
+    this.releasePage = page;
   }
 
   ngOnInit(): void {
@@ -59,6 +75,7 @@ export class AboutComponent implements OnInit {
           ...r,
           bodyHtml: marked.parse(r.body || '', { async: false }) as string,
         }));
+        this.releasePage = 1;
         this.releasesLoading = false;
       },
       error: () => {

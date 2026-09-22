@@ -42,6 +42,9 @@
   <hr class="divider">
 
   <h3>Release History</h3>
+  <p class="text-muted small">Expand a release to read its notes.
+    <a href="https://github.com/primetime43/GAPS-2/releases" target="_blank" rel="noopener" class="activeLink">Full release history on GitHub</a>
+  </p>
 
   <div *ngIf="releasesLoading" class="text-muted mt-3">Loading releases...</div>
   <div *ngIf="releasesError" class="text-danger mt-3">{{ releasesError }}</div>
@@ -49,14 +52,20 @@
     No releases found.
   </div>
 
-  <div *ngFor="let release of releases" class="changelog-entry mt-3">
-    <h5 class="text-primary mb-1">
-      {{ release.name || release.tag_name }}
-    </h5>
-    <small class="text-muted">{{ release.published_at | date:'mediumDate' }}</small>
-    <div class="release-body mt-2 text-muted" [innerHTML]="release.bodyHtml"></div>
-    <a [href]="release.html_url" target="_blank" rel="noopener" class="release-link mt-2 d-inline-block">
-      View on GitHub
-    </a>
-  </div>
+  <nav *ngIf="releasePageCount > 1" class="release-pagination" aria-label="Release history pages">
+    <button type="button" class="btn btn-sm btn-outline-secondary" [disabled]="releasePage === 1"
+            (click)="setReleasePage(releasePage - 1)">Previous</button>
+    <span class="text-muted small" aria-live="polite">Page {{ releasePage }} of {{ releasePageCount }}</span>
+    <button type="button" class="btn btn-sm btn-outline-secondary" [disabled]="releasePage === releasePageCount"
+            (click)="setReleasePage(releasePage + 1)">Next</button>
+  </nav>
+
+  <details *ngFor="let release of visibleReleases" class="changelog-entry mt-3" [open]="release === releases[0]">
+    <summary>
+      <span class="release-title">{{ release.name || release.tag_name }}</span>
+      <small class="text-muted release-date">{{ release.published_at | date:'mediumDate' }}</small>
+    </summary>
+    <div class="release-body mt-3 text-muted" [innerHTML]="release.bodyHtml"></div>
+    <a [href]="release.html_url" target="_blank" rel="noopener" class="release-link mt-2 d-inline-block">View on GitHub</a>
+  </details>
 </div>
