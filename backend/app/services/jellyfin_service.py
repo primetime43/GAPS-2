@@ -1,5 +1,6 @@
 import logging
 import threading
+from urllib.parse import quote
 import requests
 from app.services import config_store
 
@@ -32,8 +33,11 @@ class JellyfinService:
             self._user_id = saved.get('user_id')
             self._active_server = saved.get('active_server')
 
-    def _headers(self) -> dict:
-        return {'X-Emby-Token': self._api_key}
+    def _headers(self, api_key: str | None = None) -> dict:
+        # Jellyfin 12 disables legacy X-Emby-Token authentication. The standard
+        # MediaBrowser scheme also works on older servers and with API keys.
+        token = self._api_key if api_key is None else api_key
+        return {'Authorization': f'MediaBrowser Token="{quote(token or "", safe="")}"'}
 
     def _base(self) -> str:
         return self._server_url.rstrip('/')
@@ -44,7 +48,7 @@ class JellyfinService:
         """Test connection to a Jellyfin server."""
         try:
             url = f"{server_url.rstrip('/')}/System/Info"
-            resp = requests.get(url, headers={'X-Emby-Token': api_key}, timeout=10)
+            resp = requests.get(url, headers=self._headers(api_key), timeout=10)
             if resp.status_code == 200:
                 info = resp.json()
                 return True, info.get('ServerName', 'Jellyfin Server')

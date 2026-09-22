@@ -123,7 +123,7 @@ def image_proxy():
             if not service._server_url or not service._api_key:
                 return jsonify(error='Not connected'), 404
             url = f"{service._base()}/Items/{item_id}/Images/Primary?maxHeight=300"
-            headers = {'X-Emby-Token': service._api_key}
+            headers = service._headers()
 
         else:
             return jsonify(error='Unknown source'), 400
