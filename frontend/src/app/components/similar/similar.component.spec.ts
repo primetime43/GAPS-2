@@ -1,7 +1,7 @@
 import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
 import { FormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
-import { of } from 'rxjs';
+import { of, Subject, throwError } from 'rxjs';
 import { SimilarComponent } from './similar.component';
 import { ActiveServerService, ActiveServer } from '../../services/active-server.service';
 import { LibraryService } from '../../services/library.service';
@@ -91,6 +91,41 @@ describe('SimilarComponent', () => {
   });
 
   afterEach(() => localStorage.removeItem(librarySelectionsKey));
+
+  it('displays library failures instead of silently showing an empty library', () => {
+    libraryService.getMovies.and.returnValue(throwError(() => ({ error: { error: 'Server offline' } })));
+    fixture.detectChanges();
+    expect(component.errorMessage).toBe('Server offline');
+    expect(component.loadingMovies).toBeFalse();
+  });
+
+  it('ignores library results from a previous selection', () => {
+    const pending = new Subject<any>();
+    libraryService.getMovies.and.returnValue(pending);
+    fixture.detectChanges();
+    component.selectedLibraries = [];
+    component.loadMovies();
+    pending.next({ movies: [seed] });
+    expect(component.movies).toEqual([]);
+  });
+
+  it('does not resurrect results after clearing a pending similar lookup', () => {
+    const pending = new Subject<any>();
+    recommendationService.getSimilarMovies.and.returnValue(pending);
+    component.selectMovie(seed);
+    component.clearResults();
+    pending.next([{ tmdbId: 2, name: 'Old result' }]);
+    expect(component.allSimilar).toEqual([]);
+    expect(component.loadingSimilar).toBeFalse();
+  });
+
+  it('honors the global IMDb link preference', () => {
+    preferencesService.load.and.returnValue(of({ ...DEFAULT_PREFERENCES, externalLinkProvider: 'imdb' }));
+    recommendationService.getSimilarMovies.and.returnValue(of([{ tmdbId: 2, name: 'Similar title' }] as any));
+    fixture.detectChanges();
+    component.selectMovie(seed);
+    expect(component.allSimilar[0].externalUrl).toBe('/api/tmdb/movie/2/imdb');
+  });
 
   it('loads TMDB-backed movies from the default movie library', fakeAsync(() => {
     fixture.detectChanges();

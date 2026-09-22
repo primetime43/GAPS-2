@@ -1,6 +1,6 @@
-import { Component, OnInit } from '@angular/core';
-import { forkJoin, of } from 'rxjs';
-import { catchError, map } from 'rxjs/operators';
+import { Component, OnInit, OnDestroy } from '@angular/core';
+import { forkJoin, of, Subject } from 'rxjs';
+import { catchError, map, takeUntil } from 'rxjs/operators';
 import { ActiveServerService, MediaServerSource } from '../../services/active-server.service';
 import { LibraryService } from '../../services/library.service';
 import { PreferencesService } from '../../services/preferences.service';
@@ -10,6 +10,7 @@ import { GapViewService } from '../../services/gap-view.service';
 import { MediaLibrary } from '../../models/media-server.model';
 import { Movie } from '../../models/movie.model';
 import { Gap } from '../../models/recommendation.model';
+import { environment } from '../../../environments/environment';
 
 type ResultView = 'all' | 'owned' | 'missing';
 type ResultSort = 'relevance' | 'rating' | 'year' | 'name';
@@ -21,7 +22,7 @@ type SendState = 'sending' | 'sent' | 'error';
   styleUrls: ['./similar.component.scss'],
   standalone: false,
 })
-export class SimilarComponent implements OnInit {
+export class SimilarComponent implements OnInit, OnDestroy {
   private static readonly LIBRARY_SELECTIONS_KEY = 'gaps2.similar.librarySelections';
 
   loading = true;
@@ -60,6 +61,10 @@ export class SimilarComponent implements OnInit {
   radarrEnabled = false;
   private sendStatus = new Map<number, SendState>();
   private sendErrors = new Map<number, string>();
+  private destroy$ = new Subject<void>();
+  private librariesChanged$ = new Subject<void>();
+  private resultsChanged$ = new Subject<void>();
+  externalLinkProvider: 'tmdb' | 'imdb' = 'tmdb';
 
   constructor(
     private activeServerService: ActiveServerService,
@@ -75,7 +80,7 @@ export class SimilarComponent implements OnInit {
     forkJoin({
       active: this.activeServerService.getActive(),
       prefs: this.preferencesService.load().pipe(catchError(() => of(null))),
-    }).subscribe(({ active, prefs }) => {
+    }).pipe(takeUntil(this.destroy$)).subscribe(({ active, prefs }) => {
       if (!active) {
         this.loading = false;
         return;
@@ -88,6 +93,7 @@ export class SimilarComponent implements OnInit {
       this.itemsPerPage = prefs?.moviesPerPage || 50;
       this.showImdbRatings = !!prefs?.showImdbRatings;
       this.showTmdbRatings = prefs?.showTmdbRatings !== false;
+      this.externalLinkProvider = prefs?.externalLinkProvider || 'tmdb';
       if (prefs?.qualityFilterEnabled) {
         this.minRating = prefs.minRating || 0;
         this.minVoteCount = prefs.minVoteCount || 0;
@@ -99,6 +105,11 @@ export class SimilarComponent implements OnInit {
       }
       this.loading = false;
     });
+  }
+
+  ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
   }
 
   get filteredMovies(): Movie[] {
@@ -180,15 +191,11 @@ export class SimilarComponent implements OnInit {
   }
 
   loadMovies(): void {
+    this.librariesChanged$.next();
+    this.clearResults();
     this.movies = [];
-    this.selectedMovie = null;
-    this.allSimilar = [];
-    this.filteredSimilar = [];
     this.movieFilter = '';
     this.currentPage = 1;
-    this.errorMessage = '';
-    this.loadingImdbRatings = false;
-    this.imdbRatingsLoaded = false;
 
     if (!this.selectedLibraries.length) {
       this.loadingMovies = false;
@@ -199,20 +206,25 @@ export class SimilarComponent implements OnInit {
     forkJoin(
       this.selectedLibraries.map(title =>
         this.libraryService.getMovies(title, this.activeSource)
-          .pipe(catchError(() => of({ movies: [] as Movie[] })))
       )
-    ).subscribe(results => {
-      const seen = new Set<number>();
-      const merged: Movie[] = [];
-      for (const result of results) {
-        for (const movie of result.movies || []) {
-          if (!movie.tmdbId || seen.has(movie.tmdbId)) continue;
-          seen.add(movie.tmdbId);
-          merged.push(movie);
+    ).pipe(takeUntil(this.librariesChanged$), takeUntil(this.destroy$)).subscribe({
+      next: results => {
+        const seen = new Set<number>();
+        const merged: Movie[] = [];
+        for (const result of results) {
+          for (const movie of result.movies || []) {
+            if (!movie.tmdbId || seen.has(movie.tmdbId)) continue;
+            seen.add(movie.tmdbId);
+            merged.push(movie);
+          }
         }
-      }
-      this.movies = merged.sort((a, b) => a.name.localeCompare(b.name));
-      this.loadingMovies = false;
+        this.movies = merged.sort((a, b) => a.name.localeCompare(b.name));
+        this.loadingMovies = false;
+      },
+      error: err => {
+        this.loadingMovies = false;
+        this.errorMessage = err.error?.error || 'Failed to load selected libraries.';
+      },
     });
   }
 
@@ -222,6 +234,7 @@ export class SimilarComponent implements OnInit {
       return;
     }
 
+    this.resultsChanged$.next();
     this.selectedMovie = movie;
     this.loadingSimilar = true;
     this.allSimilar = [];
@@ -235,7 +248,7 @@ export class SimilarComponent implements OnInit {
       movie.tmdbId,
       this.selectedLibraries,
       this.activeSource,
-    ).subscribe({
+    ).pipe(takeUntil(this.resultsChanged$), takeUntil(this.destroy$)).subscribe({
       next: rows => {
         this.allSimilar = (rows || []).map(row => ({
           id: row.tmdbId,
@@ -247,7 +260,9 @@ export class SimilarComponent implements OnInit {
           overview: row.overview || '',
           groupName: 'Similar Movies',
           owned: !!row.owned,
-          externalUrl: 'https://www.themoviedb.org/movie/' + row.tmdbId,
+          externalUrl: this.externalLinkProvider === 'imdb'
+            ? `${environment.apiUrl}/tmdb/movie/${row.tmdbId}/imdb`
+            : 'https://www.themoviedb.org/movie/' + row.tmdbId,
           radarrEligible: !!row.tmdbId,
           sonarrEligible: false,
           tmdbRating: row.voteAverage && row.voteAverage > 0 ? row.voteAverage : undefined,
@@ -266,6 +281,8 @@ export class SimilarComponent implements OnInit {
   }
 
   clearResults(): void {
+    this.resultsChanged$.next();
+    this.loadingSimilar = false;
     this.selectedMovie = null;
     this.allSimilar = [];
     this.filteredSimilar = [];
@@ -313,7 +330,7 @@ export class SimilarComponent implements OnInit {
   loadImdbRatings(): void {
     if (!this.showImdbRatings || !this.allSimilar.length || this.loadingImdbRatings) return;
     this.loadingImdbRatings = true;
-    this.gapView.applyImdbRatings(this.allSimilar).subscribe(() => {
+    this.gapView.applyImdbRatings(this.allSimilar).pipe(takeUntil(this.resultsChanged$), takeUntil(this.destroy$)).subscribe(() => {
       this.loadingImdbRatings = false;
       this.imdbRatingsLoaded = true;
       this.applyFilter();
