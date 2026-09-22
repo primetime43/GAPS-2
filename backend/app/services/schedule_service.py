@@ -133,7 +133,7 @@ class ScheduleService:
         with self._app.app_context():
             cfg = self._load_config()
             libraries = self._block_libraries(cfg.get('movie', {}))
-            source = cfg.get('source', 'plex')
+            source = cfg.get('movie', {}).get('source', cfg.get('source', 'plex'))
             if libraries:
                 self._run_movie_scan(libraries, source)
 
@@ -144,7 +144,7 @@ class ScheduleService:
         with self._app.app_context():
             cfg = self._load_config()
             libraries = self._block_libraries(cfg.get('tv', {}))
-            source = cfg.get('source', 'plex')
+            source = cfg.get('tv', {}).get('source', cfg.get('source', 'plex'))
             if libraries:
                 self._run_tv_scan(libraries, source)
 
@@ -394,11 +394,15 @@ class ScheduleService:
 
         key = 'tv' if media_type == 'tv' else 'movie'
         cfg = self._load_config()
+        # Preserve each existing job's server when saving the other schedule.
+        for block in ('movie', 'tv'):
+            if cfg.get(block):
+                cfg[block].setdefault('source', cfg.get('source', 'plex'))
         cfg['source'] = source
         cfg.setdefault('movie', {})
         cfg.setdefault('tv', {})
         cfg[key] = {
-            'enabled': True, 'preset': preset, 'libraries': libraries,
+            'enabled': True, 'preset': preset, 'libraries': libraries, 'source': source,
             'hour': hour, 'minute': minute, 'dayOfWeek': day_of_week,
         }
         config_store.put('schedule', cfg)

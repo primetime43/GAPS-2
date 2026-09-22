@@ -106,9 +106,6 @@ export class ScheduleSettingsComponent implements OnInit {
     this.selectedTvLibraries = [...(config.tv?.libraries || [])];
     this.tvTime = this.formatTime(config.tv?.hour ?? 4, config.tv?.minute ?? 0);
     this.tvDayOfWeek = config.tv?.dayOfWeek || 'mon';
-    if (config.source) {
-      this.activeSource = config.source as any;
-    }
     this.presetKeys = Object.keys(config.presets);
     this.days = config.days || {};
     this.dayKeys = Object.keys(this.days);
