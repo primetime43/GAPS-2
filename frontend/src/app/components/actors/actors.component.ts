@@ -218,6 +218,7 @@ export class ActorsComponent implements OnInit, OnDestroy {
     this.pendingIgnoreGap = null;
     this.mediaType = type;
     this.genreFilter = null;
+    this.resultFilter = '';
     this.loadGenres();
     this.applyLibrarySelection();
     this.loadIgnored();

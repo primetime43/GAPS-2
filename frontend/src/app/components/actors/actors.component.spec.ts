@@ -75,6 +75,58 @@ describe('ActorsComponent', () => {
     expect(component.selectedLibraries).toEqual(['Movies']);
   });
 
+  it('switches a selected actor from TV to movies and back without searching again', () => {
+    component.toggleLibrarySelection('More movies');
+    component.setMediaType('tv');
+    component.selectActor(actor);
+    component.resultFilter = 'TV title';
+    component.genreFilter = 18;
+    component.setView('missing');
+    fixture.detectChanges();
+
+    const buttons = fixture.nativeElement.querySelectorAll('[aria-label="Media type"] button');
+    buttons[0].click();
+    fixture.detectChanges();
+    expect(component.selectedActor).toBe(actor);
+    expect(actors.getActorGaps).toHaveBeenCalledWith(actor.id, ['Movies'], 'jellyfin', true, false, 'movie', false);
+    expect(actors.searchPeople).not.toHaveBeenCalled();
+    expect(component.resultFilter).toBe('');
+    expect(component.genreFilter).toBeNull();
+    expect(component.view).toBe('missing');
+    expect(component.downloaderName).toBe('Radarr');
+    expect(buttons[0].getAttribute('aria-pressed')).toBe('true');
+    expect(fixture.nativeElement.querySelector('.rec-title-link')).not.toBeNull();
+
+    buttons[1].click();
+    fixture.detectChanges();
+    expect(component.selectedActor).toBe(actor);
+    expect(actors.getActorGaps).toHaveBeenCalledWith(actor.id, ['TV'], 'jellyfin', true, false, 'tv', false);
+    expect(component.downloaderName).toBe('Sonarr');
+    expect(buttons[1].getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('keeps the media switch available during loading, empty results and errors', () => {
+    const pending = new Subject<any>();
+    actors.getActorGaps.and.returnValue(pending);
+    component.selectActor(actor);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelectorAll('[aria-label="Media type"] button').length).toBe(2);
+
+    actors.getActorGaps.and.returnValue(of({ actor: null, gaps: [] }));
+    fixture.nativeElement.querySelectorAll('[aria-label="Media type"] button')[1].click();
+    fixture.detectChanges();
+    expect(component.mediaType).toBe('tv');
+    expect(fixture.nativeElement.textContent).toContain('No TV shows to show');
+    expect(fixture.nativeElement.querySelectorAll('[aria-label="Media type"] button').length).toBe(2);
+
+    actors.getActorGaps.and.returnValue(throwError(() => ({ error: { error: 'Library unavailable' } })));
+    fixture.nativeElement.querySelectorAll('[aria-label="Media type"] button')[0].click();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Library unavailable');
+    expect(fixture.nativeElement.querySelectorAll('[aria-label="Media type"] button').length).toBe(2);
+    expect(component.selectedActor).toBe(actor);
+  });
+
   it('only offers the movie rating provider that is actually populated', () => {
     component.selectActor(actor);
     fixture.detectChanges();

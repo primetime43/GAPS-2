@@ -26,13 +26,15 @@
 
   <!-- Main content -->
   <div *ngIf="!loading && hasServer">
-    <!-- Movies / TV toggle (hidden on the results page — go Back to switch/search) -->
-    <div *ngIf="!selectedActor" class="btn-group btn-group-sm mb-3" role="group" aria-label="Media type">
+    <!-- Keep the media switch available while viewing or loading a filmography. -->
+    <div class="btn-group btn-group-sm mb-3" role="group" aria-label="Media type">
       <button type="button" class="btn"
+              [attr.aria-pressed]="mediaType === 'movie'"
               [class.btn-primary]="mediaType === 'movie'"
               [class.btn-outline-secondary]="mediaType !== 'movie'"
               (click)="setMediaType('movie')">Movies</button>
       <button type="button" class="btn"
+              [attr.aria-pressed]="mediaType === 'tv'"
               [class.btn-primary]="mediaType === 'tv'"
               [class.btn-outline-secondary]="mediaType !== 'tv'"
               (click)="setMediaType('tv')">TV Shows</button>
