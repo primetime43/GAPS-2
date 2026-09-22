@@ -249,7 +249,7 @@ class RadarrService:
             if isinstance(errors, list):
                 messages = [e.get('errorMessage', '') for e in errors if isinstance(e, dict)]
                 joined = '; '.join(m for m in messages if m)
-                if any('already' in m.lower() for m in messages):
+                if any('already' in m.lower() for m in messages) and self._movie_in_library(tmdb_id):
                     return True, f'"{payload["title"]}" is already in Radarr'
                 if joined:
                     return False, joined

@@ -223,7 +223,7 @@ class SonarrService:
             if isinstance(errors, list):
                 messages = [e.get('errorMessage', '') for e in errors if isinstance(e, dict)]
                 joined = '; '.join(m for m in messages if m)
-                if any('already' in m.lower() for m in messages):
+                if any('already' in m.lower() for m in messages) and self._series_in_library(tvdb_id):
                     return True, f'"{payload["title"]}" is already in Sonarr'
                 if joined:
                     return False, joined
