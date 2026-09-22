@@ -12,11 +12,10 @@ They differ only in:
   * the config_store key of the last persisted scan (`seed_key`), used to
     rehydrate a 'done' state on startup so the dashboard survives a restart.
 
-Generation semantics mirror the original inline code exactly: a `generation` of
-`None` means "not tied to a tracked scan" (e.g. a scheduled scan calling the
-gap finder directly) and is treated as always-current, so its progress writes
-are unconditional. A real (int) generation is guarded — writes apply only while
-it's still the active scan.
+A `generation` of `None` means "not tied to a tracked scan" (e.g. a scheduled
+scan calling the gap finder directly). Its work can proceed independently, but
+it cannot change the manual scan's progress. A real (int) generation is guarded
+— writes apply only while it's still the active scan.
 """
 
 import threading
@@ -96,10 +95,9 @@ class ScanProgressTracker:
             return self._generation == generation
 
     def update(self, generation: int | None, **fields) -> bool:
-        """Apply partial field updates to the live progress dict, unless a newer
-        generation has superseded `generation`. Returns whether it applied."""
+        """Update progress only for the active tracked scan."""
         with self._lock:
-            if generation is not None and self._generation != generation:
+            if generation is None or self._generation != generation:
                 return False
             self._progress.update(fields)
             return True
@@ -115,9 +113,11 @@ class ScanProgressTracker:
             self._progress['status'] = 'done'
             return True
 
-    def fail(self, generation: int, error: str) -> None:
+    def fail(self, generation: int, error: str) -> bool:
         """Mark the scan errored, unless superseded."""
         with self._lock:
             if self._generation == generation:
                 self._progress['error'] = error
                 self._progress['status'] = 'error'
+                return True
+            return False

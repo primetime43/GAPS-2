@@ -813,7 +813,8 @@ class TmdbService:
                 gaps=missing_gaps,
             )
         except Exception as e:
-            self._scan.fail(generation, str(e))
+            if not self._scan.fail(generation, str(e)):
+                return
             scan_history.record(
                 media_type='movie',
                 libraries=libraries,
