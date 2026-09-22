@@ -96,16 +96,20 @@ export class ScheduleSettingsComponent implements OnInit {
     });
   }
 
-  private applyConfig(config: ScheduleConfig): void {
+  private applyConfig(config: ScheduleConfig, type?: MediaType): void {
     this.schedule = config;
-    this.moviePreset = config.movie?.preset || '';
-    this.selectedMovieLibraries = [...(config.movie?.libraries || [])];
-    this.movieTime = this.formatTime(config.movie?.hour ?? 4, config.movie?.minute ?? 0);
-    this.movieDayOfWeek = config.movie?.dayOfWeek || 'mon';
-    this.tvPreset = config.tv?.preset || '';
-    this.selectedTvLibraries = [...(config.tv?.libraries || [])];
-    this.tvTime = this.formatTime(config.tv?.hour ?? 4, config.tv?.minute ?? 0);
-    this.tvDayOfWeek = config.tv?.dayOfWeek || 'mon';
+    if (!type || type === 'movie') {
+      this.moviePreset = config.movie?.preset || '';
+      this.selectedMovieLibraries = [...(config.movie?.libraries || [])];
+      this.movieTime = this.formatTime(config.movie?.hour ?? 4, config.movie?.minute ?? 0);
+      this.movieDayOfWeek = config.movie?.dayOfWeek || 'mon';
+    }
+    if (!type || type === 'tv') {
+      this.tvPreset = config.tv?.preset || '';
+      this.selectedTvLibraries = [...(config.tv?.libraries || [])];
+      this.tvTime = this.formatTime(config.tv?.hour ?? 4, config.tv?.minute ?? 0);
+      this.tvDayOfWeek = config.tv?.dayOfWeek || 'mon';
+    }
     this.presetKeys = Object.keys(config.presets);
     this.days = config.days || {};
     this.dayKeys = Object.keys(this.days);
@@ -135,7 +139,7 @@ export class ScheduleSettingsComponent implements OnInit {
       mediaType: type, preset, libraries: [...libraries], source: this.activeSource, hour, minute, dayOfWeek,
     }).subscribe({
       next: (config) => {
-        this.applyConfig(config);
+        this.applyConfig(config, type);
         this.showMessage(`${type === 'tv' ? 'TV' : 'Movie'} schedule saved.`, 'success');
         this.saving[type] = false;
       },
@@ -151,7 +155,7 @@ export class ScheduleSettingsComponent implements OnInit {
     this.clearMessage();
     this.scheduleService.disableSchedule(type).subscribe({
       next: (config) => {
-        this.applyConfig(config);
+        this.applyConfig(config, type);
         this.showMessage(`${type === 'tv' ? 'TV' : 'Movie'} schedule disabled.`, 'success');
         this.saving[type] = false;
       },
