@@ -6,9 +6,4 @@ import { Component } from '@angular/core';
     styleUrls: ['./header.component.scss'],
     standalone: false
 })
-export class HeaderComponent {
-
-  goToSettings(): void {
-    // handled by routerLink in template; kept for any programmatic needs
-  }
-}
+export class HeaderComponent {}

@@ -10,11 +10,6 @@ def _get_service(source: str):
     return media_service_for(current_app, source)
 
 
-def _get_movies_cache(source: str) -> dict:
-    """Get the movies cache from the appropriate media server service."""
-    return _get_service(source).movies_cache
-
-
 @recommendations_bp.route('/movie', methods=['GET'])
 def get_gaps_for_movie():
     """Find collection gaps for a single movie."""
