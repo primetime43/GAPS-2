@@ -59,6 +59,31 @@ describe('ScanHistoryComponent', () => {
     httpMock.verify();
   });
 
+  it('cancels a previous history request when the media filter changes', () => {
+    fixture.detectChanges();
+    const previous = httpMock.expectOne(`${environment.apiUrl}/scan-history?limit=50`);
+    queryParamMap$.next(convertToParamMap({ type: 'tv' }));
+    expect(previous.cancelled).toBeTrue();
+    httpMock.expectOne(`${environment.apiUrl}/scan-history?mediaType=tv&limit=50`)
+      .flush({ history: [], lastMovie: null, lastTv: null });
+    expect(component.entries).toEqual([]);
+  });
+
+  it('keeps export busy and blocks duplicate downloads until the workbook is built', fakeAsync(() => {
+    let finish!: () => void;
+    spyOn<any>(component, 'writeWorkbook').and.returnValue(new Promise<void>(resolve => finish = resolve));
+    component.exportRow(exportableEntry, 'xlsx');
+    httpMock.expectOne(`${environment.apiUrl}/scan-history/${exportableEntry.id}`).flush({
+      ...exportableEntry, gaps: [{ tmdbId: 1, name: 'Movie' }],
+    });
+    component.exportRow(exportableEntry, 'csv');
+    httpMock.expectNone(`${environment.apiUrl}/scan-history/${exportableEntry.id}`);
+    expect(component.isExporting(exportableEntry, 'xlsx')).toBeTrue();
+    finish();
+    tick();
+    expect(component.isExporting(exportableEntry, 'xlsx')).toBeFalse();
+  }));
+
   it('loads history with no type filter by default', fakeAsync(() => {
     fixture.detectChanges();
     tick();

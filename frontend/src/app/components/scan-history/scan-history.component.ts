@@ -29,6 +29,7 @@ export class ScanHistoryComponent implements OnInit, OnDestroy {
   rowError: Record<string, string> = {};
 
   private destroy$ = new Subject<void>();
+  private loadChanged$ = new Subject<void>();
 
   constructor(
     private scanHistoryService: ScanHistoryService,
@@ -53,11 +54,12 @@ export class ScanHistoryComponent implements OnInit, OnDestroy {
   }
 
   load(): void {
+    this.loadChanged$.next();
     this.loading = true;
     this.error = '';
     const filter =
       this.mediaTypeFilter === 'all' ? undefined : this.mediaTypeFilter;
-    this.scanHistoryService.get(filter, 50).subscribe({
+    this.scanHistoryService.get(filter, 50).pipe(takeUntil(this.loadChanged$), takeUntil(this.destroy$)).subscribe({
       next: (resp) => {
         this.entries = resp.history || [];
         this.loading = false;
@@ -103,20 +105,22 @@ export class ScanHistoryComponent implements OnInit, OnDestroy {
   }
 
   exportRow(entry: ScanHistoryEntry, format: ExportFormat): void {
-    if (!entry.id || !this.canExport(entry)) return;
+    if (!entry.id || !this.canExport(entry) || this.exportingFor[entry.id]) return;
     const id = entry.id;
     this.exportingFor[id] = format;
     delete this.rowError[id];
 
-    this.scanHistoryService.getById(id).subscribe({
+    this.scanHistoryService.getById(id).pipe(takeUntil(this.destroy$)).subscribe({
       next: (detail) => {
-        this.exportingFor[id] = null;
         if (!detail.gaps || detail.gaps.length === 0) {
+          this.exportingFor[id] = null;
           this.rowError[id] = 'No gap details stored for this scan.';
           return;
         }
         this.writeWorkbook(detail, format).catch(() => {
           this.rowError[id] = 'Failed to build the export file.';
+        }).finally(() => {
+          this.exportingFor[id] = null;
         });
       },
       error: (err) => {
