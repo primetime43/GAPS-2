@@ -1,7 +1,7 @@
 import logging
 from flask import Blueprint, jsonify, request, current_app
 from app.services import config_store
-from app.services.media_servers import media_service_for
+from app.services.media_servers import media_service_for, load_library_cache
 from app.blueprints import ignored_helpers
 
 logger = logging.getLogger(__name__)
@@ -85,9 +85,12 @@ def get_gaps_for_show():
 
     service = _get_service(source)
     names = library_names if library_names else ([library_name] if library_name else [])
+    cache, error = load_library_cache(service, names, 'tv')
+    if error:
+        return jsonify(error=error), 502
     owned_ids: set[int] = set()
     for name in names:
-        owned_ids.update(service.shows_cache.get(name, {}).get('tvdbIds', []))
+        owned_ids.update(cache.get(name, {}).get('tvdbIds', []))
 
     gaps, error = current_app.tvdb_service.find_gaps_for_show(series_id, owned_ids, show_existing)
     if error:
@@ -120,13 +123,9 @@ def scan_tv_gaps():
 
     if fresh_scan:
         tvdb.clear_cache()
-        service.clear_shows_cache()
-    # Ensure show data is loaded for each selected library.
-    for name in names:
-        if name not in service.shows_cache:
-            service.get_shows(name)
-
-    cache = service.shows_cache
+    cache, error = load_library_cache(service, names, 'tv', refresh=fresh_scan)
+    if error:
+        return jsonify(error=error), 502
     owned_shows: list[dict] = []
     owned_ids: set[int] = set()
     seen: set[int] = set()
@@ -141,8 +140,7 @@ def scan_tv_gaps():
 
     if not owned_ids:
         return jsonify(
-            error='No TV shows with TheTVDB IDs found in the selected libraries. '
-                  'Browse the libraries first to load show data.'
+            error='No TV shows with TheTVDB IDs found in the selected libraries.'
         ), 400
 
     tvdb.start_scan(

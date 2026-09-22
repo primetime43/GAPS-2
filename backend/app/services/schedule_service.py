@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from app.services import config_store, scan_history
-from app.services.media_servers import media_service_for
+from app.services.media_servers import media_service_for, load_library_cache
 
 logger = logging.getLogger(__name__)
 
@@ -167,10 +167,10 @@ class ScheduleService:
             # cache was loaded (it otherwise persists for the process lifetime).
             # Merge owned movies across all selected libraries, deduped the same
             # way the Missing-page scan does.
-            media_service.clear_movies_cache()
-            for name in library_names:
-                media_service.get_movies(name)
-            cache = media_service.movies_cache
+            cache, error = load_library_cache(media_service, library_names, 'movie', refresh=True)
+            if error:
+                self._record_last_run(status='error', libraries=library_names, message=error)
+                return
 
             owned_movies: list[dict] = []
             owned_ids: set = set()
@@ -243,10 +243,10 @@ class ScheduleService:
 
             # Re-fetch every run so the scan sees shows added since the cache was
             # loaded; merge owned shows across all selected libraries.
-            media_service.clear_shows_cache()
-            for name in library_names:
-                media_service.get_shows(name)
-            cache = media_service.shows_cache
+            cache, error = load_library_cache(media_service, library_names, 'tv', refresh=True)
+            if error:
+                self._record_last_run(status='error', libraries=library_names, message=error, media_type='tv')
+                return
 
             owned_shows: list[dict] = []
             owned_ids: set = set()
