@@ -1,0 +1,41 @@
+# Optional updater setup. Use this file on its own, not as an override.
+services:
+  gaps2:
+    image: ${GAPS_IMAGE_REPOSITORY:-ghcr.io/primetime43/gaps-2}:${GAPS_INITIAL_TAG:-latest}
+    container_name: ${GAPS_CONTAINER_NAME:-gaps2}
+    labels:
+      io.gaps.updates.enabled: "true"
+    ports:
+      - "${GAPS_BIND_ADDRESS:-127.0.0.1}:${GAPS_PORT:-4277}:4277"
+    environment:
+      FLASK_ENV: production
+      GAPS_UPDATES_DIR: /control
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
+    volumes:
+      - gaps2-data:/app/data
+      - updates-control:/control
+    restart: unless-stopped
+
+  updater:
+    image: ${GAPS_IMAGE_REPOSITORY:-ghcr.io/primetime43/gaps-2}:${GAPS_INITIAL_TAG:-latest}
+    entrypoint: ["python", "/app/docker_updater.py"]
+    environment:
+      GAPS_TARGET_CONTAINER: ${GAPS_CONTAINER_NAME:-gaps2}
+      GAPS_IMAGE_REPOSITORY: ${GAPS_IMAGE_REPOSITORY:-ghcr.io/primetime43/gaps-2}
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - gaps2-data:/managed-data
+      - updates-control:/control
+      - updates-state:/state
+    depends_on:
+      - gaps2
+    restart: unless-stopped
+
+volumes:
+  gaps2-data:
+    name: ${GAPS_DATA_VOLUME:-gaps2-data}
+  updates-control:
+  updates-state:

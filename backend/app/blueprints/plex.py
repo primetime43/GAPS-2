@@ -42,7 +42,7 @@ def fetch_servers():
 
 @plex_bp.route('/libraries/<path:server_name>', methods=['GET'])
 def fetch_libraries(server_name):
-    libraries, token, error = current_app.plex_service.fetch_libraries(server_name)
+    libraries, token, error = current_app.plex_service.fetch_libraries(server_name, request.args.get('serverUrl'))
     connections = current_app.plex_service.get_connections(server_name)
     if error:
         return jsonify(error=error, connections=connections), 404
@@ -60,7 +60,7 @@ def save_data():
     success, error = current_app.plex_service.save_active_server(server, token, libraries, server_url)
     if success:
         return jsonify(result='Success')
-    return jsonify(result='Error', error=error)
+    return jsonify(result='Error', error=error), 400
 
 
 @plex_bp.route('/test-active', methods=['POST'])

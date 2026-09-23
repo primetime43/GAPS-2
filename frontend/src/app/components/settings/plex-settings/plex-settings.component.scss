@@ -53,6 +53,7 @@
 
 .active-server-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
@@ -84,6 +85,13 @@
 }
 
 /* Library groups */
+.library-preview {
+  padding: 16px;
+  border: 1px solid #444;
+  border-radius: 8px;
+  background-color: #252525;
+}
+
 .lib-group {
   margin-bottom: 10px;
 }

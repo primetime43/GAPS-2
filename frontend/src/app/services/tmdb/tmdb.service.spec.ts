@@ -23,6 +23,14 @@ describe('TmdbService', () => {
     expect(service).toBeTruthy();
   });
 
+  it('requests genre lists for the selected media type', () => {
+    for (const mediaType of ['movie', 'tv'] as const) {
+      service.getGenres(mediaType).subscribe(genres => expect(genres).toEqual([{ id: 18, name: 'Drama' }]));
+      const req = httpMock.expectOne(`${environment.apiUrl}/tmdb/genres?mediaType=${mediaType}`);
+      req.flush({ genres: [{ id: 18, name: 'Drama' }] });
+    }
+  });
+
   it('getStatus should GET tmdb/status and return hasKey and apiKey', () => {
     const mockStatus: TmdbStatus = { hasKey: true, apiKey: 'abc123' };
 

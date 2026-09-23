@@ -20,12 +20,35 @@ img {
   border: 1px solid #444;
   border-left: 4px solid #00bc8c;
   border-radius: 8px;
-  padding: 20px;
+  padding: 12px 16px;
 
-  h5 {
-    color: #00bc8c;
-    margin-bottom: 4px;
+  summary {
+    cursor: pointer;
+    border-radius: 2px;
+
+    &:focus-visible {
+      outline: 2px solid #00bc8c;
+      outline-offset: 4px;
+    }
   }
+
+  .release-title {
+    color: #00bc8c;
+    font-weight: 500;
+  }
+
+  .release-date {
+    display: inline-block;
+    margin-left: 12px;
+  }
+}
+
+.release-pagination {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 16px 0;
 }
 
 .release-body {

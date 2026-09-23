@@ -1,0 +1,20 @@
+.update-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  color: #8dcfbd;
+  font-size: 0.875rem;
+
+  .status-dot {
+    width: 0.4rem;
+    height: 0.4rem;
+    flex-shrink: 0;
+    border-radius: 50%;
+    background: currentColor;
+  }
+
+  .spinner-border {
+    flex-shrink: 0;
+  }
+}

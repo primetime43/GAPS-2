@@ -11,7 +11,7 @@ GAPS 2 connects to your Plex, Jellyfin, or Emby server, looks at what you own, a
 - **Discover gaps automatically** — point it at a library and it finds every incomplete collection (movies) and franchise (TV) for you
 - **Act on them instantly** — send missing titles to Radarr/Sonarr to download, without leaving the app
 - **Set it and forget it** — scheduled scans keep watch and notify you (Discord, Telegram, Email) when new gaps appear
-- **Runs anywhere** — one-click Windows .exe, a single Docker container, or local dev — all from one port
+- **Runs anywhere** — a single Docker container or local development, all from one port
 
 ## Features
 
@@ -35,14 +35,10 @@ GAPS 2 connects to your Plex, Jellyfin, or Emby server, looks at what you own, a
 **Deploy your way**
 - Responsive dark-themed UI (Angular 19 + Bootstrap 5)
 - Dockerized deployment with persistent, encrypted configuration
-- Windows standalone executable (single .exe via PyInstaller)
-- Automated releases via GitHub Actions (Windows exe + Docker Hub + GitHub Container Registry)
+- Automated Docker releases via GitHub Actions to Docker Hub and GitHub Container Registry
+- Optional in-app switching between Stable, Develop, and a specific release
 
 ## Quick Start
-
-### Windows Executable
-
-Download `GAPS-2.exe` from the [latest release](https://github.com/primetime43/GAPS-2/releases) and run it. The app opens in your browser at `http://localhost:4277`.
 
 ### Docker
 
@@ -76,6 +72,8 @@ docker pull ghcr.io/primetime43/gaps-2:develop
 
 > **Persist `/app/data`.** GAPS encrypts saved settings (API keys, tokens, server URLs) in `backend/data/config.enc`. The encryption key lives next to it as `.config.key`, so both files must be on a persistent volume — otherwise every container recreation generates a fresh key and the old config becomes unreadable. The `docker run` example above and the Compose file already mount `/app/data`; if you write your own command (e.g. an unRAID template), make sure the mount is there. To override the key explicitly — for moving between hosts or sharing a config across replicas — set the `GAPS2_CONFIG_KEY` environment variable to a Fernet key (output of `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`).
 
+To switch between Stable, Develop, and a specific version from **Settings > Updates**, see the [in-app release switching guide](docs/release-switching.md).
+
 ### Images of v2.8.0
 <details>
   <summary>Click to view screenshots of version 2.8.0</summary>
@@ -99,35 +97,7 @@ docker pull ghcr.io/primetime43/gaps-2:develop
   
 ### Development
 
-**One-command launch:**
-
-- **Windows:** Double-click `run-dev.bat`
-- **Linux/Mac/Git Bash:** `./run-dev.sh`
-
-This automatically sets up a Python virtual environment, installs all dependencies, and starts both servers.
-
-**Manual setup:**
-
-Prerequisites: Python 3.9+, Node.js 20+, a [TMDB API key](https://www.themoviedb.org/settings/api) (for movies), and optionally a free [TheTVDB v4 API key](https://thetvdb.com/dashboard/account/apikey) (for TV franchise scanning)
-
-```bash
-# Backend
-cd backend
-python -m venv venv
-source venv/bin/activate        # Linux/Mac
-# venv\Scripts\activate.bat     # Windows
-pip install -r requirements.txt
-python run.py
-```
-
-```bash
-# Frontend
-cd frontend
-npm install
-npm start
-```
-
-The Angular dev server starts at `http://localhost:4200` and proxies API requests to the Flask backend at `http://localhost:4277`.
+See the [development guide](docs/development.md) for prerequisites and local setup.
 
 ## Usage
 

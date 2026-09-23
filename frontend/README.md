@@ -1,27 +1,13 @@
-# GAPS2
+# GAPS 2 frontend
 
-This project was generated with [Angular CLI](https://github.com/angular/angular-cli) version 16.2.0.
+Run these commands from `frontend/`:
 
-## Development server
+- `npm ci` installs the locked dependencies.
+- `npm start` serves the app at `http://localhost:4200` and proxies `/api` to the backend at `http://localhost:4277`.
+- `npm run build` writes the production app to `dist/gaps-2/`.
+- `npm test` runs the Karma unit tests.
+- `npm test -- --watch=false --browsers=ChromeHeadless` runs the tests once. Set `CHROME_BIN` to your Chrome or Edge executable if needed.
 
-Run `ng serve` for a dev server. Navigate to `http://localhost:4200/`. The application will automatically reload if you change any of the source files.
+TypeScript rejects unused locals, imports, and parameters during builds and tests. Prefix intentionally unused parameters with `_`.
 
-## Code scaffolding
-
-Run `ng generate component component-name` to generate a new component. You can also use `ng generate directive|pipe|service|class|guard|interface|enum|module`.
-
-## Build
-
-Run `ng build` to build the project. The build artifacts will be stored in the `dist/` directory.
-
-## Running unit tests
-
-Run `ng test` to execute the unit tests via [Karma](https://karma-runner.github.io).
-
-## Running end-to-end tests
-
-Run `ng e2e` to execute the end-to-end tests via a platform of your choice. To use this command, you need to first add a package that implements end-to-end testing capabilities.
-
-## Further help
-
-To get more help on the Angular CLI use `ng help` or go check out the [Angular CLI Overview and Command Reference](https://angular.io/cli) page.
+See the [project README](../README.md) for backend setup and packaging.

@@ -595,8 +595,9 @@ class TvdbService:
                 gaps=missing_gaps,
             )
         except Exception as e:
+            if not self._scan.fail(generation, str(e)):
+                return
             logger.exception("TVDB scan failed")
-            self._scan.fail(generation, str(e))
             scan_history.record(
                 media_type='tv',
                 libraries=libraries,

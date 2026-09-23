@@ -3,7 +3,7 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 import { FormsModule } from '@angular/forms';
 import { Component, Input, Output, EventEmitter } from '@angular/core';
-import { of } from 'rxjs';
+import { of, Subject, throwError } from 'rxjs';
 import { RecommendedComponent } from './recommended.component';
 import { ActiveServerService, ActiveServer, MediaServerSource } from '../../services/active-server.service';
 import { MediaLibrary } from '../../models/media-server.model';
@@ -254,8 +254,10 @@ describe('RecommendedComponent', () => {
     component.allGaps = [
       gap({ id: 1, name: 'Released', year: '1999', releaseDate: past, groupName: 'C', owned: false }),
       gap({ id: 2, name: 'Future', year: '2099', releaseDate: future, groupName: 'C', owned: false }),
-      gap({ id: 3, name: 'Unannounced', year: 'N/A', releaseDate: '', groupName: 'C', owned: false }),
+      gap({ id: 3, name: 'Unknown date', year: 'N/A', releaseDate: '', groupName: 'C', owned: false }),
       gap({ id: 4, name: 'Owned future', year: '2099', releaseDate: future, groupName: 'C', owned: true }),
+      gap({ id: 5, name: 'Future year only', year: '2099', groupName: 'C', owned: false }),
+      gap({ id: 6, name: 'Past year only', year: '1999', groupName: 'C', owned: false }),
     ];
     component.ignoredIds = new Set();
     component.view = 'all';
@@ -267,8 +269,10 @@ describe('RecommendedComponent', () => {
     expect(titles).toContain('Released');
     expect(titles).toContain('Owned future');
     expect(titles).not.toContain('Future');
-    expect(titles).not.toContain('Unannounced');
-    expect(component.missingCount).toBe(1);
+    expect(titles).toContain('Unknown date');
+    expect(titles).toContain('Past year only');
+    expect(titles).not.toContain('Future year only');
+    expect(component.missingCount).toBe(3);
   });
 
   it('toggleIgnore should request confirmation before ignoring an item', () => {
@@ -403,5 +407,107 @@ describe('RecommendedComponent', () => {
     (component as any).pollSub = of(0).subscribe();
     component.ngOnDestroy();
     expect((component as any).pollSub).toBeNull();
+  });
+
+  it('does not replace the latest library selection with a late browse response', () => {
+    const pending = new Subject<any>();
+    component.selectedLibraries = ['Old'];
+    libraryService.getMovies.and.returnValue(pending);
+    component.loadItems();
+    libraryService.getMovies.and.returnValue(of({ movies: [{ name: 'New', tmdbId: 2 }] } as any));
+    component.selectedLibraries = ['New'];
+    component.loadItems();
+    pending.next({ movies: [{ name: 'Old', tmdbId: 1 }] });
+    expect(component.items.map(item => item.name)).toEqual(['New']);
+  });
+
+  it('ignores a movie lookup completed after switching to TV', () => {
+    const pending = new Subject<any>();
+    recommendationService.getGapsForMovie.and.returnValue(pending);
+    component.selectItem({ name: 'Old movie', tmdbId: 1 } as any);
+    component.setMediaType('tv');
+    pending.next([{ name: 'Old movie', tmdbId: 1 }]);
+    expect(component.allGaps).toEqual([]);
+    expect(component.loadingGaps).toBeFalse();
+  });
+
+  it('stops a pending scan start when its view is cleared', () => {
+    const pending = new Subject<any>();
+    preferencesService.save.and.returnValue(pending);
+    component.selectedLibraries = ['Movies'];
+    component.scanLibrary();
+    component.clearResults();
+    pending.next({});
+    expect(recommendationService.startScan).not.toHaveBeenCalled();
+    expect(component.loadingGaps).toBeFalse();
+  });
+
+  it('reports polling failures instead of leaving a permanent spinner', fakeAsync(() => {
+    recommendationService.getScanProgress.and.returnValue(throwError(() => new Error('offline')));
+    component.loadingGaps = true;
+    (component as any).startPolling(['Movies']);
+    tick();
+    expect(component.loadingGaps).toBeFalse();
+    expect(component.errorMessage).toContain('Lost connection');
+  }));
+
+  it('does not restore a different servers scan for an identically named library', () => {
+    component.activeServerName = 'Old server';
+    (component as any).cacheCompletedScan(['Movies'], [gap({ id: 1, name: 'Old result' })], 1);
+    component.activeServerName = 'New server';
+    component.selectedLibraries = ['Movies'];
+    libraryService.getMovies.and.returnValue(of({ movies: [] }));
+    component.loadItems();
+    expect(component.allGaps).toEqual([]);
+    expect(component.scanMode).toBeFalse();
+  });
+
+  it('does not apply a remembered movie genre when opening TV', fakeAsync(() => {
+    component.mediaType = 'tv';
+    preferencesService.load.and.returnValue(of({ ...DEFAULT_PREFERENCES, missingFilters: {
+      view: 'all', sortBy: 'default', genreFilter: 18, showFuture: true,
+    } }));
+    fixture.detectChanges();
+    tick();
+    expect(component.genreFilter).toBeNull();
+  }));
+
+  it('links saved TV titles without slugs to their TVDB ID', () => {
+    component.mediaType = 'tv';
+    tvdbService.getGapsForShow.and.returnValue(of([{ tvdbId: 123, name: 'TV title' }] as any));
+    component.selectItem({ tvdbId: 123, name: 'TV title' } as any);
+    expect(component.allGaps[0].externalUrl).toBe('https://thetvdb.com/dereferrer/series/123');
+  });
+
+  it('restores visible results when an ignore request fails', () => {
+    const pending = new Subject<any>();
+    recommendationService.addIgnored.and.returnValue(pending);
+    const movie = gap({ id: 123, name: 'Movie', groupName: 'Collection' });
+    component.allGaps = [movie];
+    component.pendingIgnoreGap = movie;
+    component.onIgnoreConfirm();
+    expect(component.filteredGroups).toEqual([]);
+    pending.error(new Error('offline'));
+    expect(component.ignoredIds.has(123)).toBeFalse();
+    expect(component.filteredGroups[0].gaps[0].id).toBe(123);
+    expect(component.errorMessage).toContain('ignore');
+  });
+
+  it('does not apply a failed movie unignore to the TV ignore list', () => {
+    const pending = new Subject<any>();
+    recommendationService.removeIgnored.and.returnValue(pending);
+    component.ignoredIds.add(123);
+    component.toggleIgnore(gap({ id: 123 }), new Event('click'));
+    component.setMediaType('tv');
+    pending.error(new Error('offline'));
+    expect(component.ignoredIds.has(123)).toBeFalse();
+  });
+
+  it('dismisses a movie ignore confirmation when switching to TV', () => {
+    component.pendingIgnoreGap = gap({ id: 123 });
+    component.setMediaType('tv');
+    expect(component.pendingIgnoreGap).toBeNull();
+    component.onIgnoreConfirm();
+    expect(tvdbService.addIgnored).not.toHaveBeenCalled();
   });
 });

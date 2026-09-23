@@ -27,6 +27,7 @@ export interface UserPreferences {
   minRating: number;
   minVoteCount: number;
   externalLinkProvider: 'tmdb' | 'imdb';
+  actorTvLinkProvider: 'tvdb' | 'imdb';
   showImdbRatings: boolean;
   showTmdbRatings: boolean;
   missingFilters: MissingFilters | null;
@@ -53,6 +54,7 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   minRating: 0,
   minVoteCount: 0,
   externalLinkProvider: 'tmdb',
+  actorTvLinkProvider: 'tvdb',
   showImdbRatings: false,
   showTmdbRatings: true,
   missingFilters: null,

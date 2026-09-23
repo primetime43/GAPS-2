@@ -1,4 +1,5 @@
 import { Component, OnInit } from '@angular/core';
+import { forkJoin } from 'rxjs';
 import {
   SonarrService, SonarrConfig, SonarrQualityProfile, SonarrRootFolder,
 } from '../../../services/sonarr.service';
@@ -71,19 +72,18 @@ export class SonarrSettingsComponent implements OnInit {
 
   loadMeta(): void {
     this.loadingMeta = true;
-    this.sonarr.getProfiles().subscribe({
-      next: (profiles) => {
+    this.profiles = [];
+    this.rootFolders = [];
+    forkJoin({ profiles: this.sonarr.getProfiles(), folders: this.sonarr.getRootFolders() }).subscribe({
+      next: ({ profiles, folders }) => {
         this.profiles = profiles;
+        this.rootFolders = folders;
         this.loadingMeta = false;
       },
       error: (err) => {
         this.loadingMeta = false;
-        this.showMessage(err.error?.error || 'Could not load quality profiles', 'error');
+        this.showMessage(err.error?.error || 'Could not load quality profiles or root folders', 'error');
       },
-    });
-    this.sonarr.getRootFolders().subscribe({
-      next: (folders) => (this.rootFolders = folders),
-      error: () => {},
     });
   }
 
@@ -118,7 +118,7 @@ export class SonarrSettingsComponent implements OnInit {
         this.config = cfg;
         this.showMessage('Sonarr settings saved.', 'success');
         this.saving = false;
-        if (cfg.enabled && this.profiles.length === 0) this.loadMeta();
+        if (cfg.enabled) this.loadMeta();
       },
       error: (err) => {
         this.showMessage(err.error?.error || 'Failed to save settings', 'error');

@@ -1,5 +1,5 @@
 from flask import Blueprint, jsonify, request, current_app
-from app.services.media_servers import media_service_for
+from app.services.media_servers import media_service_for, load_library_cache
 from app.blueprints import ignored_helpers
 
 recommendations_bp = Blueprint('recommendations', __name__)
@@ -8,11 +8,6 @@ recommendations_bp = Blueprint('recommendations', __name__)
 def _get_service(source: str):
     """Get the appropriate media server service."""
     return media_service_for(current_app, source)
-
-
-def _get_movies_cache(source: str) -> dict:
-    """Get the movies cache from the appropriate media server service."""
-    return _get_service(source).movies_cache
 
 
 @recommendations_bp.route('/movie', methods=['GET'])
@@ -34,9 +29,11 @@ def get_gaps_for_movie():
     if not api_key:
         return jsonify(error='No TMDB API key configured'), 400
 
-    cache = _get_movies_cache(source)
     # Merge owned IDs from all specified libraries
     names = library_names if library_names else ([library_name] if library_name else [])
+    cache, error = load_library_cache(_get_service(source), names, 'movie')
+    if error:
+        return jsonify(error=error), 502
     owned_ids = set()
     for name in names:
         library_data = cache.get(name, {})
@@ -74,7 +71,9 @@ def get_similar_movies():
     if not api_key:
         return jsonify(error='No TMDB API key configured'), 400
 
-    cache = _get_movies_cache(source)
+    cache, error = load_library_cache(_get_service(source), library_names, 'movie')
+    if error:
+        return jsonify(error=error), 502
     owned_ids: set[int] = set()
     owned_title_year: set[str] = set()
     for name in library_names:
@@ -128,20 +127,9 @@ def scan_library_gaps():
 
     if fresh_scan:
         tmdb.clear_cache()
-        # Clear cached movie lists so we re-fetch from the media server
-        service.clear_movies_cache()
-        # Re-fetch movies for the selected libraries
-        for name in names:
-            service.get_movies(name)
-    elif incremental:
-        # Refresh the owned-movie list so newly-added titles are visible, but
-        # keep the TMDB collection cache — that's what lets the scan touch only
-        # the new movies instead of re-deriving the whole library.
-        service.clear_movies_cache()
-        for name in names:
-            service.get_movies(name)
-
-    cache = service.movies_cache
+    cache, error = load_library_cache(service, names, 'movie', refresh=fresh_scan or incremental)
+    if error:
+        return jsonify(error=error), 502
 
     # Merge movies and IDs from all selected libraries
     owned_movies = []
@@ -158,7 +146,7 @@ def scan_library_gaps():
         owned_ids.update(library_data.get('tmdbIds', []))
 
     if not owned_movies:
-        return jsonify(error='No movies loaded for the selected libraries. Browse the libraries first to load movie data.'), 400
+        return jsonify(error='No movies found in the selected libraries.'), 400
 
     used_incremental = tmdb.start_scan(
         api_key=api_key,

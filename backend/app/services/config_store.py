@@ -5,7 +5,6 @@ import json
 import logging
 import os
 import platform
-import sys
 import threading
 import uuid
 
@@ -19,12 +18,13 @@ _KEY_ENV_VAR = 'GAPS2_CONFIG_KEY'
 # (request thread + scheduled-scan thread + scan-completion thread) can't
 # clobber each other's keys.
 _WRITE_LOCK = threading.Lock()
+# Keep sidecar migration, reads, writes, and removal ordered. Migration also
+# takes _WRITE_LOCK when removing the encrypted copy, so use a separate lock.
+_SIDECAR_LOCK = threading.Lock()
 
 
 def _get_base_dir():
-    """Return the backend root, works both normally and in a PyInstaller bundle."""
-    if getattr(sys, 'frozen', False):
-        return os.path.dirname(sys.executable)
+    """Return the backend root for source and Docker installs."""
     return os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 
 
@@ -251,6 +251,7 @@ def _sidecar_write(key: str, value) -> None:
         os.replace(tmp, path)
     except OSError as e:
         logger.warning("Failed to write sidecar %s: %s", path, e)
+        raise
 
 
 def _strip_encrypted_key(key: str) -> None:
@@ -275,8 +276,13 @@ def _sidecar_get(key: str, default):
     # No sidecar yet — migrate a legacy value still embedded in config.enc.
     legacy = load().get(key)
     if legacy is not None:
-        _sidecar_write(key, legacy)
-        _strip_encrypted_key(key)
+        try:
+            _sidecar_write(key, legacy)
+            _strip_encrypted_key(key)
+        except OSError as e:
+            # Keep the original until the new file has been saved successfully.
+            logger.warning("Could not finish migrating '%s': %s", key, e)
+            return legacy
         logger.info("Migrated '%s' out of config.enc into %s", key, path)
         return legacy
     return default
@@ -284,13 +290,15 @@ def _sidecar_get(key: str, default):
 
 def get(key: str, default=None):
     if key in _SIDECAR_KEYS:
-        return _sidecar_get(key, default)
+        with _SIDECAR_LOCK:
+            return _sidecar_get(key, default)
     return load().get(key, default)
 
 
 def put(key: str, value) -> None:
     if key in _SIDECAR_KEYS:
-        _sidecar_write(key, value)
+        with _SIDECAR_LOCK:
+            _sidecar_write(key, value)
         return
     with _WRITE_LOCK:
         data = load()
@@ -300,13 +308,12 @@ def put(key: str, value) -> None:
 
 def remove(key: str) -> None:
     if key in _SIDECAR_KEYS:
-        try:
-            os.remove(_sidecar_path(key))
-        except FileNotFoundError:
-            pass
-        except OSError as e:
-            logger.warning("Failed to remove sidecar %s: %s", _sidecar_path(key), e)
-        _strip_encrypted_key(key)  # also clear any pre-migration copy
+        with _SIDECAR_LOCK:
+            try:
+                os.remove(_sidecar_path(key))
+            except FileNotFoundError:
+                pass
+            _strip_encrypted_key(key)  # also clear any pre-migration copy
         return
     with _WRITE_LOCK:
         data = load()

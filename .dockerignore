@@ -8,6 +8,7 @@ __pycache__
 *.pyo
 venv/
 backend/data/
+backend/tests/
 
 # Node/Angular
 frontend/node_modules/

@@ -61,6 +61,9 @@ class EmbyService:
 
         self._server_url = server_url.rstrip('/')
         self._api_key = api_key
+        self._user_id = None
+        self.clear_movies_cache()
+        self.clear_shows_cache()
         self.clear_libraries_cache()  # new connection → drop any cached list
 
         # Get first admin user ID
@@ -153,6 +156,10 @@ class EmbyService:
     # -- Active Server --
 
     def save_active_server(self, server_url: str, api_key: str, server_name: str, libraries: list | None = None) -> None:
+        if self._server_url != server_url.rstrip('/') or self._api_key != api_key:
+            self._user_id = None
+        self.clear_movies_cache()
+        self.clear_shows_cache()
         self._server_url = server_url.rstrip('/')
         self._api_key = api_key
         self._active_server = {

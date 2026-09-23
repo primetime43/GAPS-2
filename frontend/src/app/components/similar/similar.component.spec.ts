@@ -1,7 +1,7 @@
 import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
 import { FormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
-import { of } from 'rxjs';
+import { of, Subject, throwError } from 'rxjs';
 import { SimilarComponent } from './similar.component';
 import { ActiveServerService, ActiveServer } from '../../services/active-server.service';
 import { LibraryService } from '../../services/library.service';
@@ -91,6 +91,175 @@ describe('SimilarComponent', () => {
   });
 
   afterEach(() => localStorage.removeItem(librarySelectionsKey));
+
+  it('displays library failures instead of silently showing an empty library', () => {
+    libraryService.getMovies.and.returnValue(throwError(() => ({ error: { error: 'Server offline' } })));
+    fixture.detectChanges();
+    expect(component.errorMessage).toBe('Server offline');
+    expect(component.loadingMovies).toBeFalse();
+  });
+
+  it('ignores library results from a previous selection', () => {
+    const pending = new Subject<any>();
+    libraryService.getMovies.and.returnValue(pending);
+    fixture.detectChanges();
+    component.selectedLibraries = [];
+    component.loadMovies();
+    pending.next({ movies: [seed] });
+    expect(component.movies).toEqual([]);
+  });
+
+  it('does not resurrect results after clearing a pending similar lookup', () => {
+    const pending = new Subject<any>();
+    recommendationService.getSimilarMovies.and.returnValue(pending);
+    component.selectMovie(seed);
+    component.clearResults();
+    pending.next([{ tmdbId: 2, name: 'Old result' }]);
+    expect(component.allSimilar).toEqual([]);
+    expect(component.loadingSimilar).toBeFalse();
+  });
+
+  it('honors the global IMDb link preference', () => {
+    preferencesService.load.and.returnValue(of({ ...DEFAULT_PREFERENCES, externalLinkProvider: 'imdb' }));
+    recommendationService.getSimilarMovies.and.returnValue(of([{ tmdbId: 2, name: 'Similar title' }] as any));
+    fixture.detectChanges();
+    component.selectMovie(seed);
+    expect(component.allSimilar[0].externalUrl).toBe('/api/tmdb/movie/2/imdb');
+  });
+
+  it('loads IMDb automatically for new results when the preference is enabled', () => {
+    preferencesService.load.and.returnValue(of({ ...DEFAULT_PREFERENCES, showImdbRatings: true }));
+    recommendationService.getSimilarMovies.and.returnValue(of([{ tmdbId: 2, name: 'Similar title' }] as any));
+    const pending = new Subject<void>();
+    gapView.applyImdbRatings.and.returnValue(pending);
+    fixture.detectChanges();
+    component.selectMovie(seed);
+    fixture.detectChanges();
+
+    expect(gapView.applyImdbRatings).toHaveBeenCalledOnceWith(component.allSimilar, { suppressErrors: false });
+    expect(component.loadingImdbRatings).toBeTrue();
+    expect(fixture.nativeElement.querySelectorAll('.rec-card').length).toBe(1);
+    expect(fixture.nativeElement.textContent).toContain('Loading IMDb ratings');
+    pending.next();
+    expect(component.loadingImdbRatings).toBeFalse();
+  });
+
+  it('loads ratings when enabled and reuses them after toggling off and on', () => {
+    recommendationService.getSimilarMovies.and.returnValue(of([{ tmdbId: 2, name: 'Similar title' }] as any));
+    component.selectMovie(seed);
+    expect(gapView.applyImdbRatings).not.toHaveBeenCalled();
+    component.showImdbRatings = true;
+    component.onRatingPrefsChange();
+    component.showImdbRatings = false;
+    component.onRatingPrefsChange();
+    component.showImdbRatings = true;
+    component.onRatingPrefsChange();
+    expect(gapView.applyImdbRatings).toHaveBeenCalledTimes(1);
+    expect(preferencesService.save).toHaveBeenCalledWith({ showImdbRatings: true, showTmdbRatings: true });
+  });
+
+  it('keeps IMDb and TMDB links available without loading ratings', () => {
+    recommendationService.getSimilarMovies.and.returnValue(of([{ tmdbId: 2, name: 'Similar title' }] as any));
+    fixture.detectChanges();
+    component.showImdbRatings = false;
+    component.showTmdbRatings = false;
+    component.selectMovie(seed);
+    fixture.detectChanges();
+
+    const imdbLink: HTMLAnchorElement = fixture.nativeElement.querySelector('.rating-chip.imdb');
+    const tmdbLink: HTMLAnchorElement = fixture.nativeElement.querySelector('.rating-chip.tmdb');
+    expect(imdbLink.getAttribute('href')).toBe('/api/tmdb/movie/2/imdb');
+    expect(tmdbLink.href).toBe('https://www.themoviedb.org/movie/2');
+    expect(imdbLink.target).toBe('_blank');
+    expect(gapView.applyImdbRatings).not.toHaveBeenCalled();
+
+    component.externalLinkProvider = 'imdb';
+    component.onLinkProviderChange();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.rec-title-link').getAttribute('href')).toBe('/api/tmdb/movie/2/imdb');
+    expect(preferencesService.save).toHaveBeenCalledWith({ externalLinkProvider: 'imdb' });
+  });
+
+  it('uses the resolved IMDb ID for links after loading ratings', () => {
+    recommendationService.getSimilarMovies.and.returnValue(of([{ tmdbId: 2, name: 'Similar title' }] as any));
+    gapView.applyImdbRatings.and.callFake(gaps => {
+      gaps[0].imdbId = 'tt1234567';
+      gaps[0].imdbRating = 7;
+      return of(undefined);
+    });
+    component.externalLinkProvider = 'imdb';
+    component.showImdbRatings = true;
+    component.selectMovie(seed);
+    expect(component.allSimilar[0].externalUrl).toBe('https://www.imdb.com/title/tt1234567/');
+  });
+
+  it('shows a retry after a ratings failure and recovers without reloading movies', () => {
+    recommendationService.getSimilarMovies.and.returnValue(of([{ tmdbId: 2, name: 'Similar title' }] as any));
+    gapView.applyImdbRatings.and.returnValue(throwError(() => new Error('offline')));
+    fixture.detectChanges();
+    component.showImdbRatings = true;
+    component.selectMovie(seed);
+    fixture.detectChanges();
+
+    expect(component.loadingImdbRatings).toBeFalse();
+    expect(component.imdbRatingsLoaded).toBeFalse();
+    expect(fixture.nativeElement.textContent).toContain('Could not load IMDb ratings');
+    expect(component.filteredSimilar.length).toBe(1);
+    gapView.applyImdbRatings.and.returnValue(of(undefined));
+    fixture.nativeElement.querySelector('.imdb-status button').click();
+    expect(component.imdbRatingsError).toBe('');
+    expect(component.imdbRatingsLoaded).toBeTrue();
+    expect(recommendationService.getSimilarMovies).toHaveBeenCalledTimes(1);
+  });
+
+  it('explains empty and partial IMDb results and allows another attempt', () => {
+    recommendationService.getSimilarMovies.and.returnValue(of([
+      { tmdbId: 2, name: 'One' }, { tmdbId: 3, name: 'Two' },
+    ] as any));
+    fixture.detectChanges();
+    component.showImdbRatings = true;
+    component.selectMovie(seed);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('No IMDb ratings were found.');
+    expect(fixture.nativeElement.querySelector('.imdb-status a').getAttribute('href')).toBe('/settings/imdb');
+
+    gapView.applyImdbRatings.and.callFake(gaps => {
+      gaps[0].imdbRating = 7;
+      return of(undefined);
+    });
+    fixture.nativeElement.querySelector('.imdb-status button').click();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('IMDb ratings available for 1 of 2 movies.');
+    expect(gapView.applyImdbRatings).toHaveBeenCalledTimes(2);
+  });
+
+  it('ignores old ratings requests when selecting another movie', () => {
+    recommendationService.getSimilarMovies.and.returnValue(of([{ tmdbId: 2, name: 'Similar title' }] as any));
+    const previous = new Subject<void>();
+    const current = new Subject<void>();
+    gapView.applyImdbRatings.and.returnValues(previous, current);
+    component.showImdbRatings = true;
+    component.selectMovie(seed);
+    component.selectMovie({ ...seed, tmdbId: 999 });
+    previous.next();
+    expect(component.loadingImdbRatings).toBeTrue();
+    expect(component.imdbRatingsLoaded).toBeFalse();
+    current.next();
+    expect(component.loadingImdbRatings).toBeFalse();
+  });
+
+  it('allows going back while the similar search is still loading', () => {
+    const pending = new Subject<any>();
+    recommendationService.getSimilarMovies.and.returnValue(pending);
+    fixture.detectChanges();
+    component.selectMovie(seed);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).not.toContain('TMDB did not return any similar movies');
+    fixture.nativeElement.querySelector('.result-toolbar button').click();
+    pending.next([{ tmdbId: 2, name: 'Old result' }]);
+    expect(component.selectedMovie).toBeNull();
+    expect(component.allSimilar).toEqual([]);
+  });
 
   it('loads TMDB-backed movies from the default movie library', fakeAsync(() => {
     fixture.detectChanges();
@@ -204,6 +373,14 @@ describe('SimilarComponent', () => {
 
     expect(component.imdbRatingsLoaded).toBeTrue();
     expect(component.filteredSimilar.map(movie => movie.name)).toEqual(['IMDb Winner', 'TMDB Winner']);
+
+    component.showImdbRatings = false;
+    component.onRatingPrefsChange();
+    expect(component.filteredSimilar.map(movie => movie.name)).toEqual(['TMDB Winner', 'IMDb Winner']);
+    component.minRating = 7;
+    component.minVoteCount = 400;
+    component.applyFilter();
+    expect(component.filteredSimilar.map(movie => movie.name)).toEqual(['TMDB Winner']);
   });
 
   it('starts with configured quality thresholds when that preference is enabled', fakeAsync(() => {

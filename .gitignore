@@ -21,13 +21,6 @@ dist/
 # App data (user config, persisted state)
 backend/data/
 
-# PyInstaller
-build/
-*.spec.bak
-
-# Generated build info (written by CI before packaging)
-backend/app/_build_info.py
-
 # OS
 .DS_Store
 Thumbs.db

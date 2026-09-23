@@ -7,6 +7,7 @@ export interface PlexAuthResponse {
 export interface PlexServersResponse {
   servers: string[];
   token: string;
+  serverConnections?: { [name: string]: PlexConnection[] };
 }
 
 export interface PlexConnection {

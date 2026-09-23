@@ -1,15 +1,7 @@
 import logging
 import os
-import sys
 from flask import Flask, send_from_directory
 from flask_cors import CORS
-
-
-def _get_bundle_dir():
-    """Return the temp extraction dir when running as a PyInstaller bundle."""
-    if getattr(sys, 'frozen', False):
-        return sys._MEIPASS
-    return None
 
 
 def create_app(config_name=None):
@@ -71,6 +63,7 @@ def create_app(config_name=None):
     from app.blueprints.tvdb import tvdb_bp
     from app.blueprints.scan_history import scan_history_bp
     from app.blueprints.actors import actors_bp
+    from app.blueprints.updates import updates_bp
 
     app.register_blueprint(plex_bp, url_prefix='/api/plex')
     app.register_blueprint(jellyfin_bp, url_prefix='/api/jellyfin')
@@ -89,13 +82,13 @@ def create_app(config_name=None):
     app.register_blueprint(tvdb_bp, url_prefix='/api/tvdb')
     app.register_blueprint(scan_history_bp, url_prefix='/api/scan-history')
     app.register_blueprint(actors_bp, url_prefix='/api/actors')
+    app.register_blueprint(updates_bp, url_prefix='/api/updates')
 
     # In production, serve Angular dist
-    bundle_dir = _get_bundle_dir()
-    if bundle_dir:
-        dist_dir = os.path.join(bundle_dir, 'frontend', 'dist', 'gaps-2')
-    else:
-        dist_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'frontend', 'dist', 'gaps-2')
+    backend_dir = os.path.dirname(os.path.dirname(__file__))
+    dist_dir = os.path.join(backend_dir, 'frontend', 'dist', 'gaps-2')
+    if not os.path.isdir(dist_dir):
+        dist_dir = os.path.join(os.path.dirname(backend_dir), 'frontend', 'dist', 'gaps-2')
     if os.path.isdir(dist_dir):
         @app.route('/', defaults={'path': ''})
         @app.route('/<path:path>')

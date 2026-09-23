@@ -22,6 +22,7 @@ import { RadarrSettingsComponent } from './components/settings/radarr-settings/r
 import { SonarrSettingsComponent } from './components/settings/sonarr-settings/sonarr-settings.component';
 import { TvdbSettingsComponent } from './components/settings/tvdb-settings/tvdb-settings.component';
 import { SettingsComponent } from './components/settings/settings.component';
+import { UpdateSettingsComponent } from './components/settings/update-settings/update-settings.component';
 
 const routes: Routes = [
   { path: '', component: IndexComponent },
@@ -32,6 +33,7 @@ const routes: Routes = [
   { path: 'logs', component: LogsComponent },
   { path: 'scan-history', component: ScanHistoryComponent },
   { path: 'settings', component: SettingsComponent, children: [
+    { path: 'updates', component: UpdateSettingsComponent },
     { path: '', redirectTo: 'tmdb', pathMatch: 'full' },
     { path: 'tmdb', component: TmdbSettingsComponent },
     { path: 'imdb', component: ImdbSettingsComponent },

@@ -30,9 +30,10 @@ export class PlexService {
     return this.http.post<PlexServersResponse>(`${environment.apiUrl}/plex/fetch-servers`, {});
   }
 
-  fetchLibraries(serverName: string): Observable<{ libraries: PlexLibrary[], token: string, connections: PlexConnection[] }> {
+  fetchLibraries(serverName: string, serverUrl?: string): Observable<{ libraries: PlexLibrary[], token: string, connections: PlexConnection[] }> {
     return this.http.get<{ libraries: PlexLibrary[], token: string, connections: PlexConnection[] }>(
-      `${environment.apiUrl}/plex/libraries/${encodeURIComponent(serverName)}`
+      `${environment.apiUrl}/plex/libraries/${encodeURIComponent(serverName)}`,
+      { params: serverUrl ? { serverUrl } : {} }
     );
   }
 
@@ -59,8 +60,8 @@ export class PlexService {
     );
   }
 
-  refreshConnection(): Observable<{ connected: boolean; libraries?: any[]; error?: string }> {
-    return this.http.post<{ connected: boolean; libraries?: any[]; error?: string }>(
+  refreshConnection(): Observable<{ connected: boolean; libraries?: PlexLibrary[]; error?: string }> {
+    return this.http.post<{ connected: boolean; libraries?: PlexLibrary[]; error?: string }>(
       `${environment.apiUrl}/plex/refresh`, {}
     );
   }
