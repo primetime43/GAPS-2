@@ -66,6 +66,7 @@ sudo docker run -d \
 
 sudo docker run -d \
   --name gaps2-updater \
+  --hostname gaps2-updater \
   --restart unless-stopped \
   --entrypoint python \
   -e GAPS_TARGET_CONTAINER="$GAPS_CONTAINER" \
@@ -80,6 +81,38 @@ sudo docker run -d \
 ```
 
 Open `http://YOUR-NAS-IP:4277/settings/updates` and wait for the updater to connect. Leave the backup container stopped; it shares the same data folder. If setup stops with an error, check `sudo docker ps -a` before retrying. These commands are for one-time migration, not each release switch.
+
+### Restore a missing Synology updater
+
+If a failed `docker run` left `gaps2-updater` missing, the app and its saved data can still be intact. For the standalone setup above, this block recreates only the updater and reuses its existing volumes. It refuses to replace an existing container. Adjust the app name and data folder if yours differ.
+
+The short lines build one command without backslash continuations. Paste the entire block:
+
+```bash
+(
+set -e
+GAPS_DATA=/volume1/docker/appdata/gaps-2
+sudo test -d "$GAPS_DATA"
+sudo docker inspect primetime43-gaps-2-1 >/dev/null
+sudo docker volume inspect gaps2-updates-control >/dev/null
+sudo docker volume inspect gaps2-updates-state >/dev/null
+set -- docker run -d --name gaps2-updater
+set -- "$@" --hostname gaps2-updater --restart unless-stopped
+set -- "$@" --entrypoint python
+set -- "$@" -e GAPS_TARGET_CONTAINER=primetime43-gaps-2-1
+set -- "$@" -e GAPS_IMAGE_REPOSITORY=primetime43/gaps-2
+set -- "$@" -e PUID=1000 -e PGID=1000
+set -- "$@" -v /var/run/docker.sock:/var/run/docker.sock
+set -- "$@" --mount "type=bind,src=$GAPS_DATA,dst=/managed-data"
+set -- "$@" -v gaps2-updates-control:/control
+set -- "$@" -v gaps2-updates-state:/state
+sudo "$@" primetime43/gaps-2:develop /app/docker_updater.py
+)
+```
+
+Then retry **Get latest Develop** under **Settings > Updates**. A previous error can remain displayed until the next update request succeeds.
+
+Older updater builds use their hostname as a Docker container ID or name. Synology can retain an old hostname when recreating a container, causing a misleading shared-data-volume error even when both mounts match. The fixed hostname above works around that behavior. Current source identifies the running helper by its configured hostname and reports identification failures separately from mount mismatches.
 
 ## Switch builds
 

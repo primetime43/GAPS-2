@@ -9,7 +9,7 @@ from flask import Flask
 
 from app.blueprints.updates import updates_bp
 from app.services.build_info import get_build_info
-from docker_updater import create_spec, DockerError, MANAGED, Updater
+from docker_updater import create_spec, Docker, DockerError, MANAGED, Updater
 from update_protocol import image_for, read_json, selection, write_json
 
 
@@ -86,6 +86,52 @@ def container_fixture():
     }
 
 
+class DockerIdentityTests(unittest.TestCase):
+    def setUp(self):
+        with patch.object(Docker, 'call', return_value={'ApiVersion': '1.41'}):
+            self.docker = Docker()
+        self.helper = {
+            'Id': 'new-container-id', 'State': {'Running': True},
+            'Config': {'Hostname': 'old-container-id'},
+        }
+        self.docker.call = Mock(return_value=[{'Id': 'app'}, {'Id': self.helper['Id']}])
+        self.docker.container = Mock(side_effect=lambda name: self.helper if name == self.helper['Id'] else {
+            'Id': 'app', 'State': {'Running': True}, 'Config': {'Hostname': 'app'},
+        })
+        hostname = patch('docker_updater.socket.gethostname', return_value='old-container-id')
+        hostname.start()
+        self.addCleanup(hostname.stop)
+
+    def test_recreated_helper_is_found_by_hostname_and_cached_by_actual_id(self):
+        self.assertEqual(self.docker.own_container(), self.helper)
+        self.assertEqual(self.docker.own_container(), self.helper)
+        self.docker.call.assert_called_once_with('GET', '/containers/json')
+        self.docker.container.assert_called_with('new-container-id')
+
+    def test_custom_hostname_is_supported(self):
+        self.helper['Config']['Hostname'] = 'gaps2-updater'
+        with patch('docker_updater.socket.gethostname', return_value='gaps2-updater'):
+            self.assertEqual(self.docker.own_container(), self.helper)
+
+    def test_missing_helper_reports_identity_error_instead_of_volume_error(self):
+        self.docker.call.return_value = [{'Id': 'app'}]
+        with self.assertRaisesRegex(DockerError, 'Could not identify the running updater'):
+            self.docker.own_container()
+
+    def test_duplicate_hostnames_are_rejected_without_caching_a_guess(self):
+        self.docker.call.return_value.append({'Id': 'duplicate'})
+        self.docker.container.side_effect = lambda name: dict(self.helper, Id=name)
+        with self.assertRaisesRegex(DockerError, 'Multiple running containers'):
+            self.docker.own_container()
+        self.assertIsNone(self.docker._own_container_id)
+
+    def test_stopped_container_with_the_old_hostname_is_ignored(self):
+        stopped = dict(self.helper, Id='old-container-id', State={'Running': False})
+        self.docker.call.return_value = [{'Id': stopped['Id']}, {'Id': self.helper['Id']}]
+        self.docker.container.side_effect = lambda name: stopped if name == stopped['Id'] else self.helper
+        self.assertEqual(self.docker.own_container(), self.helper)
+
+
 class DockerUpdaterTests(unittest.TestCase):
     def setUp(self):
         folder = tempfile.TemporaryDirectory()
@@ -93,8 +139,9 @@ class DockerUpdaterTests(unittest.TestCase):
         self.folder = Path(folder.name)
         self.docker = Mock()
         self.current = container_fixture()
-        self.docker.container.side_effect = lambda name: self.current if name == 'gaps2' else {
-            'Mounts': [{'Destination': '/managed-data', 'Type': 'volume', 'Source': '/vol/data'}]}
+        self.docker.container.side_effect = lambda name: self.current if name == 'gaps2' else None
+        self.docker.own_container.return_value = {
+            'Mounts': [{'Destination': '/managed-data', 'Type': 'volume', 'Source': '/vol/data', 'RW': True}]}
         self.docker.image.side_effect = lambda name: {
             'Id': 'sha256:old' if name == 'sha256:old' else 'sha256:new',
             'Config': {'Env': ['APP_COMMIT=old', 'APP_CHANNEL=stable'],
@@ -180,6 +227,18 @@ class DockerUpdaterTests(unittest.TestCase):
                     self.current['Mounts'][0]['Source'] = '/other-volume'
                 self.updater.switch({'channel': 'develop'}, 'a' * 32)
                 self.docker.stop.assert_not_called()
+
+    def test_identity_failure_does_not_pull_or_stop_the_app(self):
+        self.docker.own_container.side_effect = DockerError('Could not identify the running updater container.')
+        self.assertFalse(self.updater.switch({'channel': 'develop'}, 'a' * 32))
+        self.assertIn('Could not identify', self.updater.status['message'])
+        self.docker.pull.assert_not_called()
+        self.docker.stop.assert_not_called()
+
+    def test_readonly_helper_data_is_rejected_before_stopping_the_app(self):
+        self.docker.own_container.return_value['Mounts'][0]['RW'] = False
+        self.assertFalse(self.updater.switch({'channel': 'develop'}, 'a' * 32))
+        self.docker.stop.assert_not_called()
 
     def test_compose_recreation_reapplies_saved_image_without_pulling(self):
         saved = {'selection': {'channel': 'develop', 'version': ''}, 'image': 'primetime43/gaps-2:develop', 'imageId': 'sha256:new'}

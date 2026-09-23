@@ -35,6 +35,7 @@ class UnixConnection(http.client.HTTPConnection):
 class Docker:
     def __init__(self):
         self.prefix = ''
+        self._own_container_id = None
         version = self.call('GET', '/version')['ApiVersion']
         if not re.fullmatch(r'\d+\.\d+', version):
             raise DockerError('Invalid Docker API version')
@@ -70,6 +71,31 @@ class Docker:
 
     def container(self, name):
         return self.call('GET', f'/containers/{quote(name, safe="")}/json', missing_ok=True)
+
+    def own_container(self):
+        """Find this helper even when recreation retained its previous hostname."""
+        if self._own_container_id:
+            current = self.container(self._own_container_id)
+            if current and current.get('State', {}).get('Running'):
+                return current
+            self._own_container_id = None
+
+        # Docker's default hostname resembles a container ID, but tools can
+        # preserve it when recreating a container. Match the configured hostname
+        # among running containers instead of interpreting it as an ID or name.
+        hostname = socket.gethostname()
+        matches = []
+        for summary in self.call('GET', '/containers/json'):
+            candidate = self.container(summary['Id'])
+            if (candidate and candidate.get('State', {}).get('Running')
+                    and candidate.get('Config', {}).get('Hostname') == hostname):
+                matches.append(candidate)
+        if not matches:
+            raise DockerError('Could not identify the running updater container. Recreate the updater with a unique hostname.')
+        if len(matches) != 1:
+            raise DockerError('Multiple running containers share the updater hostname. Give the updater a unique hostname.')
+        self._own_container_id = matches[0]['Id']
+        return matches[0]
 
     def image(self, name):
         return self.call('GET', f'/images/{quote(name, safe="")}/json')
@@ -156,10 +182,10 @@ class Updater:
         current = self.docker.container(self.target)
         if not current or current['Config'].get('Labels', {}).get(MANAGED) != 'true':
             raise DockerError('Target container is missing or is not opted in to updates.')
-        helper = self.docker.container(socket.gethostname())
+        helper = self.docker.own_container()
         mount = next((m for m in current['Mounts'] if m['Destination'] == '/app/data'), None)
         helper_mount = next((m for m in (helper or {}).get('Mounts', []) if m['Destination'] == '/managed-data'), None)
-        if not mount or not mount.get('RW') or not helper_mount or (
+        if not mount or not mount.get('RW') or not helper_mount or not helper_mount.get('RW') or (
                 mount['Type'], mount['Source']) != (helper_mount['Type'], helper_mount['Source']):
             raise DockerError('The app and updater must share the same persistent data volume.')
         return current
