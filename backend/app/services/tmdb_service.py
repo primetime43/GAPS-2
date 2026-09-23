@@ -1048,7 +1048,11 @@ class TmdbService:
         owned_title_year: set[str] | None = None,
         pages: int = 3,
     ) -> tuple[list[dict] | None, str | None]:
-        """Return relevance-ranked TMDB recommendations with ownership metadata."""
+        """Return TMDB movie recommendations in provider order with ownership metadata.
+
+        The /similar endpoint only matches genres and keywords; it is not the
+        recommendation feed intended for a "because you liked" view.
+        """
         entries: list[dict] = []
         seen_ids = {tmdb_id}
         page_count = max(1, min(pages, 5))
@@ -1056,7 +1060,7 @@ class TmdbService:
         for page in range(1, page_count + 1):
             try:
                 resp = self._session.get(
-                    f"{self._base_url}/movie/{tmdb_id}/similar",
+                    f"{self._base_url}/movie/{tmdb_id}/recommendations",
                     params={
                         "api_key": api_key,
                         "language": self._language,
@@ -1066,13 +1070,13 @@ class TmdbService:
                 )
                 if resp.status_code != 200:
                     if page == 1:
-                        return None, f"TMDB similar-movies request failed ({resp.status_code})"
+                        return None, f"TMDB recommendations request failed ({resp.status_code})"
                     break
                 payload = resp.json()
             except (requests.exceptions.RequestException, ValueError) as e:
-                logger.warning("TMDB similar lookup failed for %s: %s", tmdb_id, e)
+                logger.warning("TMDB recommendations lookup failed for %s: %s", tmdb_id, e)
                 if page == 1:
-                    return None, "Failed to fetch similar movies from TMDB"
+                    return None, "Failed to fetch movie recommendations from TMDB"
                 break
 
             for movie in payload.get("results", []):
