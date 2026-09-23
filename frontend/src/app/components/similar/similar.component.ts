@@ -49,12 +49,12 @@ export class SimilarComponent implements OnInit, OnDestroy {
   missingCount = 0;
   errorMessage = '';
 
-  // Rating display and quality controls. IMDb is loaded on demand because each
-  // result needs a TMDB -> IMDb ID lookup before the local dataset can be read.
+  // Load IMDb in the background only when the user enables its ratings.
   showImdbRatings = false;
   showTmdbRatings = true;
   loadingImdbRatings = false;
   imdbRatingsLoaded = false;
+  imdbRatingsError = '';
   minRating = 0;
   minVoteCount = 0;
 
@@ -243,6 +243,9 @@ export class SimilarComponent implements OnInit, OnDestroy {
     this.errorMessage = '';
     this.loadingImdbRatings = false;
     this.imdbRatingsLoaded = false;
+    this.imdbRatingsError = '';
+    this.ownedCount = 0;
+    this.missingCount = 0;
 
     this.recommendationService.getSimilarMovies(
       movie.tmdbId,
@@ -260,9 +263,7 @@ export class SimilarComponent implements OnInit, OnDestroy {
           overview: row.overview || '',
           groupName: 'Similar Movies',
           owned: !!row.owned,
-          externalUrl: this.externalLinkProvider === 'imdb'
-            ? `${environment.apiUrl}/tmdb/movie/${row.tmdbId}/imdb`
-            : 'https://www.themoviedb.org/movie/' + row.tmdbId,
+          externalUrl: this.movieUrl(row.tmdbId, this.externalLinkProvider),
           radarrEligible: !!row.tmdbId,
           sonarrEligible: false,
           tmdbRating: row.voteAverage && row.voteAverage > 0 ? row.voteAverage : undefined,
@@ -272,6 +273,7 @@ export class SimilarComponent implements OnInit, OnDestroy {
         }));
         this.applyFilter();
         this.loadingSimilar = false;
+        this.loadImdbRatings();
       },
       error: err => {
         this.errorMessage = err.error?.error || 'Failed to load similar movies from TMDB.';
@@ -290,6 +292,9 @@ export class SimilarComponent implements OnInit, OnDestroy {
     this.errorMessage = '';
     this.loadingImdbRatings = false;
     this.imdbRatingsLoaded = false;
+    this.imdbRatingsError = '';
+    this.ownedCount = 0;
+    this.missingCount = 0;
   }
 
   setView(view: ResultView): void {
@@ -308,17 +313,17 @@ export class SimilarComponent implements OnInit, OnDestroy {
     const query = this.resultFilter.trim().toLowerCase();
     if (query) rows = rows.filter(movie => movie.name.toLowerCase().includes(query));
 
-    // IMDb is preferred once loaded; otherwise these controls use TMDB. The
+    // IMDb is preferred while enabled; otherwise these controls use TMDB. The
     // rating and vote count always come from the same provider.
     if (this.minRating > 0) {
-      rows = rows.filter(movie => this.gapView.ratingOf(movie) >= this.minRating);
+      rows = rows.filter(movie => this.ratingOf(movie) >= this.minRating);
     }
     if (this.minVoteCount > 0) {
-      rows = rows.filter(movie => this.gapView.votesOf(movie) >= this.minVoteCount);
+      rows = rows.filter(movie => this.votesOf(movie) >= this.minVoteCount);
     }
 
     if (this.sortBy === 'rating') {
-      rows.sort((a, b) => this.gapView.ratingOf(b) - this.gapView.ratingOf(a));
+      rows.sort((a, b) => this.ratingOf(b) - this.ratingOf(a));
     } else if (this.sortBy === 'year') {
       rows.sort((a, b) => String(b.year).localeCompare(String(a.year)));
     } else if (this.sortBy === 'name') {
@@ -327,17 +332,59 @@ export class SimilarComponent implements OnInit, OnDestroy {
     this.filteredSimilar = rows;
   }
 
-  loadImdbRatings(): void {
-    if (!this.showImdbRatings || !this.allSimilar.length || this.loadingImdbRatings) return;
+  private ratingOf(movie: Gap): number {
+    return this.showImdbRatings ? this.gapView.ratingOf(movie) : (movie.tmdbRating ?? 0);
+  }
+
+  private votesOf(movie: Gap): number {
+    return this.showImdbRatings ? this.gapView.votesOf(movie) : (movie.tmdbVotes ?? 0);
+  }
+
+  get imdbRatingCount(): number {
+    return this.allSimilar.filter(movie => movie.imdbRating != null).length;
+  }
+
+  movieUrl(id: number, provider: 'tmdb' | 'imdb', imdbId?: string): string {
+    if (provider === 'imdb') {
+      return imdbId ? `https://www.imdb.com/title/${imdbId}/` : `${environment.apiUrl}/tmdb/movie/${id}/imdb`;
+    }
+    return `https://www.themoviedb.org/movie/${id}`;
+  }
+
+  private updateMovieLinks(): void {
+    for (const movie of this.allSimilar) {
+      movie.externalUrl = this.movieUrl(movie.id, this.externalLinkProvider, movie.imdbId);
+    }
+  }
+
+  onLinkProviderChange(): void {
+    this.updateMovieLinks();
+    this.preferencesService.save({ externalLinkProvider: this.externalLinkProvider })
+      .subscribe({ error: () => {} });
+  }
+
+  loadImdbRatings(retry = false): void {
+    if (!this.showImdbRatings || !this.allSimilar.length || this.loadingImdbRatings || (this.imdbRatingsLoaded && !retry)) return;
     this.loadingImdbRatings = true;
-    this.gapView.applyImdbRatings(this.allSimilar).pipe(takeUntil(this.resultsChanged$), takeUntil(this.destroy$)).subscribe(() => {
-      this.loadingImdbRatings = false;
-      this.imdbRatingsLoaded = true;
-      this.applyFilter();
+    this.imdbRatingsError = '';
+    this.gapView.applyImdbRatings(this.allSimilar, { suppressErrors: false })
+      .pipe(takeUntil(this.resultsChanged$), takeUntil(this.destroy$)).subscribe({
+      next: () => {
+        this.loadingImdbRatings = false;
+        this.imdbRatingsLoaded = true;
+        this.updateMovieLinks();
+        this.applyFilter();
+      },
+      error: () => {
+        this.loadingImdbRatings = false;
+        this.imdbRatingsError = 'Could not load IMDb ratings. You can still open movies on IMDb.';
+      },
     });
   }
 
   onRatingPrefsChange(): void {
+    this.applyFilter();
+    this.loadImdbRatings();
     this.preferencesService.save({
       showImdbRatings: this.showImdbRatings,
       showTmdbRatings: this.showTmdbRatings,

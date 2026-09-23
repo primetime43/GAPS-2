@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { Observable, of } from 'rxjs';
+import { Observable, of, throwError } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
 import { Gap } from '../models/recommendation.model';
 import { TmdbGenre } from './tmdb/tmdb.service';
@@ -55,25 +55,27 @@ export class GapViewService {
 
   /**
    * Fetch IMDb ratings for the given movie gaps and patch them in place, emitting
-   * once when done (errors are swallowed to an empty result). The backend returns
-   * nothing unless the IMDb integration is enabled. Resolving each title's IMDb id
-   * is a per-movie TMDB lookup, so callers invoke this on demand, not on load.
+   * once when done. Callers with a retry UI can opt into error reporting.
+   * Resolving each title's IMDb id requires a cached TMDB lookup.
    */
-  applyImdbRatings(gaps: Gap[]): Observable<void> {
+  applyImdbRatings(gaps: Gap[], options: { suppressErrors?: boolean } = {}): Observable<void> {
     const ids = gaps.map(g => g.id).filter((id): id is number => !!id);
     if (!ids.length) return of(undefined);
     return this.imdbService.getRatings(ids).pipe(
-      catchError(() => of({ ratings: {} as Record<string, any> })),
       map(res => {
         const ratings = res.ratings || {};
         for (const gap of gaps) {
           const r = ratings[String(gap.id)];
           if (r) {
+            gap.imdbId = r.imdbId;
             gap.imdbRating = r.aggregateRating;
             gap.imdbVotes = r.voteCount;
           }
         }
       }),
+      catchError(error => options.suppressErrors === false
+        ? throwError(() => error)
+        : of(undefined)),
     );
   }
 }
