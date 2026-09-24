@@ -1,6 +1,6 @@
 import { Component, OnInit } from '@angular/core';
-import { forkJoin } from 'rxjs';
-import { RadarrService, RadarrConfig, RadarrQualityProfile, RadarrRootFolder } from '../../../services/radarr.service';
+import { catchError, forkJoin, of } from 'rxjs';
+import { RadarrService, RadarrConfig, RadarrQualityProfile, RadarrRootFolder, RadarrTag } from '../../../services/radarr.service';
 
 @Component({
   selector: 'app-radarr-settings',
@@ -19,9 +19,12 @@ export class RadarrSettingsComponent implements OnInit {
     monitored: true,
     search_on_add: true,
     auto_route_by_decade: false,
+    tags: [],
   };
   profiles: RadarrQualityProfile[] = [];
   rootFolders: RadarrRootFolder[] = [];
+  tags: RadarrTag[] = [];
+  tagsError = '';
   testing = false;
   saving = false;
   loadingMeta = false;
@@ -66,6 +69,10 @@ export class RadarrSettingsComponent implements OnInit {
 
   constructor(private radarr: RadarrService) {}
 
+  hasTag(id: number): boolean {
+    return this.tags.some(tag => tag.id === id);
+  }
+
   ngOnInit(): void {
     this.radarr.getConfig().subscribe({
       next: (cfg) => {
@@ -82,10 +89,20 @@ export class RadarrSettingsComponent implements OnInit {
     this.loadingMeta = true;
     this.profiles = [];
     this.rootFolders = [];
-    forkJoin({ profiles: this.radarr.getProfiles(), folders: this.radarr.getRootFolders() }).subscribe({
-      next: ({ profiles, folders }) => {
+    this.tags = [];
+    this.tagsError = '';
+    forkJoin({
+      profiles: this.radarr.getProfiles(),
+      folders: this.radarr.getRootFolders(),
+      tags: this.radarr.getTags().pipe(catchError(err => {
+        this.tagsError = err.error?.error || 'Could not load Radarr tags. Saved tags have been kept.';
+        return of([] as RadarrTag[]);
+      })),
+    }).subscribe({
+      next: ({ profiles, folders, tags }) => {
         this.profiles = profiles;
         this.rootFolders = folders;
+        this.tags = tags;
         this.loadingMeta = false;
       },
       error: (err) => {
@@ -150,9 +167,12 @@ export class RadarrSettingsComponent implements OnInit {
           monitored: true,
           search_on_add: true,
           auto_route_by_decade: false,
+          tags: [],
         };
         this.profiles = [];
         this.rootFolders = [];
+        this.tags = [];
+        this.tagsError = '';
         this.showMessage('Radarr settings cleared.', 'success');
       },
       error: (err) => this.showMessage(err.error?.error || 'Failed to clear settings', 'error'),

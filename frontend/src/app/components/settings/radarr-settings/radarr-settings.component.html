@@ -65,7 +65,7 @@
   <div *ngIf="config.enabled">
     <h5 class="mb-3">Defaults for added movies</h5>
 
-    <div *ngIf="loadingMeta" class="text-muted mb-3">Loading profiles and root folders...</div>
+    <div *ngIf="loadingMeta" class="text-muted mb-3">Loading profiles, root folders, and tags...</div>
 
     <div class="form-group mb-3">
       <label class="form-label">Quality profile</label>
@@ -93,6 +93,26 @@
         (e.g. a 2021 film &rarr; <code>/movies/2020s</code>). When no folder matches,
         the root folder selected above is used.
       </div>
+    </div>
+
+    <div class="form-group mb-3">
+      <label class="form-label" for="radarrTags">Default tags</label>
+      <select id="radarrTags" class="form-select dark-select" multiple
+              [(ngModel)]="config.tags" [disabled]="loadingMeta || !!tagsError"
+              aria-describedby="radarrTagsHelp">
+        <option *ngFor="let tag of tags" [ngValue]="tag.id">{{ tag.label }}</option>
+        <ng-container *ngFor="let tagId of config.tags">
+          <option *ngIf="!hasTag(tagId)" [ngValue]="tagId">Unavailable tag (ID {{ tagId }})</option>
+        </ng-container>
+      </select>
+      <div id="radarrTagsHelp" class="text-muted" style="font-size: 12px;">
+        Applied to every movie added from GAPS. Hold Ctrl (Windows/Linux) or Command (Mac) to select or deselect multiple tags.
+        Create tags in Radarr, then refresh this list.
+      </div>
+      <div *ngIf="!loadingMeta && !tagsError && !tags.length" class="text-muted mt-1">No tags found in Radarr.</div>
+      <div *ngIf="tagsError" class="text-danger mt-1" role="alert">{{ tagsError }}</div>
+      <button class="btn btn-sm btn-outline-secondary mt-2" type="button" (click)="loadMeta()"
+              [disabled]="loadingMeta || saving">Refresh tags</button>
     </div>
 
     <div class="form-group mb-3">

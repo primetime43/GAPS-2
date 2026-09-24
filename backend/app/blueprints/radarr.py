@@ -26,7 +26,10 @@ def save_config():
     if api_key and set(api_key) == {'•'}:
         from app.services import config_store
         data['api_key'] = (config_store.get('radarr', {}) or {}).get('api_key', '')
-    saved = current_app.radarr_service.save_config(data)
+    try:
+        saved = current_app.radarr_service.save_config(data)
+    except ValueError as e:
+        return jsonify(error=str(e)), 400
     saved['api_key'] = '••••••' if saved.get('api_key') else ''
     return jsonify(saved)
 
@@ -65,6 +68,14 @@ def get_profiles():
 def get_root_folders():
     try:
         return jsonify(current_app.radarr_service.get_root_folders())
+    except requests.exceptions.RequestException as e:
+        return jsonify(error=str(e)), 502
+
+
+@radarr_bp.route('/tags', methods=['GET'])
+def get_tags():
+    try:
+        return jsonify(current_app.radarr_service.get_tags())
     except requests.exceptions.RequestException as e:
         return jsonify(error=str(e)), 502
 

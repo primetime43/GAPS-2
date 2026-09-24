@@ -41,9 +41,13 @@ class RadarrService:
             'monitored': saved.get('monitored', True),
             'search_on_add': saved.get('search_on_add', True),
             'auto_route_by_decade': saved.get('auto_route_by_decade', False),
+            'tags': saved.get('tags', []),
         }
 
     def save_config(self, data: dict) -> dict:
+        tags = data.get('tags', [])
+        if not isinstance(tags, list) or any(type(tag) is not int or tag <= 0 for tag in tags):
+            raise ValueError('Tags must be a list of positive integer IDs')
         cleaned = {
             'url': _normalize_url(data.get('url', '')),
             'api_key': (data.get('api_key') or '').strip(),
@@ -53,6 +57,7 @@ class RadarrService:
             'monitored': bool(data.get('monitored', True)),
             'search_on_add': bool(data.get('search_on_add', True)),
             'auto_route_by_decade': bool(data.get('auto_route_by_decade', False)),
+            'tags': list(dict.fromkeys(tags)),
         }
         config_store.put(CONFIG_KEY, cleaned)
         return self.get_config()
@@ -115,6 +120,15 @@ class RadarrService:
             }
             for f in resp.json()
         ]
+
+    def get_tags(self) -> list[dict]:
+        creds = self._get_url_key()
+        if not creds:
+            return []
+        url, api_key = creds
+        resp = self._request('GET', f'{url}/api/v3/tag', api_key)
+        resp.raise_for_status()
+        return [{'id': tag['id'], 'label': tag['label']} for tag in resp.json()]
 
     def get_library_tmdb_ids(self) -> list[int]:
         """Return the TMDB ids of every movie already in the Radarr library."""
@@ -216,6 +230,7 @@ class RadarrService:
             'rootFolderPath': root_folder_path,
             'minimumAvailability': cfg['minimum_availability'],
             'monitored': cfg['monitored'],
+            'tags': cfg.get('tags', []),
             'addOptions': {
                 'searchForMovie': cfg['search_on_add'],
                 'monitor': 'movieOnly' if cfg['monitored'] else 'none',

@@ -8,9 +8,10 @@ for (const Component of [RadarrSettingsComponent, SonarrSettingsComponent]) {
     let service: any;
 
     beforeEach(() => {
-      service = jasmine.createSpyObj('Downloader', ['getProfiles', 'getRootFolders', 'saveConfig']);
+      service = jasmine.createSpyObj('Downloader', ['getProfiles', 'getRootFolders', 'getTags', 'saveConfig']);
       service.getProfiles.and.returnValue(of([{ id: 2, name: 'New profile' }]));
       service.getRootFolders.and.returnValue(of([{ path: '/new', free_space: 0, accessible: true }]));
+      service.getTags.and.returnValue(of([]));
       component = new Component(service);
     });
 
@@ -24,7 +25,7 @@ for (const Component of [RadarrSettingsComponent, SonarrSettingsComponent]) {
       expect(component.rootFolders[0].path).toBe('/new');
     });
 
-    it('keeps metadata loading until both requests finish', () => {
+    it('keeps metadata loading until all requests finish', () => {
       const folders = new Subject<any>();
       service.getRootFolders.and.returnValue(folders);
       component.loadMeta();

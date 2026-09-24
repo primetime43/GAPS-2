@@ -14,6 +14,12 @@ export interface RadarrConfig {
   monitored: boolean;
   search_on_add: boolean;
   auto_route_by_decade: boolean;
+  tags: number[];
+}
+
+export interface RadarrTag {
+  id: number;
+  label: string;
 }
 
 export interface RadarrQualityProfile {
@@ -58,6 +64,10 @@ export class RadarrService {
 
   getLibraryTmdbIds(): Observable<{ tmdb_ids: number[] }> {
     return this.http.get<{ tmdb_ids: number[] }>(`${environment.apiUrl}/radarr/movies`);
+  }
+
+  getTags(): Observable<RadarrTag[]> {
+    return this.http.get<RadarrTag[]>(`${environment.apiUrl}/radarr/tags`);
   }
 
   addMovie(tmdbId: number, title: string, year: number): Observable<ApiMessage> {
