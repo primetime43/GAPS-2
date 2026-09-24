@@ -17,6 +17,7 @@ export interface ScanProgress {
   total_owned: number;
   libraries: string[];
   completed_at: string | null;
+  rating_filter_complete?: boolean;
   error: string | null;
 }
 

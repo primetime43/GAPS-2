@@ -1,10 +1,10 @@
 <app-confirm-modal
   [visible]="showFreshScanConfirm"
-  title="Rescan Everything?"
+  title="Full Rescan?"
   [message]="mediaType === 'tv'
     ? 'Recheck every show in the selected libraries with fresh data from TheTVDB. This clears cached data and takes longer than a normal scan.'
     : 'Recheck every movie in the selected libraries with fresh data from TMDB. This clears cached data and takes significantly longer than a quick update.'"
-  confirmText="Rescan Everything"
+  confirmText="Full Rescan"
   type="info"
   (confirmed)="onFreshScanConfirm()"
   (cancelled)="onFreshScanCancel()"
@@ -123,65 +123,16 @@
                 [attr.aria-expanded]="showAdvanced" aria-controls="scan-options">
           <span class="advanced-caret" [class.open]="showAdvanced">▸</span>
           Scan options
-          <span *ngIf="mediaType === 'movie'" class="scan-help ms-1">· Quality filter {{ qualityFilter ? 'on' : 'off' }}</span>
         </button>
       </div>
 
       <div *ngIf="showAdvanced" id="scan-options" class="scan-options mt-3">
-        <fieldset *ngIf="mediaType === 'movie'" [disabled]="loadingGaps">
-          <legend class="h6">Quality filter</legend>
-          <div class="form-check">
-            <input
-              class="form-check-input"
-              type="checkbox"
-              id="qualityFilter"
-              [(ngModel)]="qualityFilter"
-              (ngModelChange)="onQualityFilterChange()"
-            >
-            <label class="form-check-label text-muted" for="qualityFilter">
-              Exclude low-rated movies from the scan
-            </label>
-          </div>
-          <div *ngIf="qualityFilter" class="quality-thresholds d-flex align-items-center flex-wrap gap-2 mt-2">
-            <span class="text-muted small">Exclude movies rated below</span>
-            <input
-              type="number"
-              class="form-control form-control-sm dark-input quality-input"
-              min="0" max="10" step="0.1"
-              [(ngModel)]="minRating"
-              (change)="onQualityFilterChange()"
-              title="TMDB rating, 0–10. Set to 0 to ignore rating."
-              aria-label="Minimum TMDB rating"
-            >
-            <span class="text-muted small">or with fewer than</span>
-            <input
-              type="number"
-              class="form-control form-control-sm dark-input quality-input"
-              min="0" step="10"
-              [(ngModel)]="minVoteCount"
-              (change)="onQualityFilterChange()"
-              title="Number of TMDB votes. Set to 0 to ignore vote count."
-              aria-label="Minimum TMDB vote count"
-            >
-            <span class="text-muted small">votes</span>
-          </div>
-          <p class="text-muted small mb-0 mt-2">
-            Applies to this scan and scheduled scans. Only affects already-released movies — unreleased titles are kept.
-          </p>
-        </fieldset>
-        <div *ngIf="canQuickUpdate" class="scan-option-row">
-          <div>
-            <h6 class="mb-1">Check all movies again</h6>
-            <p class="scan-help mb-0">Recheck all selected movies using cached data. Useful after changing quality filters.</p>
-          </div>
-          <button type="button" class="btn btn-outline-light btn-sm" [disabled]="scanDisabled" (click)="scanLibrary(false)">Check All Movies</button>
-        </div>
         <div class="scan-option-row">
           <div>
-            <h6 class="mb-1">Rebuild scan results</h6>
+            <h6 class="mb-1">Full Rescan</h6>
             <p class="scan-help mb-0">Fetch fresh data for every selected title. Takes longer; use when results seem out of date.</p>
           </div>
-          <button type="button" class="btn btn-outline-light btn-sm" [disabled]="scanDisabled" (click)="scanLibrary(true)">Rescan Everything</button>
+          <button type="button" class="btn btn-outline-light btn-sm" [disabled]="scanDisabled" (click)="scanLibrary(true)">Full Rescan</button>
         </div>
       </div>
     </div>
@@ -294,15 +245,18 @@
       </div>
     </div>
 
+    <p *ngIf="mediaType === 'movie' && !ratingFilterComplete && !loadingGaps && (scanMode || selectedItem)" class="text-muted small">
+      This older scan may have excluded titles by rating. Run {{ savedScanInfo ? 'a Full Rescan' : 'Check for New Gaps' }} once to include them; after that, rating filters update instantly.
+    </p>
+
     <!-- Gaps results -->
-    <div *ngIf="!loadingGaps && (scanMode || selectedItem) && collectionGroups.length > 0">
+    <div *ngIf="!loadingGaps && (scanMode || selectedItem) && allGaps.length > 0">
       <app-radarr-destination *ngIf="mediaType === 'movie'" [(rootFolderPath)]="radarrRootFolderPath"></app-radarr-destination>
       <app-sonarr-destination *ngIf="mediaType === 'tv'" [(rootFolderPath)]="sonarrRootFolderPath"></app-sonarr-destination>
       <div class="d-flex flex-wrap align-items-center gap-3 mb-3">
         <button class="btn btn-sm btn-outline-light" (click)="browseLibrary()">&larr; Your Library</button>
         <h5 class="regular-text mb-0" *ngIf="scanMode">
           Found {{ missingCount }} missing {{ mediaType === 'tv' ? 'shows' : 'movies' }}
-          across {{ collectionGroups.length }} {{ mediaType === 'tv' ? 'franchises' : 'collections' }}
         </h5>
         <h5 class="regular-text mb-0" *ngIf="selectedItem">
           {{ mediaType === 'tv' ? 'Franchise' : 'Collection' }} for: {{ selectedItem.name }} ({{ selectedItem.year }})
@@ -331,6 +285,17 @@
               Filters
             </button>
             <ul class="dropdown-menu dropdown-menu-dark dropdown-menu-end p-2 filter-menu">
+              <li *ngIf="mediaType === 'movie'" class="rating-filter-controls">
+                <h6 class="mb-2">Rating &amp; popularity</h6>
+                <label for="recMinRating" class="form-label small">Minimum rating (TMDB, 0–10)</label>
+                <input id="recMinRating" type="number" class="form-control form-control-sm dark-input"
+                       min="0" max="10" step="0.1" [(ngModel)]="minRating" (ngModelChange)="onRatingFilterChange()">
+                <label for="recMinVotes" class="form-label small mt-2">Minimum votes</label>
+                <input id="recMinVotes" type="number" class="form-control form-control-sm dark-input"
+                       min="0" step="10" [(ngModel)]="minVoteCount" (ngModelChange)="onRatingFilterChange()">
+                <p class="text-muted small mt-2 mb-0">0 = no minimum. Updates these results instantly. Owned and unreleased titles stay visible.</p>
+                <hr class="dropdown-divider">
+              </li>
               <li>
                 <div class="form-check">
                   <input class="form-check-input" type="checkbox" id="recShowFuture"
@@ -445,6 +410,11 @@
       </div>
 
       <!-- Search filter -->
+      <div *ngIf="ratingFilterActive" class="rating-filter-summary mb-3" role="status">
+        <span>Minimum rating: {{ minRating }}/10 · Minimum votes: {{ minVoteCount | number }}</span>
+        <span>{{ ratingHiddenCount | number }} {{ ratingHiddenCount === 1 ? 'title hidden' : 'titles hidden' }} by these limits</span>
+        <button type="button" class="btn btn-sm btn-outline-light" (click)="clearRatingFilter()">Show all</button>
+      </div>
       <input
         class="form-control dark-input mb-3"
         type="text"
@@ -541,7 +511,7 @@
     </div>
 
     <!-- No gaps found -->
-    <div *ngIf="!loadingGaps && (scanMode || selectedItem) && collectionGroups.length === 0 && !errorMessage" class="mt-3">
+    <div *ngIf="!loadingGaps && (scanMode || selectedItem) && allGaps.length === 0 && !errorMessage" class="mt-3">
       <button class="btn btn-sm btn-outline-light mb-2" (click)="browseLibrary()">&larr; Your Library</button>
       <p class="text-muted">
         <span *ngIf="selectedItem && mediaType === 'movie'">This movie doesn't belong to a collection, or your collection is complete!</span>

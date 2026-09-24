@@ -75,12 +75,15 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   // filter bar the Actors view uses.
   view: 'all' | 'owned' | 'missing' = 'all';
   showFuture = true;
-  // Quality filter (movies only) — exclude low-tier gaps by TMDB rating / vote
-  // count. Set before scanning; applied server-side so the gaps are excluded
-  // from the scan (and from scheduled scans, which share the same setting).
-  qualityFilter = false;
+  // Reversible movie result filters; zero means no minimum.
   minRating = 0;
   minVoteCount = 0;
+  ratingHiddenCount = 0;
+  ratingFilterComplete = true;
+
+  get ratingFilterActive(): boolean {
+    return this.mediaType === 'movie' && (this.minRating > 0 || this.minVoteCount > 0);
+  }
   // Scan options stay out of the primary scan flow.
   showAdvanced = false;
   itemsPerPage = 50;
@@ -271,7 +274,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     sonarr: { enabled: false, status: new Map(), errors: new Map() },
   };
 
-  private completedScans = new Map<string, { gaps: Gap[]; totalOwned: number; routingLibraries: string[]; completedAt: string | null }>();
+  private completedScans = new Map<string, { gaps: Gap[]; totalOwned: number; routingLibraries: string[]; completedAt: string | null; ratingFilterComplete: boolean }>();
 
   get hasCompletedScan(): boolean {
     return this.completedScans.has(this.scanKey(this.selectedLibraries));
@@ -427,7 +430,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
           this.totalOwned = progress.total_owned;
           this.imdbRatingsLoaded = false;
           this.applyFilter();
-          this.cacheCompletedScan(progress.libraries || [], this.allGaps, progress.total_owned, progress.completed_at);
+          this.cacheCompletedScan(progress.libraries || [], this.allGaps, progress.total_owned, progress.completed_at, this.mediaType === 'tv' || !!(progress as ScanProgress).rating_filter_complete);
         } else {
           this.scanMode = false;
           this.errorMessage = progress.status === 'error' ? (progress.error || 'Scan failed.')
@@ -516,15 +519,18 @@ export class RecommendedComponent implements OnInit, OnDestroy {
         this.view = prefs.hideOwnedByDefault ? 'missing' : 'all';
         this.showFuture = !prefs.hideFutureReleasesByDefault;
         this.posterPrefetch = prefs.posterPrefetch || false;
-        this.qualityFilter = prefs.qualityFilterEnabled || false;
-        this.minRating = prefs.minRating || 0;
-        this.minVoteCount = prefs.minVoteCount || 0;
+        // Seed from legacy thresholds once; result filters are saved separately
+        // so browsing doesn't alter scheduled notification preferences.
+        this.minRating = prefs.qualityFilterEnabled ? (prefs.minRating || 0) : 0;
+        this.minVoteCount = prefs.qualityFilterEnabled ? (prefs.minVoteCount || 0) : 0;
         this.externalLinkProvider = prefs.externalLinkProvider || 'tmdb';
         this.showImdbRatings = !!prefs.showImdbRatings;
         this.showTmdbRatings = prefs.showTmdbRatings !== false;
         // Remembered Missing-view filters override the seeded defaults above.
         const mf = prefs.missingFilters;
         if (mf) {
+          this.minRating = mf.minRating ?? this.minRating;
+          this.minVoteCount = mf.minVoteCount ?? this.minVoteCount;
           if (mf.view) this.view = mf.view;
           if (mf.sortBy) this.sortBy = mf.sortBy;
           this.genreFilter = this.mediaType === 'movie' ? (mf.genreFilter ?? null) : null;
@@ -631,7 +637,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
         this.scanMode = true;
         this.applyFilter();
         this.imdbRatingsLoaded = false;  // new result set → offer on-demand load again
-        this.cacheCompletedScan(scanLibs, this.allGaps, progress!.total_owned, progress!.completed_at);
+        this.cacheCompletedScan(scanLibs, this.allGaps, progress!.total_owned, progress!.completed_at, !!progress!.rating_filter_complete);
       }
       this.loading = false;
     });
@@ -679,6 +685,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
           l => this.libraries.some(x => x.title === l),
         );
         this.savedScanInfo = { timestamp: resp.timestamp, libraries: resp.libraries || [] };
+        this.ratingFilterComplete = this.mediaType === 'tv' || !!resp.rating_filter_complete;
         this.downloaderLibraries = [];
         this.radarrRootFolderPath = '';
         this.sonarrRootFolderPath = '';
@@ -769,6 +776,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     const cached = this.completedScans.get(key);
     if (!cached) return;
     this.allGaps = cached.gaps;
+    this.ratingFilterComplete = cached.ratingFilterComplete;
     this.downloaderLibraries = [...cached.routingLibraries];
     this.totalOwned = cached.totalOwned;
     this.scanMode = true;
@@ -776,10 +784,11 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     this.imdbRatingsLoaded = false;  // new result set → offer on-demand load again
   }
 
-  private cacheCompletedScan(libraries: string[], gaps: Gap[], totalOwned: number, completedAt: string | null = null): void {
+  private cacheCompletedScan(libraries: string[], gaps: Gap[], totalOwned: number, completedAt: string | null = null, ratingFilterComplete = true): void {
     const key = this.scanKey(libraries);
     if (!key) return;
-    this.completedScans.set(key, { gaps, totalOwned, routingLibraries: [...this.downloaderLibraries], completedAt });
+    this.ratingFilterComplete = ratingFilterComplete;
+    this.completedScans.set(key, { gaps, totalOwned, routingLibraries: [...this.downloaderLibraries], completedAt, ratingFilterComplete });
   }
 
   private scanKey(libraries: string[]): string {
@@ -863,11 +872,8 @@ export class RecommendedComponent implements OnInit, OnDestroy {
       return;
     }
 
-    // Persist the quality filter first so the backend (which filters at scan
-    // time) uses the quality settings shown in the UI for this scan.
     // The backend loads and validates every library before starting the scan.
-    this.saveQualityPrefs().pipe(
-      switchMap(() => this.recommendationService.startScan(scanLibraries, true, freshScan, this.activeSource, incremental)),
+    this.recommendationService.startScan(scanLibraries, true, freshScan, this.activeSource, incremental).pipe(
       takeUntil(this.resultsChanged$), takeUntil(this.destroy$),
     ).subscribe({
       next: res => {
@@ -901,7 +907,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
             this.loadingGaps = false;
             this.scanProgress = null;
             const scanLibs = progress.libraries?.length ? progress.libraries : [...scanLibraries];
-            this.cacheCompletedScan(scanLibs, this.allGaps, progress.total_owned, progress.completed_at);
+            this.cacheCompletedScan(scanLibs, this.allGaps, progress.total_owned, progress.completed_at, this.mediaType === 'tv' || !!progress.rating_filter_complete);
           } else if (progress.status === 'error') {
             this.stopPolling();
             this.errorMessage = progress.error || 'Scan failed.';
@@ -971,6 +977,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   // -- Single-item lookup --
 
   selectItem(item: BrowseItem): void {
+    this.ratingFilterComplete = true;
     this.cancelResultRequests();
     this.selectedItem = item;
     this.savedScanInfo = null;
@@ -1084,8 +1091,8 @@ export class RecommendedComponent implements OnInit, OnDestroy {
       externalUrl: this.movieExternalUrl(g.tmdbId),
       radarrEligible: !!g.tmdbId,
       sonarrEligible: false,
-      tmdbRating: g.voteAverage > 0 ? g.voteAverage : undefined,
-      tmdbVotes: g.voteCount || undefined,
+      tmdbRating: g.voteAverage ?? undefined,
+      tmdbVotes: g.voteCount ?? undefined,
       genreIds: g.genreIds || [],
       popularity: g.popularity || 0,
     }));
@@ -1149,6 +1156,8 @@ export class RecommendedComponent implements OnInit, OnDestroy {
       sortBy: this.sortBy,
       genreFilter: this.genreFilter,
       showFuture: this.showFuture,
+      minRating: this.minRating,
+      minVoteCount: this.minVoteCount,
     };
     this.preferencesService.save({ missingFilters }).subscribe({ next: () => {}, error: () => {} });
   }
@@ -1181,22 +1190,25 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     this.saveMissingFilters();
   }
 
-  /**
-   * Persist the quality-filter settings. This is a scan-time filter applied
-   * server-side, so saving it (which reloads the TMDB service) makes the next
-   * scan — manual or scheduled — exclude low-tier movies. Fire-and-forget on
-   * change so scheduled scans honor it even without a manual scan.
-   */
-  private saveQualityPrefs() {
-    return this.preferencesService.save({
-      qualityFilterEnabled: this.qualityFilter,
-      minRating: this.minRating || 0,
-      minVoteCount: this.minVoteCount || 0,
-    });
+  onRatingFilterChange(): void {
+    this.minRating = Math.min(10, Math.max(0, Number(this.minRating) || 0));
+    this.minVoteCount = Math.max(0, Math.floor(Number(this.minVoteCount) || 0));
+    this.applyFilter();
+    this.saveMissingFilters();
   }
 
-  onQualityFilterChange(): void {
-    this.saveQualityPrefs().subscribe({ next: () => {}, error: () => {} });
+  clearRatingFilter(): void {
+    this.minRating = 0;
+    this.minVoteCount = 0;
+    this.onRatingFilterChange();
+  }
+
+  private passesRatingFilter(gap: Gap): boolean {
+    if (!this.ratingFilterActive || gap.owned || this.isFutureRelease(gap)) return true;
+    // Unknown ratings in older saved scans stay visible instead of being
+    // mistaken for zero. Actual TMDB zeroes still obey the thresholds.
+    return (gap.tmdbRating == null || gap.tmdbRating >= this.minRating)
+      && (gap.tmdbVotes == null || gap.tmdbVotes >= this.minVoteCount);
   }
 
   // NOTE: mirrored on the backend by `_is_future_release` in
@@ -1394,6 +1406,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
       && !this.ignoredIds.has(g.id)
       && (this.showFuture || !this.isFutureRelease(g))
       && matchesGenre(g)
+      && this.passesRatingFilter(g)
     ).length;
 
     if (this.genreFilter != null) {
@@ -1423,6 +1436,11 @@ export class RecommendedComponent implements OnInit, OnDestroy {
         }))
         .filter(group => group.gaps.length > 0);
     }
+    this.ratingHiddenCount = this.filteredGroups.reduce((count, group) =>
+      count + group.gaps.filter(g => !this.passesRatingFilter(g)).length, 0);
+    this.filteredGroups = this.filteredGroups
+      .map(group => ({ ...group, gaps: group.gaps.filter(g => this.passesRatingFilter(g)) }))
+      .filter(group => group.gaps.length > 0);
     // Index full groups by name for per-group actions (windowed rendering may
     // hand a partial group to the template), and reset the render window.
     this.groupByName = new Map(this.filteredGroups.map(g => [g.name, g]));

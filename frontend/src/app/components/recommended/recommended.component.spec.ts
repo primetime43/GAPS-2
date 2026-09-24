@@ -132,7 +132,7 @@ describe('RecommendedComponent', () => {
     const primary = () => fixture.nativeElement.querySelector('.scan-action button') as HTMLButtonElement;
     expect(primary().textContent).toContain('Scan for Gaps');
     expect(fixture.nativeElement.textContent).toContain('Your Movies');
-    expect(fixture.nativeElement.textContent).not.toContain('Rescan Everything');
+    expect(fixture.nativeElement.textContent).not.toContain('Full Rescan');
 
     recommendationService.startScan.and.returnValue(of({ status: 'started', total: 1, mode: 'full' }));
     recommendationService.getScanProgress.and.returnValue(of({
@@ -443,11 +443,10 @@ describe('RecommendedComponent', () => {
     expect(component.showFreshScanConfirm).toBeTrue();
   });
 
-  it('movie scan should persist the quality filter before starting', fakeAsync(() => {
+  it('movie scans do not change scheduled notification thresholds', fakeAsync(() => {
     component.mediaType = 'movie';
     component.activeSource = 'plex';
     component.selectedLibraries = ['Movies'];
-    component.qualityFilter = true;
     component.minRating = 6.5;
     component.minVoteCount = 200;
 
@@ -457,9 +456,7 @@ describe('RecommendedComponent', () => {
     component.scanLibrary(false);
     tick();
 
-    expect(preferencesService.save).toHaveBeenCalledWith(
-      jasmine.objectContaining({ qualityFilterEnabled: true, minRating: 6.5, minVoteCount: 200 })
-    );
+    expect(preferencesService.save).not.toHaveBeenCalled();
     expect(recommendationService.startScan).toHaveBeenCalled();
   }));
 
@@ -525,13 +522,86 @@ describe('RecommendedComponent', () => {
 
   it('stops a pending scan start when its view is cleared', () => {
     const pending = new Subject<any>();
-    preferencesService.save.and.returnValue(pending);
+    recommendationService.startScan.and.returnValue(pending);
     component.selectedLibraries = ['Movies'];
     component.scanLibrary();
     component.clearResults();
     pending.next({});
-    expect(recommendationService.startScan).not.toHaveBeenCalled();
+    expect(recommendationService.getScanProgress).not.toHaveBeenCalled();
     expect(component.loadingGaps).toBeFalse();
+  });
+
+  it('filters ratings immediately, preserves raw results, and keeps notifications separate', () => {
+    fixture.detectChanges();
+    component.allGaps = [
+      gap({ id: 1, name: 'Low rating', tmdbRating: 5.9, tmdbVotes: 200 }),
+      gap({ id: 2, name: 'Few votes', tmdbRating: 8, tmdbVotes: 109 }),
+      gap({ id: 3, name: 'At threshold', tmdbRating: 6, tmdbVotes: 110 }),
+      gap({ id: 4, name: 'Owned', owned: true, tmdbRating: 2, tmdbVotes: 2 }),
+      gap({ id: 5, name: 'Future', releaseDate: '2099-01-01', tmdbRating: 0, tmdbVotes: 0 }),
+      gap({ id: 6, name: 'Unknown rating' }),
+    ];
+    component.minRating = 6;
+    component.minVoteCount = 110;
+    component.onRatingFilterChange();
+    expect(component.filteredGroups.flatMap(g => g.gaps.map(x => x.id))).toEqual([3, 4, 5, 6]);
+    expect(component.ratingHiddenCount).toBe(2);
+    expect(component.missingCount).toBe(3);
+    expect(component.allGaps.length).toBe(6);
+    expect(preferencesService.save).toHaveBeenCalledWith({ missingFilters: jasmine.objectContaining({ minRating: 6, minVoteCount: 110 }) });
+    expect(recommendationService.startScan).not.toHaveBeenCalled();
+    component.exportResults('csv');
+    expect(exportService.exportGaps.calls.mostRecent().args[0].map(g => g.id)).toEqual([3, 4, 5, 6]);
+    component.clearRatingFilter();
+    expect(component.filteredGroups.flatMap(g => g.gaps).length).toBe(6);
+    expect(component.ratingHiddenCount).toBe(0);
+  });
+
+  it('keeps result filters and Show all reachable when every title is hidden', () => {
+    fixture.detectChanges();
+    component.hasServer = true;
+    component.scanMode = true;
+    component.allGaps = [gap({ id: 1, name: 'Hidden title', tmdbRating: 2, tmdbVotes: 10 })];
+    component.minRating = 6;
+    component.onRatingFilterChange();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('1 title hidden');
+    expect(fixture.nativeElement.querySelector('#recMinRating')).toBeTruthy();
+    fixture.nativeElement.querySelector('.rating-filter-summary button').click();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Hidden title');
+    expect(component.ratingFilterActive).toBeFalse();
+  });
+
+  it('restores zero thresholds without re-enabling legacy limits, and ignores limits for TV', () => {
+    preferencesService.load.and.returnValue(of({ ...DEFAULT_PREFERENCES,
+      qualityFilterEnabled: true, minRating: 6, minVoteCount: 110,
+      missingFilters: { view: 'all', sortBy: 'default', genreFilter: null, showFuture: true, minRating: 0, minVoteCount: 0 },
+    }));
+    fixture.detectChanges();
+    expect(component.minRating).toBe(0);
+    expect(component.minVoteCount).toBe(0);
+    component.mediaType = 'tv';
+    component.minRating = 10;
+    component.minVoteCount = 1000;
+    component.allGaps = [gap({ id: 1, tmdbRating: 1, tmdbVotes: 1 })];
+    component.applyFilter();
+    expect(component.filteredGroups[0].gaps.length).toBe(1);
+    expect(component.ratingHiddenCount).toBe(0);
+  });
+
+  it('distinguishes actual zero ratings from missing metadata in API results', () => {
+    recommendationService.getGapsForMovie.and.returnValue(of([
+      { tmdbId: 1, name: 'Unrated', year: '2000', voteAverage: 0, voteCount: 0 },
+      { tmdbId: 2, name: 'Unknown', year: '2000' },
+    ] as any));
+    component.minRating = 6;
+    component.minVoteCount = 110;
+    component.selectItem({ name: 'Movie', year: 2000, posterUrl: null, tmdbId: 3 });
+    expect(component.filteredGroups.flatMap(g => g.gaps.map(x => x.id))).toEqual([2]);
+    expect(component.ratingHiddenCount).toBe(1);
+    component.clearRatingFilter();
+    expect(component.filteredGroups.flatMap(g => g.gaps).length).toBe(2);
   });
 
   it('reports polling failures instead of leaving a permanent spinner', fakeAsync(() => {

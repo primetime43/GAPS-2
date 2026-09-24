@@ -54,6 +54,8 @@ class ScanProgressTracker:
             progress['total_owned'] = last.get('total_owned', 0)
             progress['libraries'] = last.get('libraries', [])
             progress['completed_at'] = last.get('completed_at')
+            if 'rating_filter_complete' in self._extra_fields:
+                progress['rating_filter_complete'] = bool(last.get('rating_filter_complete'))
         return progress
 
     @property

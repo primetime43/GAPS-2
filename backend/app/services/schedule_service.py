@@ -219,8 +219,10 @@ class ScheduleService:
                 collections=collections, total_owned=len(owned_ids),
                 gaps=missing,
             )
+            notification_gaps = tmdb.notification_gaps(missing)
+            notification_collections = len({g['collectionName'] for g in notification_gaps})
             self._app.notification_service.notify_scan_results(
-                len(missing), collections, label, media_type='movie'
+                len(notification_gaps), notification_collections, label, media_type='movie'
             )
         except Exception as e:
             logger.exception("Scheduled movie scan crashed unexpectedly")

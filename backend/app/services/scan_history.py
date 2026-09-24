@@ -52,7 +52,8 @@ def actionable_missing(media_type: str, gaps: list[dict]) -> list[dict]:
     - the ignore list (`ignored_movies`/`ignored_shows`) is always applied;
     - future releases are dropped when `hideFutureReleasesByDefault` is set.
 
-    Quality filtering already happened at scan time, so it isn't repeated here.
+    Rating/vote thresholds are view filters; retain those titles in history.
+    Scheduled notification thresholds are applied separately by the caller.
     """
     is_movie = media_type != 'tv'
     id_key = 'tmdbId' if is_movie else 'tvdbId'
@@ -84,6 +85,11 @@ def _strip_gap(media_type: str, gap: dict) -> dict:
         'year': gap.get('year', ''),
         'collectionName': gap.get('collectionName', ''),
         'owned': bool(gap.get('owned', False)),
+        # Keep rating fields even after the collection cache expires, so saved
+        # results can still be filtered without another scan or network lookup.
+        'releaseDate': gap.get('releaseDate'),
+        'voteAverage': gap.get('voteAverage'),
+        'voteCount': gap.get('voteCount'),
     }
 
 
@@ -120,6 +126,7 @@ def record(
         'trigger': trigger,  # 'manual' | 'scheduled'
         'message': message,
         'gaps': [_strip_gap(mt, g) for g in (gaps or [])],
+        'rating_filter_complete': mt == 'movie',
     }
     try:
         with _RECORD_LOCK:

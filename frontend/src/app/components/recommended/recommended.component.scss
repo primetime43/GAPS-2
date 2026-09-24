@@ -95,15 +95,28 @@
   font-size: 13px;
 }
 
-.quality-thresholds {
-  padding: 8px 12px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 6px;
+.rating-filter-controls {
+  padding: 4px;
+  width: 260px;
+  max-width: 100%;
 }
 
-.quality-input {
-  width: 80px;
+.filter-menu {
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.rating-filter-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  padding: 10px 12px;
+  background: #292929;
+  border: 1px solid #444;
+  border-radius: 6px;
+  color: #ccc;
+  font-size: 13px;
 }
 
 .scan-setup {

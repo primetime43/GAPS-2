@@ -17,9 +17,8 @@ DEFAULTS = {
     'posterPrefetch': False,
     'imageCacheEnabled': False,
     'mediaServerTimeout': 30,
-    # Quality filter — exclude low-tier movie gaps (issue #47). When enabled,
-    # already-released missing movies below either threshold are dropped from
-    # scan results. Unreleased titles are exempt (use hideFutureReleases for those).
+    # Rating/vote thresholds for scheduled notifications. Scan results retain
+    # all titles; the Missing page stores its own reversible display filters.
     'qualityFilterEnabled': False,
     'minRating': 0.0,       # TMDB vote_average, 0–10
     'minVoteCount': 0,      # TMDB vote_count (number of ratings)

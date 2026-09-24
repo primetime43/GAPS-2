@@ -10,6 +10,8 @@ export interface MissingFilters {
   sortBy: 'default' | 'rating' | 'popularity' | 'year' | 'name';
   genreFilter: number | null;
   showFuture: boolean;
+  minRating?: number;
+  minVoteCount?: number;
 }
 
 export interface UserPreferences {
