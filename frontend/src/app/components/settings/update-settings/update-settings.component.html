@@ -20,6 +20,20 @@
       <span *ngIf="!busy" class="status-dot" aria-hidden="true"></span>
       {{ current.updater.message }}
     </p>
+    <p *ngIf="current.updater.completedAt" class="text-muted small">
+      Last completed check: {{ current.updater.completedAt * 1000 | date:'medium' }}
+    </p>
+    <div *ngIf="current.build.channel === 'develop' || choice.channel === 'develop'" class="mb-3">
+      <p *ngIf="checkingDevelop && !develop" class="text-muted small">Checking the Develop branch on GitHub…</p>
+      <div *ngIf="develop as latest" [class.text-warning]="!matchesDevelop">
+        <p class="mb-1">Develop on GitHub: <a [href]="'https://github.com/primetime43/GAPS-2/commit/' + latest.commit" target="_blank" rel="noopener"><code>{{ latest.commit | slice:0:7 }}</code></a></p>
+        <p class="mb-1">{{ matchesDevelop ? 'The running build matches this Develop commit.' : 'The running build does not match this Develop commit.' }}</p>
+        <p *ngIf="!matchesDevelop" class="small mb-1">Get latest Develop checks for a published image. If this commit is still building, try again after its <a href="https://github.com/primetime43/GAPS-2/actions/workflows/build-develop.yml" target="_blank" rel="noopener">Docker build</a> finishes.</p>
+        <p class="text-muted small mb-1">GitHub checked: {{ latest.checkedAt * 1000 | date:'medium' }}</p>
+      </div>
+      <p *ngIf="developError" class="text-warning small" role="status">{{ developError }}</p>
+      <button class="btn btn-sm btn-outline-secondary" type="button" (click)="checkDevelop()" [disabled]="checkingDevelop">Check Develop commit</button>
+    </div>
   </div>
   <p *ngIf="reconnecting" role="status" class="alert alert-info">
     {{ busy ? 'Waiting for GAPS to restart. This page will reconnect automatically.' : 'Could not reach GAPS. Retrying…' }}
@@ -27,7 +41,7 @@
   <p *ngIf="error" role="alert" class="alert alert-danger">{{ error }}</p>
 
   <label for="update-channel" class="form-label">Release channel</label>
-  <select id="update-channel" class="form-select dark-select mb-3" [(ngModel)]="choice.channel" [disabled]="busy">
+  <select id="update-channel" class="form-select dark-select mb-3" [(ngModel)]="choice.channel" (ngModelChange)="checkDevelop()" [disabled]="busy">
     <option value="stable">Stable — latest release</option>
     <option value="develop">Develop — latest development build</option>
     <option value="version">Specific version</option>
@@ -41,7 +55,7 @@
     <p *ngIf="releasesError" class="text-muted">{{ releasesError }}</p>
   </div>
   <p *ngIf="choice.channel === 'develop'" class="text-warning">Development builds contain unreleased changes and may be less stable.</p>
-  <p *ngIf="choice.channel === 'develop'" class="text-muted small">Get latest Develop checks the registry even when you already use Develop. A newer build is downloaded and applied automatically.</p>
+  <p *ngIf="choice.channel === 'develop'" class="text-muted small">Get latest Develop checks the registry even when you already use Develop. New commits become available after their Docker image is published. Update results describe the last completed check.</p>
   <p class="text-muted">Updates run when you apply them. Your choice is kept across restarts.</p>
   <button class="btn btn-primary" [disabled]="!canApply" (click)="confirmVisible = true">
     {{ busy ? 'Update in progress…' : actionLabel }}

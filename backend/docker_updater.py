@@ -242,7 +242,8 @@ class Updater:
     def switch(self, choice, request_id, pinned_image=None):
         choice = selection(choice)
         image = image_for(self.repository, choice)
-        self.report(state='pulling', message=f'Downloading {image}.', requestId=request_id)
+        self.report(state='pulling', message=f'Downloading {image}.', requestId=request_id,
+                    completedAt=None)
         journal = None
         try:
             current = self.target_container()
@@ -268,12 +269,17 @@ class Updater:
                 self.docker.create(self.target, create_spec(current, new_image['Id'], previous))
                 self.report(state='checking', message='Waiting for the app to be ready.')
                 self.wait_healthy()
+            running = self.docker.container(self.target)
+            if not running or not running.get('State', {}).get('Running') or running.get('Image') != new_image['Id']:
+                raise DockerError('The running container does not match the selected image.')
             write_json(self.state / 'selection.json', {'selection': choice, 'image': image, 'imageId': new_image['Id']})
             (self.state / 'transaction.json').unlink(missing_ok=True)
-            message = 'The selected build is running.'
+            message = 'Last update completed: the selected build started successfully.'
             if choice['channel'] == 'develop' and not pinned_image:
-                message = 'Updated to the latest Develop build.' if changed else 'Develop is already up to date.'
+                message = ('Last update installed the Develop image available from the registry at that time.'
+                           if changed else 'At the last check, the running Develop image matched the registry image.')
             self.report(state='done', message=message, selection=choice,
+                        completedAt=time.time(),
                         currentImage=image, imageId=new_image['Id'], registry=self.repository.split('/')[0]
                         if self.repository.startswith('ghcr.io/') else 'Docker Hub')
             try:

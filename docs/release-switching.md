@@ -123,6 +123,10 @@ Older updater builds use their hostname as a Docker container ID or name. Synolo
 
 Updates are applied on demand, not automatically whenever a new build appears. The chosen image is saved by immutable image ID. If Compose recreates the original bootstrap image later, the updater reapplies that saved image. To intentionally go back to Stable, use the selector before changing the deployment externally.
 
+The update result describes the **last completed request**, not whether you are current now. The helper heartbeat only indicates that the updater is connected. The Updates page separately compares the running commit with the Develop branch on GitHub and shows when GitHub was checked. A new commit may still be building; **Get latest Develop** installs the image published in your configured registry. If the commits differ, wait for the linked Docker workflow to finish and check again. GitHub lookup failures are shown as unknown, never as up to date.
+
+New helpers also verify that the running container uses the selected image before reporting success and record a completion timestamp. The app rewords historical success messages from older helpers as well. Updating the app does not replace the separate updater container; recreate that helper with a current image to receive helper changes.
+
 ## Switch builds over SSH
 
 With the updater connected, run **one** of these commands on the NAS. They use the same update process as the app, including backups and rollback. Change `4277` if you use a different host port. Each request restarts GAPS and stops active scans.

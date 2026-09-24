@@ -14,7 +14,8 @@ describe('UpdateSettingsComponent', () => {
     localStorage.removeItem('gaps-update-request');
     status = { build: { version: '2.11.0', commit: 'abc123', installType: 'docker', channel: 'stable' },
       updater: { available: true, reason: '', state: 'idle' } };
-    service = jasmine.createSpyObj('UpdateService', ['getStatus', 'getReleases', 'apply']);
+    service = jasmine.createSpyObj('UpdateService', ['getStatus', 'getReleases', 'getDevelop', 'apply']);
+    service.getDevelop.and.returnValue(of({ commit: '6'.repeat(40), checkedAt: 1000 }));
     service.getStatus.and.callFake(() => of(status));
     service.getReleases.and.returnValue(of({ versions: ['2.11.0'] }));
     service.apply.and.returnValue(of({ requestId: 'job1', message: 'Queued' }));
@@ -105,6 +106,44 @@ describe('UpdateSettingsComponent', () => {
     expect(service.apply).not.toHaveBeenCalled();
     component.ngOnDestroy();
   }));
+
+  it('detects a different Develop commit despite a previous successful update', fakeAsync(() => {
+    status.build.channel = 'develop';
+    status.build.commit = '4'.repeat(40);
+    status.updater = { ...status.updater, state: 'done', message: 'Last update completed.' };
+    component.ngOnInit();
+    tick();
+    expect(component.matchesDevelop).toBeFalse();
+    expect(component.develop?.commit).toBe('6'.repeat(40));
+    status.build.commit = '6'.repeat(40);
+    tick(3000);
+    expect(component.matchesDevelop).toBeTrue();
+    component.ngOnDestroy();
+  }));
+
+  it('clears a previous match when the GitHub check fails', fakeAsync(() => {
+    status.build.channel = 'develop';
+    status.build.commit = '6'.repeat(40);
+    component.ngOnInit();
+    tick();
+    expect(component.matchesDevelop).toBeTrue();
+    service.getDevelop.and.returnValue(throwError(() => new Error('rate limit')));
+    component.checkDevelop();
+    expect(component.matchesDevelop).toBeFalse();
+    expect(component.develop).toBeNull();
+    expect(component.developError).toContain('unknown');
+    component.ngOnDestroy();
+  }));
+
+  it('refreshes GitHub separately from frequent updater heartbeat polling', fakeAsync(() => {
+    status.build.channel = 'develop';
+    component.ngOnInit();
+    tick();
+    expect(service.getDevelop).toHaveBeenCalledTimes(1);
+    tick(120000);
+    expect(service.getDevelop).toHaveBeenCalledTimes(2);
+    component.ngOnDestroy();
+  }));
 });
 
 describe('Updates tab', () => {
@@ -113,7 +152,8 @@ describe('Updates tab', () => {
 
   beforeEach(async () => {
     localStorage.removeItem('gaps-update-request');
-    service = jasmine.createSpyObj('UpdateService', ['getStatus', 'getReleases', 'apply']);
+    service = jasmine.createSpyObj('UpdateService', ['getStatus', 'getReleases', 'getDevelop', 'apply']);
+    service.getDevelop.and.returnValue(of({ commit: '6'.repeat(40), checkedAt: 1000 }));
     service.getStatus.and.returnValue(of({
       build: { version: '2.11.0', commit: 'abc123', installType: 'docker', channel: 'develop' },
       updater: { available: true, reason: '', state: 'idle', message: 'Ready.' },
@@ -165,6 +205,23 @@ describe('Updates tab', () => {
     fixture.detectChanges();
     expect(service.apply).not.toHaveBeenCalled();
     expect(fixture.nativeElement.querySelector('.modal-backdrop')).toBeNull();
+    fixture.destroy();
+  }));
+
+  it('shows source mismatch and publication guidance beside the last update result', fakeAsync(() => {
+    service.getStatus.and.returnValue(of({
+      build: { version: '2.12.0', commit: '4'.repeat(40), channel: 'develop' },
+      updater: { available: true, reason: '', state: 'done', message: 'Last update completed.', completedAt: 500 },
+    }));
+    fixture.detectChanges();
+    tick();
+    fixture.detectChanges();
+    const text = fixture.nativeElement.textContent;
+    expect(text).toContain('Last update completed.');
+    expect(text).toContain('Last completed check:');
+    expect(text).toContain('does not match');
+    expect(text).toContain('6666666');
+    expect(text).toContain('still building');
     fixture.destroy();
   }));
 });
