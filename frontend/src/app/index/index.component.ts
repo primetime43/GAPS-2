@@ -1,4 +1,5 @@
 import { Component, DestroyRef, OnInit } from '@angular/core';
+import { formatDate } from '@angular/common';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Observable, of } from 'rxjs';
 import { catchError, map, switchMap, timeout } from 'rxjs/operators';
@@ -22,6 +23,17 @@ interface ConnectionStatus {
   detail: string;
 }
 
+interface DashboardSchedule {
+  type: 'movie' | 'tv';
+  label: string;
+  enabled: boolean;
+  frequency: string;
+  libraries: string;
+  nextRun: string;
+  lastRun: ScheduleLastRun | null;
+  lastRunTime: string;
+}
+
 @Component({
     selector: 'app-index',
     templateUrl: './index.component.html',
@@ -37,10 +49,10 @@ export class IndexComponent implements OnInit {
     this.connection('TheTVDB', 'tvdb'),
   ];
 
-  scheduleEnabled = false;
-  schedulePreset = '';
-  nextRun: string | null = null;
-  scheduleLastRun: ScheduleLastRun | null = null;
+  schedules: DashboardSchedule[] = [];
+  schedulesLoading = true;
+  scheduleError = '';
+  readonly localTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
   lastMovieScan: ScanHistoryEntry | null = null;
   lastTvScan: ScanHistoryEntry | null = null;
@@ -63,17 +75,56 @@ export class IndexComponent implements OnInit {
   ngOnInit(): void {
     this.checkConnections();
 
-    this.scheduleService.getSchedule().subscribe({
-      next: (config: ScheduleConfig) => {
-        this.scheduleEnabled = config.enabled;
-        this.schedulePreset = config.description || config.preset;
-        this.nextRun = config.next_run;
-        this.scheduleLastRun = config.last_run;
-      },
-      error: () => {}
-    });
-
+    this.loadSchedules();
     this.loadScanHistory();
+  }
+
+  loadSchedules(): void {
+    this.schedulesLoading = true;
+    this.scheduleError = '';
+    this.scheduleService.getSchedule().pipe(timeout(15000), takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: (config: ScheduleConfig) => {
+        const history = [...(config.run_history || []), ...(config.last_run ? [config.last_run] : [])]
+          .sort((a, b) => this.scheduleDate(b.timestamp).getTime() - this.scheduleDate(a.timestamp).getTime());
+        const frequencies: Record<string, string> = {
+          hourly: 'Hourly', daily: 'Daily', weekly: 'Weekly', biweekly: 'Twice monthly', monthly: 'Monthly',
+        };
+        this.schedules = (['movie', 'tv'] as const).map(type => {
+          const block = config[type];
+          // Older schedule history predates TV support and has no mediaType.
+          const lastRun = history.find(run => (run.mediaType || 'movie') === type) || null;
+          return {
+            type, label: type === 'movie' ? 'Movies' : 'TV Shows',
+            enabled: !!block?.enabled,
+            frequency: frequencies[block?.preset] || 'Scheduled',
+            libraries: block?.libraries?.join(', ') || block?.library || '',
+            nextRun: this.formatScheduleTime(block?.next_run),
+            lastRun, lastRunTime: this.formatScheduleTime(lastRun?.timestamp),
+          };
+        });
+        this.schedulesLoading = false;
+      },
+      error: () => {
+        this.schedulesLoading = false;
+        this.scheduleError = 'Could not load schedules.';
+      },
+    });
+  }
+
+  refreshScanSummaries(): void {
+    this.loadSchedules();
+    this.loadScanHistory();
+  }
+
+  private scheduleDate(timestamp: string): Date {
+    // APScheduler returns a space between date and time; normalize for browsers.
+    return new Date(timestamp.replace(' ', 'T'));
+  }
+
+  private formatScheduleTime(timestamp: string | null | undefined): string {
+    if (!timestamp) return 'Unavailable';
+    const date = this.scheduleDate(timestamp);
+    return Number.isNaN(date.getTime()) ? 'Unavailable' : formatDate(date, "MMM d 'at' h:mm a", 'en-US');
   }
 
   loadScanHistory(): void {

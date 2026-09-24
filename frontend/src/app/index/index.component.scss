@@ -1,3 +1,38 @@
+.status-card.schedule-card {
+  display: block;
+  color: #ddd;
+
+  p { margin-bottom: 4px; }
+}
+
+.schedule-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+
+  h5 { display: flex; align-items: center; gap: 8px; margin: 0; color: #fff; }
+  svg { width: 22px; height: 22px; color: #51d9b5; }
+  a { color: #72e4c7; font-size: 13px; }
+}
+
+.schedule-timezone, .schedule-last, .schedule-libraries { font-size: 13px; color: #bbb; }
+.schedule-timezone { margin-top: 6px; }
+.schedule-row {
+  padding-top: 12px;
+  overflow-wrap: anywhere;
+
+  & + & { border-top: 1px solid #444; margin-top: 12px; }
+  h6 { color: #fff; margin-bottom: 6px; }
+  h6 span { font-size: 13px; font-weight: 400; color: #bbb; margin-left: 8px; }
+}
+.schedule-next { font-size: 14px; }
+.schedule-error {
+  color: #ffbc9a;
+  button { background: none; border: 0; color: #72e4c7; text-decoration: underline; }
+}
+
 .connections {
   display: flex;
   align-items: center;

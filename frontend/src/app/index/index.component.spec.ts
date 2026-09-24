@@ -178,16 +178,107 @@ describe('IndexComponent', () => {
     expect(pending.every(request => request.cancelled)).toBeTrue();
   });
 
-  it('should load schedule status', fakeAsync(() => {
-    flushInitRequests({
-      schedule: { enabled: true, preset: 'daily', next_run: '2026-04-07T00:00:00Z', last_run: null, run_history: [], presets: {} },
-    });
-    tick();
+  function scheduledRun(mediaType: 'movie' | 'tv', timestamp: string, missing: number, status = 'success') {
+    return { mediaType, timestamp, missing, status, library: '', collections: 1, message: '' };
+  }
 
-    expect(component.scheduleEnabled).toBeTrue();
-    expect(component.schedulePreset).toBe('daily');
-    expect(component.nextRun).toBe('2026-04-07T00:00:00Z');
-  }));
+  it('shows independent schedules and converts offset timestamps to browser local time', () => {
+    const movieTime = new Date(2026, 9, 1, 4).toISOString();
+    const tvTime = new Date(2026, 9, 2, 18, 30).toISOString();
+    flushInitRequests({ schedule: {
+      movie: { enabled: true, preset: 'monthly', next_run: movieTime.replace('T', ' '), libraries: ['Films'] },
+      tv: { enabled: true, preset: 'weekly', next_run: tvTime, libraries: ['Shows'] },
+      // Legacy combined fields must not choose the displayed schedule.
+      enabled: true, description: 'Combined server time', next_run: 'wrong', run_history: [],
+    } });
+    fixture.detectChanges();
+    const rows = fixture.nativeElement.querySelectorAll('.schedule-row');
+    expect(rows.length).toBe(2);
+    expect(rows[0].textContent).toContain('Movies');
+    expect(rows[0].textContent).toContain('Monthly');
+    expect(rows[0].textContent).toContain('Next run: Oct 1 at 4:00 AM');
+    expect(rows[0].textContent).toContain('Films');
+    expect(rows[1].textContent).toContain('TV Shows');
+    expect(rows[1].textContent).toContain('Next run: Oct 2 at 6:30 PM');
+    expect(rows[1].textContent).toContain('Shows');
+    expect(fixture.nativeElement.querySelector('.schedule-card').textContent).not.toContain('Combined server time');
+  });
+
+  it('matches the latest scheduled run to each media type, independent of history order', () => {
+    const movie = scheduledRun('movie', new Date(2026, 8, 1, 4).toISOString(), 334);
+    const tv = scheduledRun('tv', new Date(2026, 8, 2, 5).toISOString(), 188);
+    flushInitRequests({ schedule: {
+      movie: { enabled: true, preset: 'monthly', next_run: null },
+      tv: { enabled: true, preset: 'weekly', next_run: null },
+      last_run: tv,
+      run_history: [scheduledRun('movie', '2026-08-01T00:00:00Z', 1), tv, movie],
+    } });
+    fixture.detectChanges();
+    const rows = fixture.nativeElement.querySelectorAll('.schedule-row');
+    expect(rows[0].textContent).toContain('Last scheduled run: Sep 1 at 4:00 AM');
+    expect(rows[0].textContent).toContain('334');
+    expect(rows[0].textContent).not.toContain('188');
+    expect(rows[1].textContent).toContain('Last scheduled run: Sep 2 at 5:00 AM');
+    expect(rows[1].textContent).toContain('188');
+    expect(rows[1].textContent).not.toContain('334');
+  });
+
+  it('shows disabled schedules and does not attribute legacy movie history to TV', () => {
+    flushInitRequests({ schedule: {
+      movie: { enabled: false }, tv: { enabled: false }, run_history: [],
+      last_run: { timestamp: '2026-09-01T00:00:00Z', missing: 12, status: 'success' },
+    } });
+    fixture.detectChanges();
+    const rows = fixture.nativeElement.querySelectorAll('.schedule-row');
+    expect(rows[0].textContent).toContain('Not scheduled');
+    expect(rows[0].textContent).toContain('12');
+    expect(rows[1].textContent).toContain('Not scheduled');
+    expect(rows[1].textContent).toContain('No recent scheduled runs');
+    expect(fixture.nativeElement.querySelectorAll('.schedule-next').length).toBe(0);
+  });
+
+  it('handles missing next-run times and keeps failed and skipped run details separate', () => {
+    flushInitRequests({ schedule: {
+      movie: { enabled: true, next_run: null }, tv: { enabled: true, next_run: 'invalid' },
+      run_history: [
+        { ...scheduledRun('movie', '2026-09-01T00:00:00Z', 0, 'error'), message: 'Movie server unavailable' },
+        { ...scheduledRun('tv', '2026-09-02T00:00:00Z', 0, 'skipped'), message: 'TheTVDB not configured' },
+      ],
+    } });
+    fixture.detectChanges();
+    const rows = fixture.nativeElement.querySelectorAll('.schedule-row');
+    expect(rows[0].textContent).toContain('Next run: Unavailable');
+    expect(rows[0].textContent).toContain('failed.');
+    expect(rows[0].textContent).toContain('Movie server unavailable');
+    expect(rows[1].textContent).toContain('Next run: Unavailable');
+    expect(rows[1].textContent).toContain('skipped.');
+    expect(rows[1].textContent).toContain('TheTVDB not configured');
+  });
+
+  it('reports a schedule request failure instead of displaying schedules as disabled, and retries', () => {
+    flushInitRequests();
+    component.loadSchedules();
+    httpMock.expectOne(`${environment.apiUrl}/schedule`).flush({}, { status: 503, statusText: 'Offline' });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelectorAll('.schedule-row').length).toBe(0);
+    expect(fixture.nativeElement.querySelector('.schedule-error').textContent).toContain('Could not load schedules');
+    fixture.nativeElement.querySelector('.schedule-error button').click();
+    httpMock.expectOne(`${environment.apiUrl}/schedule`).flush({ movie: { enabled: false }, tv: { enabled: false } });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelectorAll('.schedule-row').length).toBe(2);
+  });
+
+  it('refreshes schedules as well as scan summaries after a scan finishes', () => {
+    flushInitRequests();
+    component.refreshScanSummaries();
+    httpMock.expectOne(`${environment.apiUrl}/schedule`).flush({
+      movie: { enabled: true, preset: 'daily', next_run: new Date(2026, 9, 2, 4).toISOString() },
+      tv: { enabled: false },
+    });
+    httpMock.expectOne(`${environment.apiUrl}/scan-history`).flush({ lastMovie: null, lastTv: null });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.schedule-row').textContent).toContain('Oct 2 at 4:00 AM');
+  });
 
   it('should load latest movie and TV scan summaries', fakeAsync(() => {
     flushInitRequests({

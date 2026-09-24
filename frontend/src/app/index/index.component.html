@@ -36,36 +36,42 @@
   </div>
 
   <div class="row mt-3">
-    <!-- Scheduled Scan -->
+    <!-- Independent movie and TV schedules -->
     <div class="col-md-6 mb-3">
-      <div class="status-card" [class.status-ok]="scheduleEnabled" [class.status-missing]="!scheduleEnabled">
-        <div class="status-icon">
-          <span *ngIf="scheduleEnabled">&#128337;</span>
-          <span *ngIf="!scheduleEnabled">&#10007;</span>
+      <section class="status-card schedule-card" aria-label="Scheduled scans">
+        <div class="schedule-heading">
+          <h5>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+              <circle cx="12" cy="12" r="9" /><path d="M12 6v6l4 2" />
+            </svg>
+            Scheduled Scans
+          </h5>
+          <a routerLink="/settings/schedule">Edit schedules</a>
         </div>
-        <div class="status-body">
-          <h5>Scheduled Scans</h5>
-          <p *ngIf="scheduleEnabled">
-            {{ schedulePreset }} &mdash; Next run: {{ nextRun || 'N/A' }}
-          </p>
-          <p *ngIf="scheduleEnabled && scheduleLastRun" class="text-muted mb-0" style="font-size: 13px;">
-            <ng-container *ngIf="scheduleLastRun.status === 'success'">
-              Last run: {{ scheduleLastRun.timestamp | date:'short' }} &mdash; found
-              <strong>{{ scheduleLastRun.missing }}</strong> missing.
-            </ng-container>
-            <ng-container *ngIf="scheduleLastRun.status === 'skipped'">
-              Last run: {{ scheduleLastRun.timestamp | date:'short' }} &mdash; skipped.
-            </ng-container>
-            <ng-container *ngIf="scheduleLastRun.status === 'error'">
-              Last run: {{ scheduleLastRun.timestamp | date:'short' }} &mdash; failed.
-            </ng-container>
-          </p>
-          <p *ngIf="!scheduleEnabled">
-            No schedule set.
-            <a [routerLink]="['/settings/schedule']" class="activeLink">Configure now</a>
-          </p>
-        </div>
-      </div>
+        <p class="schedule-timezone">Times in your timezone ({{ localTimezone }})</p>
+        <p *ngIf="schedulesLoading" role="status">Loading schedules…</p>
+        <p *ngIf="scheduleError" class="schedule-error" role="alert">
+          {{ scheduleError }} <button type="button" (click)="loadSchedules()">Retry</button>
+        </p>
+        <ng-container *ngIf="!schedulesLoading && !scheduleError">
+          <section *ngFor="let schedule of schedules" class="schedule-row" [attr.aria-label]="schedule.label + ' schedule'">
+            <h6>{{ schedule.label }} <span>{{ schedule.enabled ? schedule.frequency : 'Not scheduled' }}</span></h6>
+            <p *ngIf="schedule.enabled" class="schedule-next">Next run: <strong>{{ schedule.nextRun }}</strong></p>
+            <p *ngIf="schedule.enabled && schedule.libraries" class="schedule-libraries">{{ schedule.libraries }}</p>
+            <p *ngIf="schedule.lastRun as run; else noScheduledRuns" class="schedule-last"
+               [class.schedule-error]="run.status === 'error'">
+              Last scheduled run: {{ schedule.lastRunTime }} —
+              <ng-container [ngSwitch]="run.status">
+                <span *ngSwitchCase="'success'">found <strong>{{ run.missing }}</strong> missing.</span>
+                <span *ngSwitchCase="'skipped'">skipped.</span>
+                <span *ngSwitchCase="'error'">failed.</span>
+              </ng-container>
+              <span *ngIf="run.message && run.status !== 'success'"> {{ run.message }}</span>
+            </p>
+            <ng-template #noScheduledRuns><p class="schedule-last">No recent scheduled runs.</p></ng-template>
+          </section>
+        </ng-container>
+      </section>
     </div>
 
     <!-- Last Scan -->
@@ -132,5 +138,5 @@
 
   <!-- Quick Actions -->
   <h4 class="mt-4 text-primary">Quick Actions</h4>
-  <app-scan-controls (scanFinished)="loadScanHistory()"></app-scan-controls>
+  <app-scan-controls (scanFinished)="refreshScanSummaries()"></app-scan-controls>
 </div>
