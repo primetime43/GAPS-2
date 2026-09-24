@@ -81,7 +81,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   qualityFilter = false;
   minRating = 0;
   minVoteCount = 0;
-  // "Advanced" disclosure for the quality filter — collapsed by default.
+  // Scan options stay out of the primary scan flow.
   showAdvanced = false;
   itemsPerPage = 50;
   currentPage = 1;
@@ -271,7 +271,41 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     sonarr: { enabled: false, status: new Map(), errors: new Map() },
   };
 
-  private completedScans = new Map<string, { gaps: Gap[]; totalOwned: number; routingLibraries: string[] }>();
+  private completedScans = new Map<string, { gaps: Gap[]; totalOwned: number; routingLibraries: string[]; completedAt: string | null }>();
+
+  get hasCompletedScan(): boolean {
+    return this.completedScans.has(this.scanKey(this.selectedLibraries));
+  }
+
+  get canQuickUpdate(): boolean {
+    return this.mediaType === 'movie' && this.hasCompletedScan;
+  }
+
+  get lastCheckedAt(): string | null {
+    return this.completedScans.get(this.scanKey(this.selectedLibraries))?.completedAt ?? null;
+  }
+
+  get scanDisabled(): boolean {
+    return !this.selectedLibraries.length || this.loadingItems || this.loadingGaps;
+  }
+
+  runPrimaryScan(): void {
+    if (this.scanDisabled) return;
+    this.showAdvanced = false;
+    if (this.canQuickUpdate) this.updateScan();
+    else this.scanLibrary();
+  }
+
+  showScanResults(): void {
+    this.clearResults();
+    this.tryRestoreScanForCurrentSelection();
+  }
+
+  browseLibrary(): void {
+    this.clearResults();
+    // Dashboard and history links can open results without loading the library.
+    if (!this.items.length && !this.loadingItems) this.loadItems(false);
+  }
   private pollSub: Subscription | null = null;
   private destroy$ = new Subject<void>();
   private itemsChanged$ = new Subject<void>();
@@ -393,7 +427,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
           this.totalOwned = progress.total_owned;
           this.imdbRatingsLoaded = false;
           this.applyFilter();
-          this.cacheCompletedScan(progress.libraries || [], this.allGaps, progress.total_owned);
+          this.cacheCompletedScan(progress.libraries || [], this.allGaps, progress.total_owned, progress.completed_at);
         } else {
           this.scanMode = false;
           this.errorMessage = progress.status === 'error' ? (progress.error || 'Scan failed.')
@@ -429,6 +463,8 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     this.itemsChanged$.next();
     this.mediaChanged$.next();
     this.mediaType = type;
+    this.showAdvanced = false;
+    this.showFreshScanConfirm = false;
     this.radarrRootFolderPath = '';
     this.sonarrRootFolderPath = '';
     this.downloaderLibraries = [];
@@ -576,7 +612,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     this.recommendationService.getScanProgress().pipe(
       catchError(() => of(null))
     ).subscribe((progress) => {
-      const validScan = !!(progress && progress.status === 'done' && progress.gaps?.length);
+      const validScan = !!(progress && progress.status === 'done');
       const scanLibs = validScan ? (progress!.libraries || []) : [];
 
       if (scanLibs.length && this.libraries.some(l => scanLibs.includes(l.title))) {
@@ -595,7 +631,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
         this.scanMode = true;
         this.applyFilter();
         this.imdbRatingsLoaded = false;  // new result set → offer on-demand load again
-        this.cacheCompletedScan(scanLibs, this.allGaps, progress!.total_owned);
+        this.cacheCompletedScan(scanLibs, this.allGaps, progress!.total_owned, progress!.completed_at);
       }
       this.loading = false;
     });
@@ -665,7 +701,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   // -- Library selection / browse --
 
   /** Load the browse list for the selected libraries, merged and de-duplicated. */
-  loadItems(): void {
+  loadItems(restoreScan = true): void {
     this.radarrRootFolderPath = '';
     this.sonarrRootFolderPath = '';
     this.downloaderLibraries = [...this.selectedLibraries];
@@ -687,7 +723,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
       return;
     }
 
-    this.tryRestoreScanForCurrentSelection();
+    if (restoreScan) this.tryRestoreScanForCurrentSelection();
 
     this.loadingItems = !this.scanMode;
     const loads = this.selectedLibraries.map(lib => this.mediaType === 'tv'
@@ -731,7 +767,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     const key = this.scanKey(this.selectedLibraries);
     if (!key) return;
     const cached = this.completedScans.get(key);
-    if (!cached?.gaps?.length) return;
+    if (!cached) return;
     this.allGaps = cached.gaps;
     this.downloaderLibraries = [...cached.routingLibraries];
     this.totalOwned = cached.totalOwned;
@@ -740,10 +776,10 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     this.imdbRatingsLoaded = false;  // new result set → offer on-demand load again
   }
 
-  private cacheCompletedScan(libraries: string[], gaps: Gap[], totalOwned: number): void {
+  private cacheCompletedScan(libraries: string[], gaps: Gap[], totalOwned: number, completedAt: string | null = null): void {
     const key = this.scanKey(libraries);
     if (!key) return;
-    this.completedScans.set(key, { gaps, totalOwned, routingLibraries: [...this.downloaderLibraries] });
+    this.completedScans.set(key, { gaps, totalOwned, routingLibraries: [...this.downloaderLibraries], completedAt });
   }
 
   private scanKey(libraries: string[]): string {
@@ -752,6 +788,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   }
 
   toggleLibrarySelection(libTitle: string): void {
+    if (this.loadingGaps) return;
     const idx = this.selectedLibraries.indexOf(libTitle);
     if (idx >= 0) {
       this.selectedLibraries.splice(idx, 1);
@@ -792,6 +829,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   }
 
   private startScan(freshScan: boolean, incremental = false): void {
+    this.showAdvanced = false;
     this.cancelResultRequests();
     this.freshScanActive = freshScan;
     this.incrementalActive = incremental;
@@ -863,7 +901,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
             this.loadingGaps = false;
             this.scanProgress = null;
             const scanLibs = progress.libraries?.length ? progress.libraries : [...scanLibraries];
-            this.cacheCompletedScan(scanLibs, this.allGaps, progress.total_owned);
+            this.cacheCompletedScan(scanLibs, this.allGaps, progress.total_owned, progress.completed_at);
           } else if (progress.status === 'error') {
             this.stopPolling();
             this.errorMessage = progress.error || 'Scan failed.';

@@ -8,6 +8,8 @@
 }
 
 .movie-card {
+  padding: 0;
+  text-align: left;
   background-color: #2d2d2d;
   border: 1px solid #444;
   border-radius: 8px;
@@ -18,7 +20,8 @@
 .movie-card.clickable {
   cursor: pointer;
 
-  &:hover {
+  &:hover,
+  &:focus-visible {
     border-color: #00bc8c;
   }
 }
@@ -103,14 +106,90 @@
   width: 80px;
 }
 
-/* Compact scan-setup toolbar */
-.scan-library {
-  flex: 0 1 320px;
-  min-width: 220px;
+.scan-setup {
+  padding: 20px;
+  background: #292929;
+  border: 1px solid #444;
+  border-radius: 10px;
+  margin-bottom: 28px !important;
+}
+
+.scan-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 24px;
+}
+
+.scan-libraries {
+  flex: 1;
+  min-width: 0;
+
+  legend {
+    margin-bottom: 12px;
+    font-size: 15px;
+    font-weight: 600;
+  }
+}
+
+.scan-action {
+  flex: 0 1 330px;
+  text-align: right;
+}
+
+.scan-help {
+  color: #b5b5b5;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.scan-details {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid #444;
+}
+
+.scan-options {
+  padding-top: 16px;
+  border-top: 1px solid #444;
+}
+
+.scan-option-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+
+  &:not(:first-child) {
+    margin-top: 18px;
+    padding-top: 18px;
+    border-top: 1px solid #444;
+  }
+
+  .btn {
+    flex-shrink: 0;
+  }
+}
+
+@media (max-width: 767px) {
+  .scan-toolbar,
+  .scan-option-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .scan-action {
+    flex-basis: auto;
+    text-align: left;
+
+    .btn {
+      width: 100%;
+    }
+  }
 }
 
 .advanced-toggle {
-  color: #999;
+  color: #ccc;
   text-decoration: none;
   font-size: 14px;
 

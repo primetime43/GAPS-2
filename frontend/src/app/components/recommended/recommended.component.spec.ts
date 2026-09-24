@@ -20,6 +20,7 @@ import { SonarrService } from '../../services/sonarr.service';
 import { ImdbService } from '../../services/imdb.service';
 import { TmdbService } from '../../services/tmdb/tmdb.service';
 import { Gap } from '../../models/recommendation.model';
+import { CompactNumberPipe } from '../../pipes/compact-number.pipe';
 
 @Component({ selector: 'app-confirm-modal', template: '', standalone: false })
 class MockConfirmModalComponent {
@@ -97,7 +98,7 @@ describe('RecommendedComponent', () => {
 
     await TestBed.configureTestingModule({
       imports: [HttpClientTestingModule, FormsModule, RouterTestingModule, RadarrDestinationComponent, SonarrDestinationComponent],
-      declarations: [RecommendedComponent, MockConfirmModalComponent],
+      declarations: [RecommendedComponent, MockConfirmModalComponent, CompactNumberPipe],
       providers: [
         { provide: ActiveServerService, useValue: activeServerService },
         { provide: LibraryService, useValue: libraryService },
@@ -118,6 +119,94 @@ describe('RecommendedComponent', () => {
 
   it('should create', () => {
     expect(component).toBeTruthy();
+  });
+
+  it('offers a first scan, then a quick update after a completed scan with no gaps', fakeAsync(() => {
+    activeServerService.getActive.and.returnValue(of(activeServer('plex', 'Plex', [
+      { title: 'Movies', type: 'movie' }, { title: 'Other Movies', type: 'movie' },
+    ])));
+    libraryService.getMovies.and.returnValue(of({ movies: [{ name: 'Alien', year: 1979, posterUrl: null, overview: '' }] }));
+    fixture.detectChanges();
+    component.toggleLibrarySelection('Movies');
+    fixture.detectChanges();
+    const primary = () => fixture.nativeElement.querySelector('.scan-action button') as HTMLButtonElement;
+    expect(primary().textContent).toContain('Scan for Gaps');
+    expect(fixture.nativeElement.textContent).toContain('Your Movies');
+    expect(fixture.nativeElement.textContent).not.toContain('Rescan Everything');
+
+    recommendationService.startScan.and.returnValue(of({ status: 'started', total: 1, mode: 'full' }));
+    recommendationService.getScanProgress.and.returnValue(of({
+      status: 'done', processed: 1, total: 1, current_movie: '', collections_found: 0,
+      gaps: [], total_owned: 1, libraries: ['Movies'], completed_at: '2026-09-24T12:00:00Z', error: null,
+    }));
+    primary().click();
+    tick();
+    fixture.detectChanges();
+    expect(recommendationService.startScan).toHaveBeenCalledWith(['Movies'], true, false, 'plex', false);
+    expect(primary().textContent).toContain('Check for New Gaps');
+    expect(component.lastCheckedAt).toBe('2026-09-24T12:00:00Z');
+
+    primary().click();
+    tick();
+    expect(recommendationService.startScan).toHaveBeenCalledWith(['Movies'], true, false, 'plex', true);
+    component.clearResults();
+    component.showScanResults();
+    expect(component.scanMode).toBeTrue();
+    expect(component.allGaps).toEqual([]);
+    component.toggleLibrarySelection('Other Movies');
+    fixture.detectChanges();
+    expect(primary().textContent).toContain('Scan for Gaps');
+    expect(component.lastCheckedAt).toBeNull();
+    fixture.destroy();
+  }));
+
+  it('restores an empty completed scan and its quick-update action on page load', () => {
+    activeServerService.getActive.and.returnValue(of(activeServer('plex', 'Plex', [{ title: 'Movies', type: 'movie' }])));
+    libraryService.getMovies.and.returnValue(of({ movies: [] }));
+    recommendationService.getScanProgress.and.returnValue(of({
+      status: 'done', processed: 1, total: 1, current_movie: '', collections_found: 0,
+      gaps: [], total_owned: 1, libraries: ['Movies'], completed_at: '2026-09-24T12:00:00Z', error: null,
+    }));
+    fixture.detectChanges();
+    expect(component.scanMode).toBeTrue();
+    expect(component.canQuickUpdate).toBeTrue();
+    expect(fixture.nativeElement.textContent).toContain('Last checked');
+    expect(fixture.nativeElement.textContent).toContain('No gaps found');
+  });
+
+  it('keeps TV scans full and disables the primary action while busy or unselected', () => {
+    const scan = spyOn(component, 'scanLibrary');
+    const update = spyOn(component, 'updateScan');
+    component.runPrimaryScan();
+    expect(scan).not.toHaveBeenCalled();
+    component.mediaType = 'tv';
+    component.selectedLibraries = ['TV'];
+    (component as any).cacheCompletedScan(['TV'], [], 1);
+    component.runPrimaryScan();
+    expect(scan).toHaveBeenCalledTimes(1);
+    expect(update).not.toHaveBeenCalled();
+    component.loadingGaps = true;
+    component.runPrimaryScan();
+    component.toggleLibrarySelection('Other TV');
+    expect(scan).toHaveBeenCalledTimes(1);
+    expect(component.selectedLibraries).toEqual(['TV']);
+  });
+
+  it('loads the library when leaving results opened from a dashboard link', () => {
+    dashboardLink('movie');
+    recommendationService.getScanProgress.and.returnValue(of({
+      status: 'done', processed: 1, total: 1, current_movie: '', collections_found: 0,
+      gaps: [], total_owned: 1, libraries: ['Movies'], completed_at: '2026-09-24T12:00:00Z', error: null,
+    }));
+    libraryService.getMovies.and.returnValue(of({ movies: [{ name: 'Alien', year: 1979, posterUrl: null, overview: '' }] }));
+    fixture.detectChanges();
+    component.browseLibrary();
+    expect(component.scanMode).toBeFalse();
+    expect(component.items[0].name).toBe('Alien');
+    expect(component.canQuickUpdate).toBeTrue();
+    component.showScanResults();
+    expect(component.scanMode).toBeTrue();
+    expect(recommendationService.startScan).not.toHaveBeenCalled();
   });
 
   it('should detect Plex as active source and load movie libraries', fakeAsync(() => {
