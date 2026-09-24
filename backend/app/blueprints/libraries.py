@@ -3,11 +3,13 @@ import hashlib
 import threading
 import time
 from collections import OrderedDict
+from urllib.parse import urlencode
 
 import requests as http_requests
 from flask import Blueprint, jsonify, request, current_app, Response, stream_with_context
 
 from app.services.media_servers import media_service_for
+from app.services.poster_urls import POSTER_HEIGHT, POSTER_WIDTH, poster_scope
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +21,14 @@ _IMAGE_CACHE_TTL = 3600  # 1 hour
 
 _image_cache: OrderedDict[str, tuple[bytes, str, float]] = OrderedDict()
 _image_cache_lock = threading.Lock()
+_image_http = threading.local()
+
+
+def _poster_session():
+    """Reuse upstream connections per worker thread, without sharing cookies."""
+    if not hasattr(_image_http, 'session'):
+        _image_http.session = http_requests.Session()
+    return _image_http.session
 
 
 def _cache_get(key: str) -> tuple[bytes, str] | None:
@@ -83,6 +93,8 @@ def image_proxy():
     source = request.args.get('source', '')
     item_id = request.args.get('itemId', '')
     thumb = request.args.get('thumb', '')
+    version = request.args.get('v', '')
+    image_tag = request.args.get('tag', '')
 
     if not source or (not item_id and not thumb):
         return jsonify(error='Missing parameters'), 400
@@ -93,6 +105,7 @@ def image_proxy():
     use_cache = prefs.get('imageCacheEnabled', False)
 
     try:
+        fallback_url = None
         if source == 'plex':
             service = current_app.plex_service
             active = service.get_active_server()
@@ -105,18 +118,37 @@ def image_proxy():
                 server_url = service._server_conn._baseurl
             if not server_url:
                 return jsonify(error='No server URL'), 404
-            url = f"{server_url.rstrip('/')}{thumb}"
+            fallback_url = f"{server_url.rstrip('/')}{thumb}"
+            url = f"{server_url.rstrip('/')}/photo/:/transcode?" + urlencode({
+                'url': thumb, 'width': POSTER_WIDTH, 'height': POSTER_HEIGHT,
+                'minSize': 0, 'upscale': 0,
+            })
             headers = {'X-Plex-Token': token}
 
         elif source in ('jellyfin', 'emby'):
             service = current_app.jellyfin_service if source == 'jellyfin' else current_app.emby_service
             if not service._server_url or not service._api_key:
                 return jsonify(error='Not connected'), 404
-            url = f"{service._base()}/Items/{item_id}/Images/Primary?maxHeight=300"
+            server_url = service._base()
+            token = service._api_key
+            # These providers already returned thumbnails; keep their existing
+            # size while adding versioned browser caching.
+            params = {'maxHeight': 300}
+            if image_tag:
+                params['tag'] = image_tag
+            url = f"{server_url}/Items/{item_id}/Images/Primary?" + urlencode(params)
             headers = service._headers()
 
         else:
             return jsonify(error='Unknown source'), 400
+
+        # Only versioned URLs may be reused without revalidation. Old URLs keep
+        # their no-cache behavior; stale URLs must not cache a different server's
+        # image under a previous connection's version.
+        scope = poster_scope(source, server_url, token)
+        if version and version != scope:
+            return Response('Poster connection changed', status=404, headers={'Cache-Control': 'no-store'})
+        cache_control = 'private, max-age=3600' if version else 'private, no-cache'
 
         # Item IDs are only unique within a server. Scope cached artwork to the
         # connection/credentials as well, without keeping credentials in keys.
@@ -125,12 +157,18 @@ def image_proxy():
             cached = _cache_get(cache_key)
             if cached:
                 return Response(cached[0], content_type=cached[1],
-                                headers={'Cache-Control': 'private, no-cache'})
+                                headers={'Cache-Control': cache_control})
 
-        resp = http_requests.get(url, headers=headers, timeout=10, stream=True)
+        session = _poster_session()
+        resp = session.get(url, headers=headers, timeout=10, stream=True)
+        # Older Plex servers may reject the resize endpoint. Keep artwork usable
+        # by falling back to the original image in that case.
+        if resp.status_code != 200 and fallback_url:
+            resp.close()
+            resp = session.get(fallback_url, headers=headers, timeout=10, stream=True)
         if resp.status_code != 200:
             resp.close()
-            return Response('Image not found', status=404)
+            return Response('Image not found', status=404, headers={'Cache-Control': 'no-store'})
 
         content_type = resp.headers.get('Content-Type', 'image/jpeg')
 
@@ -146,10 +184,10 @@ def image_proxy():
             return Response(
                 image_data,
                 content_type=content_type,
-                headers={'Cache-Control': 'private, no-cache'},
+                headers={'Cache-Control': cache_control},
             )
 
-        resp_headers = {'Cache-Control': 'private, no-cache'}
+        resp_headers = {'Cache-Control': cache_control}
         content_length = resp.headers.get('Content-Length')
         if content_length:
             resp_headers['Content-Length'] = content_length
@@ -170,4 +208,4 @@ def image_proxy():
 
     except Exception as e:
         logger.warning("Image proxy failed for source=%s: %s", source, e)
-        return Response('Image not found', status=404)
+        return Response('Image not found', status=404, headers={'Cache-Control': 'no-store'})

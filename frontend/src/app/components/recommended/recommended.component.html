@@ -181,14 +181,17 @@
         (ngModelChange)="currentPage = 1; prefetchNextPage()"
       >
       <div class="movie-grid">
-        <button type="button" *ngFor="let item of pagedItems; trackBy: trackByBrowseItem" class="movie-card clickable" (click)="selectItem(item)"
+        <button type="button" *ngFor="let item of pagedItems; let i = index; trackBy: trackByBrowseItem" class="movie-card clickable" (click)="selectItem(item)"
                 [attr.aria-label]="'Check ' + item.name + (mediaType === 'tv' ? ' franchise' : ' collection')">
           <img
             *ngIf="item.posterUrl"
             [src]="item.posterUrl"
             [alt]="item.name"
             class="movie-poster"
-            loading="lazy"
+            width="300" height="450"
+            [attr.loading]="i < 8 ? 'eager' : 'lazy'"
+            [attr.fetchpriority]="i < 8 ? 'high' : 'auto'"
+            decoding="async"
           >
           <div *ngIf="!item.posterUrl" class="movie-poster-placeholder">No Image</div>
           <div class="movie-info">

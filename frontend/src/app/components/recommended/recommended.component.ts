@@ -90,6 +90,9 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   currentPage = 1;
   searchFilter = '';
   posterPrefetch = false;
+  private posterPrefetchTimer?: ReturnType<typeof setTimeout>;
+  private posterPrefetchGeneration = 0;
+  private prefetchImages = new Set<HTMLImageElement>();
 
   // Where movie poster/title clicks go. IMDb links route through the backend,
   // which resolves the IMDb ID lazily. TV always links to TheTVDB.
@@ -316,6 +319,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   private mediaChanged$ = new Subject<void>();
 
   private cancelResultRequests(): void {
+    this.cancelPosterPrefetch();
     this.resultsChanged$.next();
     this.stopPolling();
     this.loadingGaps = false;
@@ -446,6 +450,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.cancelPosterPrefetch();
     this.stopPolling();
     this.renderObserver?.disconnect();
     this.destroy$.next();
@@ -1365,17 +1370,46 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   }
 
   prefetchNextPage(): void {
-    if (!this.posterPrefetch) return;
+    this.cancelPosterPrefetch();
+    if (!this.posterPrefetch || this.scanMode || this.selectedItem || this.loadingItems) return;
     const nextPage = this.currentPage + 1;
     if (nextPage > this.totalPages) return;
     const start = (nextPage - 1) * this.itemsPerPage;
-    const nextItems = this.filteredItems.slice(start, start + this.itemsPerPage);
-    for (const item of nextItems) {
-      if (item.posterUrl) {
+    const urls = [...new Set(this.filteredItems.slice(start, start + this.itemsPerPage)
+      .map(item => item.posterUrl).filter((url): url is string => !!url))];
+    const generation = this.posterPrefetchGeneration;
+    // Give the visible grid first use of the connection. Fetch at most two
+    // background posters at a time instead of queuing a whole page ahead of it.
+    this.posterPrefetchTimer = setTimeout(() => {
+      if (generation !== this.posterPrefetchGeneration || this.scanMode || this.selectedItem) return;
+      const loadNext = () => {
+        if (generation !== this.posterPrefetchGeneration) return;
+        const url = urls.shift();
+        if (!url) return;
         const img = new Image();
-        img.src = item.posterUrl;
-      }
+        img.fetchPriority = 'low';
+        img.decoding = 'async';
+        this.prefetchImages.add(img);
+        img.onload = img.onerror = () => {
+          this.prefetchImages.delete(img);
+          img.onload = img.onerror = null;
+          loadNext();
+        };
+        img.src = url;
+      };
+      loadNext();
+      loadNext();
+    }, 500);
+  }
+
+  private cancelPosterPrefetch(): void {
+    this.posterPrefetchGeneration++;
+    clearTimeout(this.posterPrefetchTimer);
+    for (const img of this.prefetchImages) {
+      img.onload = img.onerror = null;
+      img.removeAttribute('src');
     }
+    this.prefetchImages.clear();
   }
 
   applyFilter(): void {

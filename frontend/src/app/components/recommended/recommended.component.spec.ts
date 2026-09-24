@@ -305,6 +305,47 @@ describe('RecommendedComponent', () => {
     expect(component.pagedItems.length).toBe(25);
   });
 
+  it('gives visible posters a head start and limits background loading to two at a time', fakeAsync(() => {
+    const images: any[] = [];
+    spyOn(window, 'Image').and.callFake(function () {
+      const img = { src: '', onload: null, onerror: null, removeAttribute: jasmine.createSpy('removeAttribute') };
+      images.push(img);
+      return img as any;
+    });
+    component.posterPrefetch = true;
+    component.itemsPerPage = 4;
+    component.items = Array.from({ length: 8 }, (_, i) => ({ name: `Movie ${i}`, year: 2000, posterUrl: `/poster-${i}` }));
+    component.prefetchNextPage();
+    expect(images.length).toBe(0);
+    tick(500);
+    expect(images.length).toBe(2);
+    expect(images.map(img => img.src)).toEqual(['/poster-4', '/poster-5']);
+    expect(images[0].fetchPriority).toBe('low');
+    images[0].onload();
+    expect(images.length).toBe(3);
+    const staleCompletion = images[1].onload;
+    component.clearResults();
+    expect(images[1].removeAttribute).toHaveBeenCalledWith('src');
+    staleCompletion();
+    expect(images.length).toBe(3);
+    fixture.destroy();
+  }));
+
+  it('does not preload browse posters while scan results are being viewed', fakeAsync(() => {
+    const createImage = spyOn(window, 'Image');
+    component.posterPrefetch = true;
+    component.itemsPerPage = 1;
+    component.items = [
+      { name: 'First', year: 2000, posterUrl: '/first' },
+      { name: 'Next', year: 2001, posterUrl: '/next' },
+    ];
+    component.prefetchNextPage();
+    component.scanMode = true;
+    tick(500);
+    expect(createImage).not.toHaveBeenCalled();
+    fixture.destroy();
+  }));
+
   it('applyFilter should group gaps by group and filter owned/ignored', () => {
     component.allGaps = [
       gap({ id: 1, name: 'Alien', groupName: 'Alien Collection', owned: true }),
