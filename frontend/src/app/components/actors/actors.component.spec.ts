@@ -4,6 +4,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { FormsModule } from '@angular/forms';
 import { of, Subject, throwError } from 'rxjs';
 import { ActorsComponent } from './actors.component';
+import { RadarrDestinationComponent } from '../radarr-destination/radarr-destination.component';
 import { ConfirmModalComponent } from '../confirm-modal/confirm-modal.component';
 import { CompactNumberPipe } from '../../pipes/compact-number.pipe';
 import { ActiveServerService } from '../../services/active-server.service';
@@ -38,7 +39,7 @@ describe('ActorsComponent', () => {
     tmdb = jasmine.createSpyObj('TmdbService', ['getGenres']);
     tmdb.getGenres.and.returnValue(of([]));
     await TestBed.configureTestingModule({
-      imports: [HttpClientTestingModule, RouterTestingModule, FormsModule],
+      imports: [HttpClientTestingModule, RouterTestingModule, FormsModule, RadarrDestinationComponent],
       declarations: [ActorsComponent, ConfirmModalComponent, CompactNumberPipe],
       providers: [
         { provide: ActorService, useValue: actors },
@@ -256,6 +257,19 @@ describe('ActorsComponent', () => {
     fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('Library unavailable');
     expect(fixture.nativeElement.textContent).toContain('Back');
+  });
+
+  it('sends the filmography library context and explicit root to Radarr', () => {
+    component.selectActor(actor);
+    component.downloaderEnabled = true;
+    component.radarrRootFolderPath = '/movies';
+    const radarr = TestBed.inject(RadarrService);
+    radarr.addMovie = jasmine.createSpy('addMovie').and.returnValue(of({ message: 'Added' }));
+    component.selectedLibraries = ['Other'];
+    component.send(component.allGaps[0], new Event('click'));
+    expect(radarr.addMovie).toHaveBeenCalledWith(101, 'Test title', 2020, {
+      source: 'jellyfin', server: 'Test server', library_names: ['Movies', 'More movies'], root_folder_path: '/movies',
+    });
   });
 
   it('uses the release year for dateless movies like the Missing page', () => {

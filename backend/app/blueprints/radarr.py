@@ -1,6 +1,7 @@
 import logging
 from flask import Blueprint, jsonify, request, current_app
 import requests
+from app.services.media_servers import media_service_for
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +81,20 @@ def get_tags():
         return jsonify(error=str(e)), 502
 
 
+@radarr_bp.route('/libraries', methods=['GET'])
+def get_libraries():
+    """Saved movie libraries, scoped to their server; never expose credentials."""
+    libraries = []
+    for source in ('plex', 'jellyfin', 'emby'):
+        active = media_service_for(current_app, source).get_active_server()
+        if not active:
+            continue
+        for library in active.get('libraries', []):
+            if library.get('type') in ('movie', 'movies'):
+                libraries.append({'source': source, 'server': active['server'], 'library': library['title']})
+    return jsonify(libraries)
+
+
 @radarr_bp.route('/movies', methods=['GET'])
 def get_movies():
     """Return TMDB ids already in the Radarr library, so the UI can flag them."""
@@ -99,7 +114,21 @@ def add_movie():
     title = data.get('title', '')
     year = data.get('year', 0) or 0
 
-    ok, msg = current_app.radarr_service.add_movie(tmdb_id, title=title, year=year)
+    source = data.get('source', '')
+    server = data.get('server', '')
+    names = data.get('library_names', [])
+    root = data.get('root_folder_path', '')
+    if (not isinstance(source, str) or source not in ('', 'plex', 'jellyfin', 'emby')
+            or not isinstance(server, str) or not isinstance(root, str)
+            or not isinstance(names, list)
+            or any(not isinstance(name, str) or not name.strip() for name in names)
+            or (names and (not source or not server))):
+        return jsonify(error='Invalid Radarr library context'), 400
+
+    ok, msg = current_app.radarr_service.add_movie(
+        tmdb_id, title=title, year=year, source=source, server=server,
+        library_names=names, root_folder_path=root.strip(),
+    )
     if ok:
         return jsonify(message=msg)
     return jsonify(error=msg), 400

@@ -8,10 +8,11 @@ for (const Component of [RadarrSettingsComponent, SonarrSettingsComponent]) {
     let service: any;
 
     beforeEach(() => {
-      service = jasmine.createSpyObj('Downloader', ['getProfiles', 'getRootFolders', 'getTags', 'saveConfig']);
+      service = jasmine.createSpyObj('Downloader', ['getProfiles', 'getRootFolders', 'getTags', 'getLibraries', 'saveConfig']);
       service.getProfiles.and.returnValue(of([{ id: 2, name: 'New profile' }]));
       service.getRootFolders.and.returnValue(of([{ path: '/new', free_space: 0, accessible: true }]));
       service.getTags.and.returnValue(of([]));
+      service.getLibraries.and.returnValue(of([]));
       component = new Component(service);
     });
 

@@ -31,6 +31,8 @@ export class SimilarComponent implements OnInit, OnDestroy {
   hasServer = false;
   activeSource: MediaServerSource = 'plex';
   activeServerName = '';
+  radarrRootFolderPath = '';
+  radarrLibraries: string[] = [];
 
   libraries: MediaLibrary[] = [];
   selectedLibraries: string[] = [];
@@ -236,6 +238,8 @@ export class SimilarComponent implements OnInit, OnDestroy {
 
     this.resultsChanged$.next();
     this.selectedMovie = movie;
+    this.radarrLibraries = [...this.selectedLibraries];
+    this.radarrRootFolderPath = '';
     this.loadingSimilar = true;
     this.allSimilar = [];
     this.filteredSimilar = [];
@@ -431,6 +435,10 @@ export class SimilarComponent implements OnInit, OnDestroy {
       movie.id,
       movie.name,
       parseInt(String(movie.year), 10) || 0,
+      {
+        source: this.activeSource, server: this.activeServerName,
+        library_names: this.radarrLibraries, root_folder_path: this.radarrRootFolderPath,
+      },
     ).subscribe({
       next: () => this.sendStatus.set(movie.id, 'sent'),
       error: err => {

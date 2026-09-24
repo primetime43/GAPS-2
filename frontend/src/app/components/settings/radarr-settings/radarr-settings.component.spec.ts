@@ -12,11 +12,12 @@ describe('Radarr default tags', () => {
 
   beforeEach(async () => {
     service = jasmine.createSpyObj('RadarrService', [
-      'getConfig', 'getProfiles', 'getRootFolders', 'getTags', 'saveConfig', 'clearConfig',
+      'getConfig', 'getProfiles', 'getRootFolders', 'getTags', 'getLibraries', 'saveConfig', 'clearConfig',
     ]);
     service.getProfiles.and.returnValue(of([{ id: 1, name: 'HD' }]));
     service.getRootFolders.and.returnValue(of([{ path: '/movies', free_space: 0, accessible: true }]));
     service.getTags.and.returnValue(of([{ id: 7, label: 'gaps' }, { id: 2, label: 'requests' }]));
+    service.getLibraries.and.returnValue(of([{ source: 'plex', server: 'Plex', library: 'Movies' }]));
     await TestBed.configureTestingModule({
       imports: [CommonModule, FormsModule],
       declarations: [RadarrSettingsComponent],
@@ -94,5 +95,44 @@ describe('Radarr default tags', () => {
     expect(component.config.tags).toEqual([]);
     expect(component.tags).toEqual([]);
     expect(component.tagsError).toBe('');
+  });
+
+  it('saves a library mapping chosen in the form and allows it to be removed', async () => {
+    const select: HTMLSelectElement = fixture.nativeElement.querySelector('#radarrLibraryRoot0');
+    select.value = '/movies';
+    select.dispatchEvent(new Event('change'));
+    component.saveConfig();
+    expect(service.saveConfig.calls.mostRecent().args[0].library_root_folders).toEqual([
+      { source: 'plex', server: 'Plex', library: 'Movies', root_folder_path: '/movies' },
+    ]);
+    select.value = '';
+    select.dispatchEvent(new Event('change'));
+    component.saveConfig();
+    expect(service.saveConfig.calls.mostRecent().args[0].library_root_folders).toEqual([]);
+  });
+
+  it('preserves mappings when library discovery fails, including disconnected servers', () => {
+    component.config.library_root_folders = [
+      { source: 'plex', server: 'Old Plex', library: 'Movies', root_folder_path: '/old' },
+    ];
+    service.getLibraries.and.returnValue(throwError(() => new Error('offline')));
+    component.loadMeta();
+    expect(component.mappingLibraries.length).toBe(1);
+    expect(component.mappedRoot(component.mappingLibraries[0])).toBe('/old');
+    expect(component.librariesError).toContain('Saved mappings');
+    component.saveConfig();
+    expect(service.saveConfig.calls.mostRecent().args[0].library_root_folders[0].root_folder_path).toBe('/old');
+  });
+
+  it('keeps identically named libraries on different servers separate', () => {
+    const first = { source: 'plex', server: 'Plex', library: 'Movies' };
+    const second = { ...first, server: 'Another Plex' };
+    component.setMappedRoot(first, '/movies');
+    component.setMappedRoot(second, '/other');
+    expect(component.mappedRoot(first)).toBe('/movies');
+    expect(component.mappedRoot(second)).toBe('/other');
+    service.clearConfig.and.returnValue(of({ message: 'Cleared' }));
+    component.clearConfig();
+    expect(component.config.library_root_folders).toEqual([]);
   });
 });

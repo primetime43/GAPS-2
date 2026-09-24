@@ -238,6 +238,8 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   // Media server source
   activeSource: 'plex' | 'jellyfin' | 'emby' = 'plex';
   activeServerName = '';
+  radarrRootFolderPath = '';
+  radarrLibraries: string[] = [];
 
   // TheTVDB availability (TV mode)
   tvdbEnabled = false;
@@ -268,7 +270,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     sonarr: { enabled: false, status: new Map(), errors: new Map() },
   };
 
-  private completedScans = new Map<string, { gaps: Gap[]; totalOwned: number }>();
+  private completedScans = new Map<string, { gaps: Gap[]; totalOwned: number; routingLibraries: string[] }>();
   private pollSub: Subscription | null = null;
   private destroy$ = new Subject<void>();
   private itemsChanged$ = new Subject<void>();
@@ -507,6 +509,9 @@ export class RecommendedComponent implements OnInit, OnDestroy {
       }
 
       if (validScan) {
+        // Persisted progress has no server identity, so do not infer a mapping
+        // from a different server that happens to have the same library names.
+        this.radarrLibraries = [];
         this.allGaps = this.normalizeGaps(progress!.gaps);
         this.totalOwned = progress!.total_owned;
         this.scanMode = true;
@@ -560,6 +565,8 @@ export class RecommendedComponent implements OnInit, OnDestroy {
           l => this.libraries.some(x => x.title === l),
         );
         this.savedScanInfo = { timestamp: resp.timestamp, libraries: resp.libraries || [] };
+        this.radarrLibraries = [];
+        this.radarrRootFolderPath = '';
         if (this.mediaType === 'tv') this.genreFilter = null;
         this.allGaps = this.normalizeGaps(resp.gaps || []);
         this.totalOwned = resp.totalOwned || 0;
@@ -580,6 +587,8 @@ export class RecommendedComponent implements OnInit, OnDestroy {
 
   /** Load the browse list for the selected libraries, merged and de-duplicated. */
   loadItems(): void {
+    this.radarrRootFolderPath = '';
+    this.radarrLibraries = [...this.selectedLibraries];
     this.itemsChanged$.next();
     this.cancelResultRequests();
     this.items = [];
@@ -644,6 +653,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     const cached = this.completedScans.get(key);
     if (!cached?.gaps?.length) return;
     this.allGaps = cached.gaps;
+    this.radarrLibraries = [...cached.routingLibraries];
     this.totalOwned = cached.totalOwned;
     this.scanMode = true;
     this.applyFilter();
@@ -653,7 +663,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   private cacheCompletedScan(libraries: string[], gaps: Gap[], totalOwned: number): void {
     const key = this.scanKey(libraries);
     if (!key) return;
-    this.completedScans.set(key, { gaps, totalOwned });
+    this.completedScans.set(key, { gaps, totalOwned, routingLibraries: [...this.radarrLibraries] });
   }
 
   private scanKey(libraries: string[]): string {
@@ -715,6 +725,8 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     this.errorMessage = '';
 
     const scanLibraries = [...this.selectedLibraries];
+    this.radarrLibraries = [...scanLibraries];
+    this.radarrRootFolderPath = '';
 
     if (this.mediaType === 'tv') {
       this.tvdb.startScan({
@@ -870,6 +882,8 @@ export class RecommendedComponent implements OnInit, OnDestroy {
 
   private fetchGapsForSelectedItem(): void {
     if (!this.selectedItem) return;
+    this.radarrLibraries = [...this.selectedLibraries];
+    this.radarrRootFolderPath = '';
 
     if (this.mediaType === 'tv') {
       const tvdbId = this.selectedItem.tvdbId;
@@ -1322,7 +1336,10 @@ export class RecommendedComponent implements OnInit, OnDestroy {
       getConfig: () => this.radarrService.getConfig(),
       ownedIds: () => this.radarrService.getLibraryTmdbIds().pipe(
         map(res => res.tmdb_ids || []), catchError(() => of([] as number[]))),
-      add: (gap: Gap) => this.radarrService.addMovie(gap.id, gap.name, parseInt(String(gap.year), 10) || 0),
+      add: (gap: Gap) => this.radarrService.addMovie(gap.id, gap.name, parseInt(String(gap.year), 10) || 0, {
+        source: this.activeSource, server: this.activeServerName,
+        library_names: this.radarrLibraries, root_folder_path: this.radarrRootFolderPath,
+      }),
       eligible: (gap: Gap) => gap.radarrEligible,
     };
   }

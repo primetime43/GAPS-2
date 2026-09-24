@@ -6,6 +6,7 @@ import { FormsModule } from '@angular/forms';
 
 import { AppRoutingModule } from './app-routing.module';
 import { AppComponent } from './app.component';
+import { RadarrDestinationComponent } from './components/radarr-destination/radarr-destination.component';
 
 import { provideHttpClient, withInterceptorsFromDi } from '@angular/common/http';
 import { RouteReuseStrategy } from '@angular/router';
@@ -60,7 +61,7 @@ import { UpdateSettingsComponent } from './components/settings/update-settings/u
         CompactNumberPipe,
         UpdateSettingsComponent
     ],
-    bootstrap: [AppComponent], imports: [BrowserModule,
+    bootstrap: [AppComponent], imports: [BrowserModule, RadarrDestinationComponent,
         AppRoutingModule,
         ReactiveFormsModule,
         FormsModule], providers: [

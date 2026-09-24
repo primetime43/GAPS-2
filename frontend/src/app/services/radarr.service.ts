@@ -15,6 +15,24 @@ export interface RadarrConfig {
   search_on_add: boolean;
   auto_route_by_decade: boolean;
   tags: number[];
+  library_root_folders: RadarrLibraryMapping[];
+}
+
+export interface RadarrLibrary {
+  source: string;
+  server: string;
+  library: string;
+}
+
+export interface RadarrLibraryMapping extends RadarrLibrary {
+  root_folder_path: string;
+}
+
+export interface RadarrAddContext {
+  source: string;
+  server: string;
+  library_names: string[];
+  root_folder_path?: string;
 }
 
 export interface RadarrTag {
@@ -70,11 +88,16 @@ export class RadarrService {
     return this.http.get<RadarrTag[]>(`${environment.apiUrl}/radarr/tags`);
   }
 
-  addMovie(tmdbId: number, title: string, year: number): Observable<ApiMessage> {
+  getLibraries(): Observable<RadarrLibrary[]> {
+    return this.http.get<RadarrLibrary[]>(`${environment.apiUrl}/radarr/libraries`);
+  }
+
+  addMovie(tmdbId: number, title: string, year: number, context?: RadarrAddContext): Observable<ApiMessage> {
     return this.http.post<ApiMessage>(`${environment.apiUrl}/radarr/add`, {
       tmdb_id: tmdbId,
       title,
       year,
+      ...context,
     });
   }
 }

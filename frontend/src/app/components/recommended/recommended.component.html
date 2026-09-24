@@ -265,6 +265,7 @@
 
     <!-- Gaps results -->
     <div *ngIf="!loadingGaps && (scanMode || selectedItem) && collectionGroups.length > 0">
+      <app-radarr-destination *ngIf="mediaType === 'movie'" [(rootFolderPath)]="radarrRootFolderPath"></app-radarr-destination>
       <div class="d-flex align-items-center mb-3">
         <button class="btn btn-sm btn-outline-light me-3" (click)="clearResults()">&larr; Back</button>
         <h5 class="regular-text mb-0" *ngIf="scanMode">

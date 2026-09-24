@@ -1,6 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import { catchError, forkJoin, of } from 'rxjs';
-import { RadarrService, RadarrConfig, RadarrQualityProfile, RadarrRootFolder, RadarrTag } from '../../../services/radarr.service';
+import { RadarrService, RadarrConfig, RadarrQualityProfile, RadarrRootFolder, RadarrTag, RadarrLibrary } from '../../../services/radarr.service';
 
 @Component({
   selector: 'app-radarr-settings',
@@ -20,11 +20,14 @@ export class RadarrSettingsComponent implements OnInit {
     search_on_add: true,
     auto_route_by_decade: false,
     tags: [],
+    library_root_folders: [],
   };
   profiles: RadarrQualityProfile[] = [];
   rootFolders: RadarrRootFolder[] = [];
   tags: RadarrTag[] = [];
   tagsError = '';
+  libraries: RadarrLibrary[] = [];
+  librariesError = '';
   testing = false;
   saving = false;
   loadingMeta = false;
@@ -73,6 +76,31 @@ export class RadarrSettingsComponent implements OnInit {
     return this.tags.some(tag => tag.id === id);
   }
 
+  private sameLibrary(a: RadarrLibrary, b: RadarrLibrary): boolean {
+    return a.source === b.source && a.server === b.server && a.library === b.library;
+  }
+
+  get mappingLibraries(): RadarrLibrary[] {
+    const libraries = [...this.libraries];
+    for (const mapping of this.config.library_root_folders || []) {
+      if (!libraries.some(library => this.sameLibrary(library, mapping))) libraries.push(mapping);
+    }
+    return libraries;
+  }
+
+  mappedRoot(library: RadarrLibrary): string {
+    return (this.config.library_root_folders || []).find(mapping => this.sameLibrary(mapping, library))?.root_folder_path || '';
+  }
+
+  setMappedRoot(library: RadarrLibrary, path: string): void {
+    this.config.library_root_folders = (this.config.library_root_folders || []).filter(mapping => !this.sameLibrary(mapping, library));
+    if (path) this.config.library_root_folders.push({ ...library, root_folder_path: path });
+  }
+
+  hasRoot(path: string): boolean {
+    return this.rootFolders.some(folder => folder.path === path);
+  }
+
   ngOnInit(): void {
     this.radarr.getConfig().subscribe({
       next: (cfg) => {
@@ -91,18 +119,25 @@ export class RadarrSettingsComponent implements OnInit {
     this.rootFolders = [];
     this.tags = [];
     this.tagsError = '';
+    this.libraries = [];
+    this.librariesError = '';
     forkJoin({
       profiles: this.radarr.getProfiles(),
       folders: this.radarr.getRootFolders(),
+      libraries: this.radarr.getLibraries().pipe(catchError(err => {
+        this.librariesError = err.error?.error || 'Could not load media libraries. Saved mappings have been kept.';
+        return of([] as RadarrLibrary[]);
+      })),
       tags: this.radarr.getTags().pipe(catchError(err => {
         this.tagsError = err.error?.error || 'Could not load Radarr tags. Saved tags have been kept.';
         return of([] as RadarrTag[]);
       })),
     }).subscribe({
-      next: ({ profiles, folders, tags }) => {
+      next: ({ profiles, folders, tags, libraries }) => {
         this.profiles = profiles;
         this.rootFolders = folders;
         this.tags = tags;
+        this.libraries = libraries;
         this.loadingMeta = false;
       },
       error: (err) => {
@@ -168,11 +203,14 @@ export class RadarrSettingsComponent implements OnInit {
           search_on_add: true,
           auto_route_by_decade: false,
           tags: [],
+          library_root_folders: [],
         };
         this.profiles = [];
         this.rootFolders = [];
         this.tags = [];
         this.tagsError = '';
+        this.libraries = [];
+        this.librariesError = '';
         this.showMessage('Radarr settings cleared.', 'success');
       },
       error: (err) => this.showMessage(err.error?.error || 'Failed to clear settings', 'error'),

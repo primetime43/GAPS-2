@@ -42,12 +42,32 @@ class RadarrService:
             'search_on_add': saved.get('search_on_add', True),
             'auto_route_by_decade': saved.get('auto_route_by_decade', False),
             'tags': saved.get('tags', []),
+            'library_root_folders': saved.get('library_root_folders', []),
         }
 
     def save_config(self, data: dict) -> dict:
         tags = data.get('tags', [])
         if not isinstance(tags, list) or any(type(tag) is not int or tag <= 0 for tag in tags):
             raise ValueError('Tags must be a list of positive integer IDs')
+        mappings = data.get('library_root_folders', [])
+        if not isinstance(mappings, list):
+            raise ValueError('Library root folders must be a list')
+        cleaned_mappings = []
+        seen = set()
+        for mapping in mappings:
+            fields = ('source', 'server', 'library', 'root_folder_path')
+            if not isinstance(mapping, dict) or any(
+                not isinstance(mapping.get(key), str) or not mapping[key].strip() for key in fields
+            ):
+                raise ValueError('Each library mapping requires a source, server, library, and root folder')
+            if mapping['source'] not in ('plex', 'jellyfin', 'emby'):
+                raise ValueError('Unknown library mapping source')
+            cleaned_mapping = {key: mapping[key].strip() for key in fields}
+            identity = tuple(cleaned_mapping[key] for key in ('source', 'server', 'library'))
+            if identity in seen:
+                raise ValueError('Only one root folder may be mapped to each library')
+            seen.add(identity)
+            cleaned_mappings.append(cleaned_mapping)
         cleaned = {
             'url': _normalize_url(data.get('url', '')),
             'api_key': (data.get('api_key') or '').strip(),
@@ -58,6 +78,7 @@ class RadarrService:
             'search_on_add': bool(data.get('search_on_add', True)),
             'auto_route_by_decade': bool(data.get('auto_route_by_decade', False)),
             'tags': list(dict.fromkeys(tags)),
+            'library_root_folders': cleaned_mappings,
         }
         config_store.put(CONFIG_KEY, cleaned)
         return self.get_config()
@@ -181,7 +202,9 @@ class RadarrService:
                     return path
         return default_path
 
-    def add_movie(self, tmdb_id: int, title: str = '', year: int = 0) -> tuple[bool, str]:
+    def add_movie(self, tmdb_id: int, title: str = '', year: int = 0, *,
+                  source: str = '', server: str = '', library_names: list[str] | None = None,
+                  root_folder_path: str = '') -> tuple[bool, str]:
         """Add a movie to Radarr by TMDB id.
 
         Returns (success, message). Treats "already added" responses as success.
@@ -192,8 +215,31 @@ class RadarrService:
         url, api_key = creds
 
         cfg = self.get_config()
-        if not cfg['quality_profile_id'] or not cfg['root_folder_path']:
+        # An explicit destination wins; otherwise only route automatically when
+        # every selected library has the same mapping. Never guess between roots.
+        if not root_folder_path and library_names:
+            mappings = {
+                m['library']: m['root_folder_path']
+                for m in cfg.get('library_root_folders', [])
+                if m['source'] == source and m['server'] == server
+            }
+            paths = {mappings.get(name) for name in library_names}
+            mapped_paths = paths - {None}
+            if mapped_paths and len(paths) > 1:
+                return False, 'Selected libraries have different Radarr destinations. Choose a Radarr destination above the results.'
+            if mapped_paths:
+                root_folder_path = mapped_paths.pop()
+
+        if not cfg['quality_profile_id'] or not (root_folder_path or cfg['root_folder_path']):
             return False, 'Quality profile and root folder must be configured first'
+
+        if root_folder_path:
+            try:
+                folders = self.get_root_folders()
+            except requests.exceptions.RequestException:
+                return False, 'Could not verify the Radarr destination. Check the connection and try again.'
+            if not any(f['path'] == root_folder_path and f['accessible'] for f in folders):
+                return False, 'The Radarr destination is missing or inaccessible. Update the library mapping or choose another destination.'
 
         # Look up movie metadata from Radarr's TMDB proxy so payload includes images/year.
         try:
@@ -214,8 +260,9 @@ class RadarrService:
             return False, f'Radarr lookup error: {e}'
 
         movie_year = movie.get('year') or year
-        root_folder_path = cfg['root_folder_path']
-        if cfg['auto_route_by_decade']:
+        use_decade = not root_folder_path and cfg['auto_route_by_decade']
+        root_folder_path = root_folder_path or cfg['root_folder_path']
+        if use_decade:
             root_folder_path = self._resolve_root_folder(
                 movie_year, url, api_key, cfg['root_folder_path']
             )

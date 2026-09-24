@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 import { of, Subject, throwError } from 'rxjs';
 import { SimilarComponent } from './similar.component';
+import { RadarrDestinationComponent } from '../radarr-destination/radarr-destination.component';
 import { ActiveServerService, ActiveServer } from '../../services/active-server.service';
 import { LibraryService } from '../../services/library.service';
 import { PreferencesService, DEFAULT_PREFERENCES } from '../../services/preferences.service';
@@ -74,7 +75,7 @@ describe('SimilarComponent', () => {
     recommendationService.getSimilarMovies.and.returnValue(of([]));
 
     await TestBed.configureTestingModule({
-      imports: [FormsModule, RouterTestingModule],
+      imports: [FormsModule, RouterTestingModule, RadarrDestinationComponent],
       declarations: [SimilarComponent, CompactNumberPipe],
       providers: [
         { provide: ActiveServerService, useValue: activeServerService },
@@ -381,6 +382,22 @@ describe('SimilarComponent', () => {
     component.minVoteCount = 400;
     component.applyFilter();
     expect(component.filteredSimilar.map(movie => movie.name)).toEqual(['TMDB Winner']);
+  });
+
+  it('uses the libraries from the movie lookup when sending to Radarr', () => {
+    fixture.detectChanges();
+    component.selectMovie(seed);
+    component.radarrEnabled = true;
+    component.radarrRootFolderPath = '/movies';
+    component.selectedLibraries = ['Other'];
+    const radarr = TestBed.inject(RadarrService) as jasmine.SpyObj<RadarrService>;
+    radarr.addMovie.and.returnValue(of({ message: 'Added' }));
+    component.sendToRadarr({ id: 123, name: 'Test', year: 2020, owned: false, radarrEligible: true } as Gap, new Event('click'));
+    expect(radarr.addMovie).toHaveBeenCalledWith(123, 'Test', 2020, {
+      source: 'plex', server: 'Test Plex', library_names: ['Movies'], root_folder_path: '/movies',
+    });
+    component.selectMovie(seed);
+    expect(component.radarrRootFolderPath).toBe('');
   });
 
   it('starts with configured quality thresholds when that preference is enabled', fakeAsync(() => {

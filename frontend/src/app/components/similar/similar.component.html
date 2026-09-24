@@ -94,6 +94,7 @@
     </div>
 
     <div *ngIf="selectedMovie">
+      <app-radarr-destination [(rootFolderPath)]="radarrRootFolderPath"></app-radarr-destination>
       <div class="result-toolbar d-flex align-items-center gap-3 mb-3">
         <button class="btn btn-sm btn-outline-light" (click)="clearResults()">&larr; Back</button>
         <h5 class="regular-text mb-0">

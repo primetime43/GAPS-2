@@ -65,7 +65,7 @@
   <div *ngIf="config.enabled">
     <h5 class="mb-3">Defaults for added movies</h5>
 
-    <div *ngIf="loadingMeta" class="text-muted mb-3">Loading profiles, root folders, and tags...</div>
+    <div *ngIf="loadingMeta" class="text-muted mb-3">Loading profiles, root folders, libraries, and tags...</div>
 
     <div class="form-group mb-3">
       <label class="form-label">Quality profile</label>
@@ -93,6 +93,29 @@
         (e.g. a 2021 film &rarr; <code>/movies/2020s</code>). When no folder matches,
         the root folder selected above is used.
       </div>
+    </div>
+
+    <div class="mb-4">
+      <h6>Library root folders</h6>
+      <p class="text-muted" style="font-size: 12px;">
+        Choose the Radarr folder that corresponds to each media library. Paths may differ between Plex and Radarr containers.
+        Library mappings override decade routing. Unmapped libraries use decade routing, if enabled, then the default root folder.
+        When selected libraries have conflicting mappings, choose a Radarr destination above the results before adding a movie.
+      </p>
+      <div *ngIf="librariesError" class="text-danger mb-2" role="alert">{{ librariesError }}</div>
+      <div *ngFor="let library of mappingLibraries; let i = index" class="form-group mb-2">
+        <label class="form-label" [for]="'radarrLibraryRoot' + i">{{ library.library }} ({{ library.source }} / {{ library.server }})</label>
+        <select class="form-select dark-select" [id]="'radarrLibraryRoot' + i"
+                [ngModel]="mappedRoot(library)" (ngModelChange)="setMappedRoot(library, $event)" [disabled]="loadingMeta">
+          <option value="">Use decade / default root folder</option>
+          <option *ngFor="let folder of rootFolders" [value]="folder.path" [disabled]="!folder.accessible">{{ folder.path }}</option>
+          <option *ngIf="mappedRoot(library) && !hasRoot(mappedRoot(library))" [value]="mappedRoot(library)">
+            {{ mappedRoot(library) }} (unavailable)
+          </option>
+        </select>
+      </div>
+      <div *ngIf="!loadingMeta && !librariesError && !mappingLibraries.length" class="text-muted">Connect a media server with movie libraries to configure mappings.</div>
+      <button class="btn btn-sm btn-outline-secondary mt-2" type="button" (click)="loadMeta()" [disabled]="loadingMeta || saving">Refresh libraries and folders</button>
     </div>
 
     <div class="form-group mb-3">

@@ -5,6 +5,7 @@ import { FormsModule } from '@angular/forms';
 import { Component, Input, Output, EventEmitter } from '@angular/core';
 import { of, Subject, throwError } from 'rxjs';
 import { RecommendedComponent } from './recommended.component';
+import { RadarrDestinationComponent } from '../radarr-destination/radarr-destination.component';
 import { ActiveServerService, ActiveServer, MediaServerSource } from '../../services/active-server.service';
 import { MediaLibrary } from '../../models/media-server.model';
 import { LibraryService } from '../../services/library.service';
@@ -93,7 +94,7 @@ describe('RecommendedComponent', () => {
     tmdbService.getGenres.and.returnValue(of([]));
 
     await TestBed.configureTestingModule({
-      imports: [HttpClientTestingModule, FormsModule, RouterTestingModule],
+      imports: [HttpClientTestingModule, FormsModule, RouterTestingModule, RadarrDestinationComponent],
       declarations: [RecommendedComponent, MockConfirmModalComponent],
       providers: [
         { provide: ActiveServerService, useValue: activeServerService },
@@ -501,6 +502,22 @@ describe('RecommendedComponent', () => {
     component.setMediaType('tv');
     pending.error(new Error('offline'));
     expect(component.ignoredIds.has(123)).toBeFalse();
+  });
+
+  it('sends the result library context and destination to Radarr', () => {
+    radarrService.getConfig.and.returnValue(of({ enabled: true } as any));
+    radarrService.getLibraryTmdbIds.and.returnValue(of({ tmdb_ids: [] }));
+    radarrService.addMovie.and.returnValue(of({ message: 'Added' }));
+    component.refreshDownloaderStatus('radarr');
+    component.activeSource = 'plex';
+    component.activeServerName = 'Plex';
+    component.radarrLibraries = ['Movies'];
+    component.selectedLibraries = ['Other'];
+    component.radarrRootFolderPath = '/movies';
+    component.sendToDownloader(gap({ id: 123, name: 'Test', year: 2020, radarrEligible: true }), new Event('click'));
+    expect(radarrService.addMovie).toHaveBeenCalledWith(123, 'Test', 2020, {
+      source: 'plex', server: 'Plex', library_names: ['Movies'], root_folder_path: '/movies',
+    });
   });
 
   it('dismisses a movie ignore confirmation when switching to TV', () => {
