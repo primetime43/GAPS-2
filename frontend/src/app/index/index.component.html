@@ -74,67 +74,45 @@
       </section>
     </div>
 
-    <!-- Last Scan -->
+    <!-- Keep recent activity in the existing second column. -->
     <div class="col-md-6 mb-3">
-      <div
-        class="status-card last-scan-card"
-        [class.status-ok]="hasAnyLastScan"
-        [class.status-missing]="!hasAnyLastScan"
-        [class.clickable]="hasAnyLastScan"
-        (click)="openHistory()"
-        role="button"
-        tabindex="0"
-        (keydown.enter)="openHistory()"
-      >
-        <div class="status-icon">
-          <span *ngIf="hasAnyLastScan">&#128269;</span>
-          <span *ngIf="!hasAnyLastScan">&#8212;</span>
-        </div>
-        <div class="status-body">
+      <section class="status-card activity-card" aria-label="Recent activity">
+        <div class="activity-heading">
           <h5>
-            Last Scan
-            <span *ngIf="hasAnyLastScan" class="view-history-hint">View history &rsaquo;</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+              <path d="M4 5h16M4 12h16M4 19h16" />
+            </svg>
+            Recent Activity
           </h5>
-
-          <p *ngIf="!hasAnyLastScan">
-            No scan results yet.
-            <a [routerLink]="['/recommended']" class="activeLink" (click)="$event.stopPropagation()">Run a scan</a>
-          </p>
-
-          <p *ngIf="lastMovieScan" class="scan-line">
-            <span class="scan-badge badge-movie">Movies</span>
-            <ng-container *ngIf="lastMovieScan.status === 'success'">
-              Found <strong>{{ lastMovieScan.missing }}</strong> gap(s) across
-              <strong>{{ lastMovieScan.totalOwned }}</strong> movies.
-            </ng-container>
-            <ng-container *ngIf="lastMovieScan.status === 'skipped'">
-              Skipped<ng-container *ngIf="lastMovieScan.message">: {{ lastMovieScan.message }}</ng-container>.
-            </ng-container>
-            <ng-container *ngIf="lastMovieScan.status === 'error'">
-              Failed<ng-container *ngIf="lastMovieScan.message">: {{ lastMovieScan.message }}</ng-container>.
-            </ng-container>
-            <span class="text-muted">— {{ lastMovieScan.timestamp | date:'short' }}</span>
-          </p>
-
-          <p *ngIf="lastTvScan" class="scan-line">
-            <span class="scan-badge badge-tv">TV</span>
-            <ng-container *ngIf="lastTvScan.status === 'success'">
-              Found <strong>{{ lastTvScan.missing }}</strong> gap(s) across
-              <strong>{{ lastTvScan.totalOwned }}</strong> shows.
-            </ng-container>
-            <ng-container *ngIf="lastTvScan.status === 'skipped'">
-              Skipped<ng-container *ngIf="lastTvScan.message">: {{ lastTvScan.message }}</ng-container>.
-            </ng-container>
-            <ng-container *ngIf="lastTvScan.status === 'error'">
-              Failed<ng-container *ngIf="lastTvScan.message">: {{ lastTvScan.message }}</ng-container>.
-            </ng-container>
-            <span class="text-muted">— {{ lastTvScan.timestamp | date:'short' }}</span>
-          </p>
+          <a routerLink="/scan-history">View history &rsaquo;</a>
         </div>
-      </div>
+        <p *ngIf="historyLoading && !recentScans.length" class="activity-note" role="status">Loading recent scans…</p>
+        <p *ngIf="historyError" class="activity-note activity-error" role="alert">
+          {{ historyError }} <button type="button" (click)="loadScanHistory()" [disabled]="historyLoading">Retry</button>
+        </p>
+        <p *ngIf="!historyLoading && !historyError && !recentScans.length" class="activity-note">
+          No scans yet. Start a movie or TV scan below.
+        </p>
+        <ol class="activity-list" *ngIf="recentScans.length">
+          <li *ngFor="let scan of recentScans" class="activity-row">
+            <div class="activity-summary">
+              <span class="activity-type">{{ scan.mediaType === 'tv' ? 'TV' : 'Movies' }}</span>
+              <span class="activity-libraries" [title]="scan.libraryLabel">{{ scan.libraryLabel }}</span>
+            </div>
+            <span *ngIf="scan.status === 'success'" class="activity-count">{{ scan.missing }} missing</span>
+            <div class="activity-meta">
+              <span [ngSwitch]="scan.status" [attr.data-status]="scan.status">
+                <ng-container *ngSwitchCase="'success'">Completed</ng-container>
+                <ng-container *ngSwitchCase="'error'">Failed</ng-container>
+                <ng-container *ngSwitchCase="'skipped'">Skipped</ng-container>
+              </span>
+              <span> · {{ scan.timeLabel }}</span>
+            </div>
+          </li>
+        </ol>
+      </section>
     </div>
   </div>
-
 
   <!-- Quick Actions -->
   <h4 class="mt-4 text-primary">Quick Actions</h4>

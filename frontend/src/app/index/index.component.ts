@@ -3,7 +3,6 @@ import { formatDate } from '@angular/common';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Observable, of } from 'rxjs';
 import { catchError, map, switchMap, timeout } from 'rxjs/operators';
-import { Router } from '@angular/router';
 import { TmdbService } from '../services/tmdb/tmdb.service';
 import { ActiveServerService } from '../services/active-server.service';
 import { ScheduleService, ScheduleConfig, ScheduleLastRun } from '../services/schedule.service';
@@ -34,6 +33,11 @@ interface DashboardSchedule {
   lastRunTime: string;
 }
 
+interface RecentScan extends ScanHistoryEntry {
+  timeLabel: string;
+  libraryLabel: string;
+}
+
 @Component({
     selector: 'app-index',
     templateUrl: './index.component.html',
@@ -54,15 +58,15 @@ export class IndexComponent implements OnInit {
   scheduleError = '';
   readonly localTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-  lastMovieScan: ScanHistoryEntry | null = null;
-  lastTvScan: ScanHistoryEntry | null = null;
+  recentScans: RecentScan[] = [];
+  historyLoading = true;
+  historyError = '';
 
   constructor(
     private tmdbService: TmdbService,
     private activeServerService: ActiveServerService,
     private scheduleService: ScheduleService,
     private scanHistoryService: ScanHistoryService,
-    private router: Router,
     private radarrService: RadarrService,
     private sonarrService: SonarrService,
     private tvdbService: TvdbService,
@@ -98,8 +102,8 @@ export class IndexComponent implements OnInit {
             enabled: !!block?.enabled,
             frequency: frequencies[block?.preset] || 'Scheduled',
             libraries: block?.libraries?.join(', ') || block?.library || '',
-            nextRun: this.formatScheduleTime(block?.next_run),
-            lastRun, lastRunTime: this.formatScheduleTime(lastRun?.timestamp),
+            nextRun: this.formatLocalTime(block?.next_run),
+            lastRun, lastRunTime: this.formatLocalTime(lastRun?.timestamp),
           };
         });
         this.schedulesLoading = false;
@@ -121,19 +125,28 @@ export class IndexComponent implements OnInit {
     return new Date(timestamp.replace(' ', 'T'));
   }
 
-  private formatScheduleTime(timestamp: string | null | undefined): string {
+  private formatLocalTime(timestamp: string | null | undefined): string {
     if (!timestamp) return 'Unavailable';
     const date = this.scheduleDate(timestamp);
     return Number.isNaN(date.getTime()) ? 'Unavailable' : formatDate(date, "MMM d 'at' h:mm a", 'en-US');
   }
 
   loadScanHistory(): void {
-    this.scanHistoryService.get().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+    this.historyLoading = true;
+    this.historyError = '';
+    this.scanHistoryService.get(undefined, 3).pipe(timeout(15000), takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (resp) => {
-        this.lastMovieScan = resp.lastMovie;
-        this.lastTvScan = resp.lastTv;
+        this.recentScans = (resp.history || []).slice(0, 3).map(scan => ({
+          ...scan,
+          timeLabel: this.formatLocalTime(scan.timestamp),
+          libraryLabel: scan.libraries?.join(', ') || 'Unspecified library',
+        }));
+        this.historyLoading = false;
       },
-      error: () => {},
+      error: () => {
+        this.historyLoading = false;
+        this.historyError = 'Could not refresh recent activity.';
+      },
     });
   }
 
@@ -214,12 +227,4 @@ export class IndexComponent implements OnInit {
     ).subscribe(status => Object.assign(connection, status));
   }
 
-  get hasAnyLastScan(): boolean {
-    return !!(this.lastMovieScan || this.lastTvScan);
-  }
-
-  openHistory(): void {
-    if (!this.hasAnyLastScan) return;
-    this.router.navigate(['/scan-history']);
-  }
 }

@@ -1,7 +1,6 @@
 import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 import { RouterTestingModule } from '@angular/router/testing';
-import { Router } from '@angular/router';
 import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
 import { IndexComponent } from './index.component';
 import { environment } from '../../environments/environment';
@@ -66,7 +65,7 @@ describe('IndexComponent', () => {
     }
     httpMock.expectOne(`${environment.apiUrl}/schedule`)
       .flush(options?.schedule ?? { enabled: false, preset: '', next_run: null, last_run: null, run_history: [], presets: {} });
-    httpMock.expectOne(`${environment.apiUrl}/scan-history`)
+    httpMock.expectOne(`${environment.apiUrl}/scan-history?limit=3`)
       .flush(options?.scanHistory ?? { history: [], lastMovie: null, lastTv: null });
   }
 
@@ -149,7 +148,7 @@ describe('IndexComponent', () => {
     flushInitRequests();
     component.checkConnections();
     fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('.last-scan-card')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('.activity-card')).toBeTruthy();
     expect(fixture.nativeElement.querySelector('.check-connections').disabled).toBeTrue();
     // Leave the network requests pending to exercise timeout handling.
     const pending = httpMock.match(() => true);
@@ -173,7 +172,7 @@ describe('IndexComponent', () => {
     fixture.detectChanges();
     const pending = httpMock.match(request => !request.url.endsWith('/schedule') && !request.url.endsWith('/scan-history'));
     httpMock.expectOne(`${environment.apiUrl}/schedule`).flush({});
-    httpMock.expectOne(`${environment.apiUrl}/scan-history`).flush({});
+    httpMock.expectOne(`${environment.apiUrl}/scan-history?limit=3`).flush({});
     fixture.destroy();
     expect(pending.every(request => request.cancelled)).toBeTrue();
   });
@@ -275,59 +274,97 @@ describe('IndexComponent', () => {
       movie: { enabled: true, preset: 'daily', next_run: new Date(2026, 9, 2, 4).toISOString() },
       tv: { enabled: false },
     });
-    httpMock.expectOne(`${environment.apiUrl}/scan-history`).flush({ lastMovie: null, lastTv: null });
+    httpMock.expectOne(`${environment.apiUrl}/scan-history?limit=3`).flush({ lastMovie: null, lastTv: null });
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('.schedule-row').textContent).toContain('Oct 2 at 4:00 AM');
   });
 
-  it('should load latest movie and TV scan summaries', fakeAsync(() => {
-    flushInitRequests({
-      scanHistory: {
-        history: [],
-        lastMovie: {
-          timestamp: '2026-05-20T10:00:00Z', mediaType: 'movie', libraries: ['Movies'],
-          totalOwned: 500, missing: 42, status: 'success', trigger: 'manual', message: '',
-        },
-        lastTv: {
-          timestamp: '2026-05-19T10:00:00Z', mediaType: 'tv', libraries: ['Shows'],
-          totalOwned: 120, missing: 7, status: 'success', trigger: 'manual', message: '',
-        },
-      },
-    });
-    tick();
+  function activity(overrides: any = {}) {
+    return {
+      id: 'scan-1', timestamp: new Date(2026, 8, 24, 4).toISOString(), mediaType: 'movie',
+      libraries: ['Films'], totalOwned: 500, missing: 42, status: 'success', trigger: 'manual', message: '',
+      ...overrides,
+    };
+  }
 
-    expect(component.lastMovieScan?.missing).toBe(42);
-    expect(component.lastMovieScan?.totalOwned).toBe(500);
-    expect(component.lastTvScan?.missing).toBe(7);
-    expect(component.lastTvScan?.totalOwned).toBe(120);
-    expect(component.hasAnyLastScan).toBeTrue();
-  }));
+  it('shows at most three recent scans in the existing card with libraries and local dates', () => {
+    flushInitRequests({ scanHistory: { history: [
+      activity(),
+      activity({ id: 'scan-2', mediaType: 'tv', libraries: ['Shows', 'Kids TV'], missing: 7, trigger: 'scheduled' }),
+      activity({ id: 'scan-3', libraries: ['Classics'], missing: 0 }),
+      activity({ id: 'scan-4', libraries: ['Older scan'] }),
+    ] } });
+    fixture.detectChanges();
+    const rows = fixture.nativeElement.querySelectorAll('.activity-row');
+    expect(rows.length).toBe(3);
+    expect(rows[0].textContent).toContain('Movies');
+    expect(rows[0].textContent).toContain('Films');
+    expect(rows[0].textContent).toContain('42 missing');
+    expect(rows[0].textContent).toContain('Completed');
+    expect(rows[0].textContent).toContain('Sep 24 at 4:00 AM');
+    expect(rows[1].textContent).toContain('TV');
+    expect(rows[1].textContent).toContain('Shows, Kids TV');
+    expect(rows[1].textContent).toContain('7 missing');
+    expect(rows[2].textContent).toContain('0 missing');
+    expect(fixture.nativeElement.querySelector('.activity-card').textContent).not.toContain('Older scan');
+    expect(fixture.nativeElement.querySelectorAll('.status-card').length).toBe(2);
+  });
 
-  it('navigates to /scan-history when card is clicked', fakeAsync(() => {
-    flushInitRequests({
-      scanHistory: {
-        history: [],
-        lastMovie: { timestamp: '2026-05-20T10:00:00Z', mediaType: 'movie', libraries: [], totalOwned: 1, missing: 1, status: 'success', trigger: 'manual', message: '' },
-        lastTv: null,
-      },
-    });
-    tick();
+  it('labels failed and skipped scans without treating their missing counts as completed results', () => {
+    flushInitRequests({ scanHistory: { history: [
+      activity({ status: 'error', missing: 0 }),
+      activity({ id: 'scan-2', status: 'skipped', mediaType: 'tv', missing: 0 }),
+    ] } });
+    fixture.detectChanges();
+    const rows = fixture.nativeElement.querySelectorAll('.activity-row');
+    expect(rows[0].textContent).toContain('Failed');
+    expect(rows[1].textContent).toContain('Skipped');
+    expect(fixture.nativeElement.querySelectorAll('.activity-count').length).toBe(0);
+  });
 
-    const router = TestBed.inject(Router);
-    const spy = spyOn(router, 'navigate');
-    component.openHistory();
+  it('keeps the full library list accessible when the visible text is shortened', () => {
+    const libraries = ['A very long movie library name', 'Another very long library', 'Family films'];
+    flushInitRequests({ scanHistory: { history: [activity({ libraries })] } });
+    fixture.detectChanges();
+    const label = fixture.nativeElement.querySelector('.activity-libraries');
+    expect(label.textContent).toBe(libraries.join(', '));
+    expect(label.title).toBe(libraries.join(', '));
+    expect(fixture.nativeElement.querySelector('.activity-heading a').getAttribute('href')).toBe('/scan-history');
+  });
 
-    expect(spy).toHaveBeenCalledWith(['/scan-history']);
-  }));
-
-  it('does not navigate when there is no scan history', fakeAsync(() => {
+  it('shows a compact empty state without adding placeholder rows', () => {
     flushInitRequests();
-    tick();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.activity-card').textContent).toContain('No scans yet');
+    expect(fixture.nativeElement.querySelectorAll('.activity-row').length).toBe(0);
+  });
 
-    const router = TestBed.inject(Router);
-    const spy = spyOn(router, 'navigate');
-    component.openHistory();
+  it('replaces recent activity after completion instead of growing the list', () => {
+    flushInitRequests({ scanHistory: { history: [activity()] } });
+    component.refreshScanSummaries();
+    httpMock.expectOne(`${environment.apiUrl}/schedule`).flush({});
+    httpMock.expectOne(`${environment.apiUrl}/scan-history?limit=3`).flush({ history: [
+      activity({ id: 'scan-new', libraries: ['New scan'], missing: 15 }), activity(),
+    ] });
+    fixture.detectChanges();
+    const rows = fixture.nativeElement.querySelectorAll('.activity-row');
+    expect(rows.length).toBe(2);
+    expect(rows[0].textContent).toContain('New scan');
+    expect(rows[0].textContent).toContain('15 missing');
+  });
 
-    expect(spy).not.toHaveBeenCalled();
-  }));
+  it('keeps previous activity on a failed refresh and provides a retry', () => {
+    flushInitRequests({ scanHistory: { history: [activity()] } });
+    component.loadScanHistory();
+    httpMock.expectOne(`${environment.apiUrl}/scan-history?limit=3`).flush({}, { status: 503, statusText: 'Offline' });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.activity-error').textContent).toContain('Could not refresh');
+    expect(fixture.nativeElement.querySelectorAll('.activity-row').length).toBe(1);
+    expect(fixture.nativeElement.querySelector('.activity-card').textContent).not.toContain('No scans yet');
+    fixture.nativeElement.querySelector('.activity-error button').click();
+    httpMock.expectOne(`${environment.apiUrl}/scan-history?limit=3`).flush({ history: [activity({ missing: 12 })] });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.activity-error')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.activity-count').textContent).toContain('12 missing');
+  });
 });
