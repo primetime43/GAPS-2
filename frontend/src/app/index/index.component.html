@@ -1,7 +1,10 @@
-<div class="container top-margin">
-  <h3 class="regular-text">Dashboard</h3>
+<div class="container top-margin dashboard">
+  <div class="dashboard-heading">
+    <h3>Dashboard</h3>
+    <p>All times in {{ localTimezone }}</p>
+  </div>
 
-  <section class="connections mt-3" aria-label="Service connections">
+  <section class="connections" aria-label="Service connections">
     <ul class="connection-list" aria-live="polite">
       <li *ngFor="let connection of connections">
         <a class="connection" [routerLink]="connection.settings"
@@ -21,6 +24,9 @@
       </li>
     </ul>
     <button type="button" class="check-connections" (click)="checkConnections()" [disabled]="checkingConnections">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+        <path d="M20 7v5h-5M4 17v-5h5M6 6a8 8 0 0 1 14 6M4 12a8 8 0 0 0 14 6" />
+      </svg>
       {{ checkingConnections ? 'Checking…' : 'Recheck' }}
     </button>
   </section>
@@ -35,9 +41,9 @@
     </div>
   </div>
 
-  <div class="row mt-3">
+  <div class="dashboard-grid">
     <!-- Independent movie and TV schedules -->
-    <div class="col-md-6 mb-3">
+    <div class="dashboard-column">
       <section class="status-card schedule-card" aria-label="Scheduled scans">
         <div class="schedule-heading">
           <h5>
@@ -48,7 +54,6 @@
           </h5>
           <a routerLink="/settings/schedule">Edit schedules</a>
         </div>
-        <p class="schedule-timezone">Times in your timezone ({{ localTimezone }})</p>
         <p *ngIf="schedulesLoading" role="status">Loading schedules…</p>
         <p *ngIf="scheduleError" class="schedule-error" role="alert">
           {{ scheduleError }} <button type="button" (click)="loadSchedules()">Retry</button>
@@ -75,7 +80,7 @@
     </div>
 
     <!-- Keep recent activity in the existing second column. -->
-    <div class="col-md-6 mb-3">
+    <div class="dashboard-column">
       <section class="status-card activity-card" aria-label="Recent activity">
         <div class="activity-heading">
           <h5>
@@ -84,7 +89,9 @@
             </svg>
             Recent Activity
           </h5>
-          <a routerLink="/scan-history">View history &rsaquo;</a>
+          <a routerLink="/scan-history">View history
+            <svg class="link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m9 5 7 7-7 7" /></svg>
+          </a>
         </div>
         <p *ngIf="historyLoading && !recentScans.length" class="activity-note" role="status">Loading recent scans…</p>
         <p *ngIf="historyError" class="activity-note activity-error" role="alert">
@@ -114,7 +121,8 @@
     </div>
   </div>
 
-  <!-- Quick Actions -->
-  <h4 class="mt-4 text-primary">Quick Actions</h4>
-  <app-scan-controls (scanFinished)="refreshScanSummaries()"></app-scan-controls>
+  <section class="dashboard-actions" aria-labelledby="quick-actions-heading">
+    <h4 id="quick-actions-heading">Quick Actions</h4>
+    <app-scan-controls (scanFinished)="refreshScanSummaries()"></app-scan-controls>
+  </section>
 </div>

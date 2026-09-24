@@ -128,7 +128,10 @@ export class IndexComponent implements OnInit {
   private formatLocalTime(timestamp: string | null | undefined): string {
     if (!timestamp) return 'Unavailable';
     const date = this.scheduleDate(timestamp);
-    return Number.isNaN(date.getTime()) ? 'Unavailable' : formatDate(date, "MMM d 'at' h:mm a", 'en-US');
+    if (Number.isNaN(date.getTime())) return 'Unavailable';
+    const pattern = date.getFullYear() === new Date().getFullYear()
+      ? "MMM d 'at' h:mm a" : "MMM d, y 'at' h:mm a";
+    return formatDate(date, pattern, 'en-US');
   }
 
   loadScanHistory(): void {

@@ -367,4 +367,18 @@ describe('IndexComponent', () => {
     expect(fixture.nativeElement.querySelector('.activity-error')).toBeNull();
     expect(fixture.nativeElement.querySelector('.activity-count').textContent).toContain('12 missing');
   });
+  it('uses the same local date format, including the year for older schedule and activity entries', () => {
+    const year = new Date().getFullYear() - 1;
+    const timestamp = new Date(year, 8, 24, 4).toISOString();
+    flushInitRequests({
+      schedule: { movie: { enabled: false }, tv: { enabled: false }, run_history: [scheduledRun('movie', timestamp, 42)] },
+      scanHistory: { history: [activity({ timestamp })] },
+    });
+    fixture.detectChanges();
+    const label = `Sep 24, ${year} at 4:00 AM`;
+    expect(fixture.nativeElement.querySelector('.schedule-last').textContent).toContain(label);
+    expect(fixture.nativeElement.querySelector('.activity-meta').textContent).toContain(label);
+    expect(fixture.nativeElement.querySelector('.dashboard-heading').textContent).toContain(component.localTimezone);
+  });
+
 });
