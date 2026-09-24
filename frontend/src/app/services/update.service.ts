@@ -30,7 +30,13 @@ export interface UpdateStatus {
     currentImage?: string;
     imageId?: string;
     requestId?: string;
+    completedAt?: number;
   };
+}
+
+export interface DevelopStatus {
+  commit: string;
+  checkedAt: number;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -43,6 +49,10 @@ export class UpdateService {
 
   getReleases(): Observable<{ versions: string[] }> {
     return this.http.get<{ versions: string[] }>(`${environment.apiUrl}/updates/releases`);
+  }
+
+  getDevelop(): Observable<DevelopStatus> {
+    return this.http.get<DevelopStatus>(`${environment.apiUrl}/updates/develop`);
   }
 
   apply(selection: UpdateSelection): Observable<{ requestId: string; message: string }> {

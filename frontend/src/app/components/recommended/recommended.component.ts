@@ -5,8 +5,8 @@ import { catchError, filter, map, skip, switchMap, takeUntil } from 'rxjs/operat
 import { of } from 'rxjs';
 import { ActiveServerService } from '../../services/active-server.service';
 import { LibraryService } from '../../services/library.service';
-import { RecommendationService } from '../../services/recommendation.service';
-import { TvdbService } from '../../services/tvdb.service';
+import { RecommendationService, ScanProgress } from '../../services/recommendation.service';
+import { TvdbService, TvdbScanProgress } from '../../services/tvdb.service';
 import { Gap } from '../../models/recommendation.model';
 import { MediaLibrary } from '../../models/media-server.model';
 import { PreferencesService, MissingFilters } from '../../services/preferences.service';
@@ -238,6 +238,9 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   // Media server source
   activeSource: 'plex' | 'jellyfin' | 'emby' = 'plex';
   activeServerName = '';
+  radarrRootFolderPath = '';
+  sonarrRootFolderPath = '';
+  downloaderLibraries: string[] = [];
 
   // TheTVDB availability (TV mode)
   tvdbEnabled = false;
@@ -268,7 +271,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     sonarr: { enabled: false, status: new Map(), errors: new Map() },
   };
 
-  private completedScans = new Map<string, { gaps: Gap[]; totalOwned: number }>();
+  private completedScans = new Map<string, { gaps: Gap[]; totalOwned: number; routingLibraries: string[] }>();
   private pollSub: Subscription | null = null;
   private destroy$ = new Subject<void>();
   private itemsChanged$ = new Subject<void>();
@@ -330,11 +333,79 @@ export class RecommendedComponent implements OnInit, OnDestroy {
    * it works whether or not the route component was reused. */
   private captureSavedScanParam(): void {
     const qp = this.router.parseUrl(this.router.url).queryParams || {};
+    this.pendingLatestScan = qp['latest'] === '1';
+    if (this.pendingLatestScan) {
+      // A dashboard link must replace a reused view's old results without
+      // cancelling a movie or TV scan that is still running on the server.
+      this.cancelResultRequests();
+      this.stopPolling();
+      this.itemsChanged$.next();
+      this.mediaChanged$.next();
+      this.mediaType = qp['type'] === 'tv' ? 'tv' : 'movie';
+      this.pendingSavedScanId = null;
+      this.pendingIgnoreGap = null;
+      this.selectedItem = null;
+      this.selectedLibraries = [];
+      this.items = [];
+      this.loadingItems = false;
+      this.allGaps = [];
+      this.collectionGroups = [];
+      this.filteredGroups = [];
+      this.scanProgress = null;
+      this.savedScanInfo = null;
+      this.scanMode = false;
+      this.errorMessage = '';
+      this.searchFilter = '';
+      this.downloaderLibraries = [];
+      this.radarrRootFolderPath = '';
+      this.sonarrRootFolderPath = '';
+      return;
+    }
     const scanId = qp['scan'];
     if (!scanId) return;
     this.pendingSavedScanId = scanId;
     const type = qp['type'];
     if (type === 'tv' || type === 'movie') this.mediaType = type;
+  }
+
+  private pendingLatestScan = false;
+
+  private loadLatestScan(): void {
+    this.loadingGaps = true;
+    this.scanMode = true;
+    this.view = 'missing';
+    this.genreFilter = null;
+    const progress$: Observable<ScanProgress | TvdbScanProgress> = this.mediaType === 'tv'
+      ? this.tvdb.getScanProgress() : this.recommendationService.getScanProgress();
+    progress$.pipe(takeUntil(this.resultsChanged$), takeUntil(this.destroy$)).subscribe({
+      next: progress => {
+        this.selectedLibraries = (progress.libraries || []).filter(name => this.libraries.some(lib => lib.title === name));
+        // Progress has no server identity, so do not infer downloader mappings.
+        this.downloaderLibraries = [];
+        if (progress.status === 'scanning') {
+          this.scanProgress = this.normalizeProgress(progress);
+          this.startPolling(progress.libraries || []);
+          return;
+        }
+        this.loadingGaps = false;
+        if (progress.status === 'done') {
+          this.allGaps = this.normalizeGaps(progress.gaps || []);
+          this.totalOwned = progress.total_owned;
+          this.imdbRatingsLoaded = false;
+          this.applyFilter();
+          this.cacheCompletedScan(progress.libraries || [], this.allGaps, progress.total_owned);
+        } else {
+          this.scanMode = false;
+          this.errorMessage = progress.status === 'error' ? (progress.error || 'Scan failed.')
+            : progress.status === 'cancelled' ? 'The scan was cancelled.' : 'No scan results yet. Select libraries to run a scan.';
+        }
+      },
+      error: () => {
+        this.loadingGaps = false;
+        this.scanMode = false;
+        this.errorMessage = 'Could not load the latest scan. Please try again.';
+      },
+    });
   }
 
   ngOnDestroy(): void {
@@ -358,6 +429,9 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     this.itemsChanged$.next();
     this.mediaChanged$.next();
     this.mediaType = type;
+    this.radarrRootFolderPath = '';
+    this.sonarrRootFolderPath = '';
+    this.downloaderLibraries = [];
     this.pendingIgnoreGap = null;
     this.savedScanInfo = null;
     this.stopPolling();
@@ -465,6 +539,12 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   }
 
   private finishInitialization(prefs: any, autoSelectLibrary: boolean): void {
+    if (this.pendingLatestScan) {
+      this.pendingLatestScan = false;
+      this.loading = false;
+      this.loadLatestScan();
+      return;
+    }
     // A saved scan was requested (Scan History → Missing view). Load it instead
     // of the normal last-scan restore, regardless of autoSelectLibrary.
     if (this.pendingSavedScanId) {
@@ -507,6 +587,9 @@ export class RecommendedComponent implements OnInit, OnDestroy {
       }
 
       if (validScan) {
+        // Persisted progress has no server identity, so do not infer a mapping
+        // from a different server that happens to have the same library names.
+        this.downloaderLibraries = [];
         this.allGaps = this.normalizeGaps(progress!.gaps);
         this.totalOwned = progress!.total_owned;
         this.scanMode = true;
@@ -560,6 +643,9 @@ export class RecommendedComponent implements OnInit, OnDestroy {
           l => this.libraries.some(x => x.title === l),
         );
         this.savedScanInfo = { timestamp: resp.timestamp, libraries: resp.libraries || [] };
+        this.downloaderLibraries = [];
+        this.radarrRootFolderPath = '';
+        this.sonarrRootFolderPath = '';
         if (this.mediaType === 'tv') this.genreFilter = null;
         this.allGaps = this.normalizeGaps(resp.gaps || []);
         this.totalOwned = resp.totalOwned || 0;
@@ -580,6 +666,9 @@ export class RecommendedComponent implements OnInit, OnDestroy {
 
   /** Load the browse list for the selected libraries, merged and de-duplicated. */
   loadItems(): void {
+    this.radarrRootFolderPath = '';
+    this.sonarrRootFolderPath = '';
+    this.downloaderLibraries = [...this.selectedLibraries];
     this.itemsChanged$.next();
     this.cancelResultRequests();
     this.items = [];
@@ -644,6 +733,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     const cached = this.completedScans.get(key);
     if (!cached?.gaps?.length) return;
     this.allGaps = cached.gaps;
+    this.downloaderLibraries = [...cached.routingLibraries];
     this.totalOwned = cached.totalOwned;
     this.scanMode = true;
     this.applyFilter();
@@ -653,7 +743,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   private cacheCompletedScan(libraries: string[], gaps: Gap[], totalOwned: number): void {
     const key = this.scanKey(libraries);
     if (!key) return;
-    this.completedScans.set(key, { gaps, totalOwned });
+    this.completedScans.set(key, { gaps, totalOwned, routingLibraries: [...this.downloaderLibraries] });
   }
 
   private scanKey(libraries: string[]): string {
@@ -715,6 +805,9 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     this.errorMessage = '';
 
     const scanLibraries = [...this.selectedLibraries];
+    this.downloaderLibraries = [...scanLibraries];
+    this.radarrRootFolderPath = '';
+    this.sonarrRootFolderPath = '';
 
     if (this.mediaType === 'tv') {
       this.tvdb.startScan({
@@ -870,6 +963,9 @@ export class RecommendedComponent implements OnInit, OnDestroy {
 
   private fetchGapsForSelectedItem(): void {
     if (!this.selectedItem) return;
+    this.downloaderLibraries = [...this.selectedLibraries];
+    this.radarrRootFolderPath = '';
+    this.sonarrRootFolderPath = '';
 
     if (this.mediaType === 'tv') {
       const tvdbId = this.selectedItem.tvdbId;
@@ -1312,7 +1408,10 @@ export class RecommendedComponent implements OnInit, OnDestroy {
         getConfig: () => this.sonarrService.getConfig(),
         ownedIds: () => this.sonarrService.getLibraryTvdbIds().pipe(
           map(res => res.tvdb_ids || []), catchError(() => of([] as number[]))),
-        add: (gap: Gap) => this.sonarrService.addSeries(gap.id, gap.name),
+        add: (gap: Gap) => this.sonarrService.addSeries(gap.id, gap.name, {
+          source: this.activeSource, server: this.activeServerName,
+          library_names: this.downloaderLibraries, root_folder_path: this.sonarrRootFolderPath,
+        }),
         eligible: (gap: Gap) => gap.sonarrEligible,
       };
     }
@@ -1322,7 +1421,10 @@ export class RecommendedComponent implements OnInit, OnDestroy {
       getConfig: () => this.radarrService.getConfig(),
       ownedIds: () => this.radarrService.getLibraryTmdbIds().pipe(
         map(res => res.tmdb_ids || []), catchError(() => of([] as number[]))),
-      add: (gap: Gap) => this.radarrService.addMovie(gap.id, gap.name, parseInt(String(gap.year), 10) || 0),
+      add: (gap: Gap) => this.radarrService.addMovie(gap.id, gap.name, parseInt(String(gap.year), 10) || 0, {
+        source: this.activeSource, server: this.activeServerName,
+        library_names: this.downloaderLibraries, root_folder_path: this.radarrRootFolderPath,
+      }),
       eligible: (gap: Gap) => gap.radarrEligible,
     };
   }

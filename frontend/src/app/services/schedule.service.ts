@@ -33,7 +33,7 @@ export interface ScheduleConfig {
   run_history: ScheduleLastRun[];
   presets: { [key: string]: string };  // frequency key → label (Hourly, Daily, …)
   days: { [key: string]: string };     // day-of-week key → label (mon → Monday)
-  // Convenience fields summarising both schedules (used by the dashboard).
+  // Legacy convenience fields summarising both schedules.
   enabled: boolean;
   preset: string;
   description: string;

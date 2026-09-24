@@ -1,0 +1,61 @@
+<div class="scan-actions">
+  <button *ngFor="let scan of scans" type="button" class="btn btn-success"
+          [disabled]="!canChoose(scan)" (click)="chooseLibraries(scan)">
+    {{ busy(scan) ? scan.label + ' scan running' : 'Scan ' + scan.label }}
+  </button>
+  <a class="btn btn-outline-light" routerLink="/recommended" [queryParams]="{ latest: '1', type: 'movie' }">View Missing</a>
+</div>
+
+<section *ngIf="picker" class="library-picker" aria-label="Choose scan libraries">
+  <h5>Scan {{ picker.label }}</h5>
+  <p *ngIf="loadingLibraries" role="status">Loading libraries…</p>
+  <p *ngIf="libraryError" role="alert">{{ libraryError }}</p>
+  <fieldset *ngIf="libraries.length" [disabled]="picker.starting">
+    <legend>Libraries on {{ active?.server }}</legend>
+    <label *ngFor="let library of libraries" class="library-option">
+      <input type="checkbox" [checked]="selected.includes(library)" (change)="toggleLibrary(library)">
+      {{ library }}
+    </label>
+  </fieldset>
+  <p *ngIf="libraries.length" class="scan-help">Uses your saved scan settings.</p>
+  <div class="scan-actions">
+    <button type="button" class="btn btn-success" (click)="startScan()"
+            [disabled]="!selected.length || !canChoose(picker)">Start scan</button>
+    <button type="button" class="btn btn-outline-light" (click)="picker = null"
+            [disabled]="loadingLibraries || picker.starting">Close</button>
+  </div>
+</section>
+
+<div class="scan-panels">
+  <ng-container *ngFor="let scan of scans">
+    <div *ngIf="scan.visible || scan.pollError" class="scan-panel">
+      <p *ngIf="scan.pollError" class="scan-error" role="status">{{ scan.label }}: {{ scan.pollError }}</p>
+      <section *ngIf="scan.visible" class="scan-status" [attr.aria-label]="scan.label + ' scan'">
+        <div class="scan-heading">
+          <h5>{{ scan.label }} <span aria-live="polite">— {{ phase(scan) }}</span></h5>
+          <button *ngIf="scan.progress?.status === 'scanning' && !scan.starting" type="button"
+                  class="btn btn-sm btn-outline-danger" (click)="cancelScan(scan)" [disabled]="scan.cancelling">
+            {{ scan.cancelling ? 'Cancelling…' : 'Cancel scan' }}
+          </button>
+        </div>
+        <p *ngIf="scan.progress?.libraries?.length" class="scan-help">{{ scan.progress?.libraries?.join(', ') }}</p>
+        <ng-container *ngIf="scan.progress?.status === 'scanning' && !scan.starting">
+          <div class="progress" role="progressbar" [attr.aria-label]="scan.label + ': ' + phase(scan)"
+               aria-valuemin="0" aria-valuemax="100" [attr.aria-valuenow]="scan.progress?.total ? percent(scan) : null">
+            <div class="progress-bar" [class.progress-bar-striped]="!scan.progress?.total"
+                 [style.width.%]="scan.progress?.total ? percent(scan) : 100"></div>
+          </div>
+          <p class="scan-help mt-2" *ngIf="scan.progress?.total">
+            {{ scan.progress?.processed }} / {{ scan.progress?.total }} ({{ percent(scan) }}%)
+          </p>
+          <p class="current-title">{{ scan.progress?.current_movie || scan.progress?.current_show }}</p>
+        </ng-container>
+        <p *ngIf="scan.error || scan.progress?.status === 'error'" class="scan-error" role="alert">
+          {{ scan.error || scan.progress?.error || 'Scan failed. Try again.' }}
+        </p>
+        <a *ngIf="scan.progress?.status === 'done' && !scan.starting" routerLink="/recommended"
+           [queryParams]="{ latest: '1', type: scan.type }" class="results-link">View missing {{ scan.type === 'movie' ? 'movies' : 'TV shows' }}</a>
+      </section>
+    </div>
+  </ng-container>
+</div>

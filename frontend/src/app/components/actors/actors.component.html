@@ -164,6 +164,8 @@
 
       <!-- Results -->
       <div *ngIf="!loadingGaps && selectedActor">
+        <app-radarr-destination *ngIf="mediaType === 'movie'" [(rootFolderPath)]="radarrRootFolderPath"></app-radarr-destination>
+        <app-sonarr-destination *ngIf="mediaType === 'tv'" [(rootFolderPath)]="sonarrRootFolderPath"></app-sonarr-destination>
         <div class="d-flex align-items-center mb-3 flex-wrap gap-2">
           <button class="btn btn-sm btn-outline-light me-2" (click)="clearActor()">&larr; Back</button>
           <h5 class="regular-text mb-0">{{ selectedActor.name }}</h5>

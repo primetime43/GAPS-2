@@ -4,6 +4,7 @@ import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { environment } from '../../environments/environment';
 import { ApiMessage } from '../models/api-response.model';
+import { ScanStatus } from '../models/scan-status.model';
 
 export interface TvdbConfig {
   enabled: boolean;
@@ -94,6 +95,12 @@ export class TvdbService {
 
   getScanProgress(): Observable<TvdbScanProgress> {
     return this.http.get<TvdbScanProgress>(`${environment.apiUrl}/tvdb/scan/progress`);
+  }
+
+  getScanStatus(): Observable<ScanStatus> {
+    return this.http.get<ScanStatus>(`${environment.apiUrl}/tvdb/scan/progress`, {
+      params: { summary: 'true' },
+    });
   }
 
   cancelScan(): Observable<{ cancelled: boolean }> {

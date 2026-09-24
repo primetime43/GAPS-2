@@ -1,7 +1,7 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { of, Subject, timer } from 'rxjs';
 import { catchError, switchMap, takeUntil } from 'rxjs/operators';
-import { UpdateSelection, UpdateService, UpdateStatus } from '../../../services/update.service';
+import { DevelopStatus, UpdateSelection, UpdateService, UpdateStatus } from '../../../services/update.service';
 
 const REQUEST_KEY = 'gaps-update-request';
 const BUSY = ['queued', 'pulling', 'backing-up', 'restarting', 'checking', 'rolling-back'];
@@ -18,6 +18,9 @@ export class UpdateSettingsComponent implements OnInit, OnDestroy {
   versions: string[] = [];
   error = '';
   releasesError = '';
+  develop: DevelopStatus | null = null;
+  developError = '';
+  checkingDevelop = false;
   reconnecting = false;
   submitting = false;
   confirmVisible = false;
@@ -50,6 +53,24 @@ export class UpdateSettingsComponent implements OnInit, OnDestroy {
       : `Switch to ${this.targetLabel}? GAPS will restart and any active scans will stop. Settings are backed up first.`;
   }
 
+  get matchesDevelop(): boolean {
+    return !!this.develop && this.status?.build.commit === this.develop.commit;
+  }
+
+  checkDevelop(): void {
+    if (this.checkingDevelop || (this.choice.channel !== 'develop' && this.status?.build.channel !== 'develop')) return;
+    this.checkingDevelop = true;
+    this.developError = '';
+    this.updates.getDevelop().pipe(takeUntil(this.destroy$)).subscribe({
+      next: develop => { this.develop = develop; this.checkingDevelop = false; },
+      error: () => {
+        this.develop = null;
+        this.developError = 'Could not check GitHub. The latest Develop commit is unknown.';
+        this.checkingDevelop = false;
+      },
+    });
+  }
+
   ngOnInit(): void {
     try { this.requestId = localStorage.getItem(REQUEST_KEY) || ''; } catch { /* storage can be disabled */ }
     this.updates.getReleases().pipe(takeUntil(this.destroy$)).subscribe({
@@ -68,6 +89,7 @@ export class UpdateSettingsComponent implements OnInit, OnDestroy {
           channel: status.build.channel === 'develop' ? 'develop' : 'stable', version: '',
         };
         this.initialized = true;
+        this.checkDevelop();
       }
       if (this.requestId && status.updater.requestId === this.requestId &&
           ['done', 'error'].includes(status.updater.state || '')) {
@@ -76,6 +98,7 @@ export class UpdateSettingsComponent implements OnInit, OnDestroy {
         if (status.updater.state === 'done') this.reloadPage();
       }
     });
+    timer(120000, 120000).pipe(takeUntil(this.destroy$)).subscribe(() => this.checkDevelop());
   }
 
   apply(): void {

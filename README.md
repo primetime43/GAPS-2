@@ -109,6 +109,20 @@ See the [development guide](docs/development.md) for prerequisites and local set
 6. *(Optional)* Configure **Radarr** and/or **Sonarr** in Settings to send missing titles straight to your downloaders
 7. *(Optional)* Configure **scheduled scans** (separate cadences for movies and TV) and **notifications** in Settings
 
+### Radarr destinations
+
+In **Settings > Radarr > Library root folders**, map each movie library to the corresponding root folder configured in Radarr. Choose the path as Radarr sees it, even if Plex uses a different Docker mount path. Mappings are saved separately for each media-server type, server name, and library name; update them if you rename a server or library.
+
+For additions from **Missing**, **Actors**, and **Similar Movies**, the destination order is: an explicit **Radarr destination** selected above the results, then the selected libraries' mapping, then decade routing (if enabled), then the default root folder. If selected libraries have different mappings, or mix mapped and unmapped libraries, choose a destination explicitly. Multiple libraries mapped to the same root can route automatically. A missing or inaccessible mapped folder produces an error rather than sending the movie elsewhere.
+
+Saved scans restored from disk do not retain server identity, so their automatic routing uses decade/default settings. Choose a destination above those results to override it. The result-level destination resets when starting a new lookup or scan. Default tags apply regardless of the destination.
+
+### Sonarr destinations and tags
+
+In **Settings > Sonarr**, select **Default tags** from the tags already defined in Sonarr and map your TV libraries under **Library root folders**. Tags are applied to every series added from GAPS. Refresh the tag list after creating tags in Sonarr, and use **Save Defaults** to save your selections.
+
+TV results in **Missing** and **Actors** include a **Sonarr destination** selector. The routing order is an explicit destination, then the selected libraries' mapping, then the default root folder. Conflicting or partially mapped library selections require an explicit destination. Mappings are scoped to the media-server type, server name, and library name, and use paths as Sonarr sees them. Missing or inaccessible mapped folders produce an error. Restored scans without server identity use the default unless you choose a destination. Movie and TV destinations are separate and reset on new lookups or media changes.
+
 > **TheTVDB API key:** create a free key on your [TheTVDB dashboard](https://thetvdb.com/dashboard/account/apikey). Some keys are tied to the *User Subscription* funding model and require your subscriber PIN; if so, GAPS will tell you, and you can enter the PIN on the TheTVDB settings page.
 
 ## License

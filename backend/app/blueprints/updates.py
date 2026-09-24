@@ -1,4 +1,5 @@
 import os
+import re
 from pathlib import Path
 import threading
 import time
@@ -13,6 +14,8 @@ from update_protocol import BUSY_STATES, read_json, selection, write_json
 
 updates_bp = Blueprint('updates', __name__)
 _request_lock = threading.Lock()
+_develop_lock = threading.Lock()
+_develop_cache = None
 
 
 def updater_status():
@@ -31,6 +34,15 @@ def updater_status():
         if get_build_info()['installType'] == 'docker' else
         'This is a source checkout. In-app switching is available with the optional Docker updater.'
     )
+    # Helpers are upgraded separately from the app. Reword historical success
+    # messages from older helpers too; their heartbeat is not an update check.
+    if result.get('state') == 'done':
+        legacy_messages = {
+            'Updated to the latest Develop build.': 'Last update installed the Develop image available from the registry at that time.',
+            'Develop is already up to date.': 'At the last check, the running Develop image matched the registry image.',
+            'The selected build is running.': 'Last update completed: the selected build started successfully.',
+        }
+        result['message'] = legacy_messages.get(result.get('message'), result.get('message'))
     return result
 
 
@@ -74,6 +86,32 @@ def get_releases():
         return jsonify(versions=list(dict.fromkeys(versions)))
     except (requests.RequestException, ValueError, TypeError):
         return jsonify(error='Could not load releases from GitHub. You can still enter a version.'), 502
+
+
+@updates_bp.get('/develop')
+def get_develop():
+    """Compare against source history separately from a past Docker pull result."""
+    global _develop_cache
+    with _develop_lock:
+        now = time.monotonic()
+        if _develop_cache and now < _develop_cache['expires']:
+            return jsonify(_develop_cache['body']), _develop_cache['status']
+        try:
+            response = requests.get(
+                'https://api.github.com/repos/primetime43/GAPS-2/commits/develop',
+                headers={'Accept': 'application/vnd.github+json'}, timeout=10,
+            )
+            response.raise_for_status()
+            commit = response.json().get('sha')
+            if not isinstance(commit, str) or not re.fullmatch(r'[a-f0-9]{40}', commit):
+                raise ValueError('Invalid Develop commit')
+            body, status = {'commit': commit, 'checkedAt': time.time()}, 200
+        except (requests.RequestException, ValueError, TypeError, AttributeError):
+            body, status = {'error': 'Could not check the Develop branch on GitHub. Its latest commit is unknown.'}, 502
+        # Share checks across tabs/clients, and cache failures to avoid a retry
+        # storm when GitHub is unavailable or rate-limited.
+        _develop_cache = {'expires': time.monotonic() + 60, 'body': body, 'status': status}
+        return jsonify(body), status
 
 
 @updates_bp.post('/apply')

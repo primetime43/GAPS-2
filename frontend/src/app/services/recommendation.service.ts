@@ -5,6 +5,7 @@ import { map } from 'rxjs/operators';
 import { environment } from '../../environments/environment';
 import { CollectionGap } from '../models/recommendation.model';
 import { Movie } from '../models/movie.model';
+import { ScanStatus } from '../models/scan-status.model';
 
 export interface ScanProgress {
   status: 'idle' | 'scanning' | 'done' | 'error' | 'cancelled';
@@ -95,6 +96,12 @@ export class RecommendationService {
     return this.http.get<ScanProgress>(
       `${environment.apiUrl}/recommendations/scan/progress`
     );
+  }
+
+  getScanStatus(): Observable<ScanStatus> {
+    return this.http.get<ScanStatus>(`${environment.apiUrl}/recommendations/scan/progress`, {
+      params: { summary: 'true' },
+    });
   }
 
   cancelScan(): Observable<{ cancelled: boolean }> {

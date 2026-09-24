@@ -72,6 +72,70 @@ class UpdateApiTests(unittest.TestCase):
         self.assertEqual(info['version'], '2.12.0')
         self.assertEqual(info['commit'], 'abc123')
 
+    def test_legacy_success_is_historical_even_when_helper_heartbeat_is_fresh(self):
+        for message in ('Updated to the latest Develop build.', 'Develop is already up to date.'):
+            with self.subTest(message=message):
+                write_json(self.folder / 'status.json', {
+                    'heartbeat': time.time(), 'state': 'done', 'message': message,
+                })
+                with patch.dict(os.environ, {'APP_COMMIT': '4709c6b', 'APP_CHANNEL': 'develop'}):
+                    result = self.client.get('/api/updates').json
+                self.assertEqual(result['build']['commit'], '4709c6b')
+                self.assertNotIn('latest', result['updater']['message'])
+                self.assertNotIn('up to date', result['updater']['message'])
+                self.assertNotIn('completedAt', result['updater'])
+
+
+class DevelopCheckTests(unittest.TestCase):
+    def setUp(self):
+        app = Flask(__name__)
+        app.register_blueprint(updates_bp, url_prefix='/api/updates')
+        self.client = app.test_client()
+        cache = patch('app.blueprints.updates._develop_cache', None)
+        cache.start()
+        self.addCleanup(cache.stop)
+        get = patch('app.blueprints.updates.requests.get')
+        self.get = get.start()
+        self.addCleanup(get.stop)
+
+    def test_github_head_is_reported_independently_of_running_commit_and_cached(self):
+        self.get.return_value.json.return_value = {'sha': '6' * 40}
+        first = self.client.get('/api/updates/develop')
+        second = self.client.get('/api/updates/develop')
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(first.json['commit'], '6' * 40)
+        self.assertEqual(first.json, second.json)
+        self.assertGreater(first.json['checkedAt'], 0)
+        self.get.assert_called_once()
+        self.assertTrue(self.get.call_args.args[0].endswith('/commits/develop'))
+
+    def test_expired_cache_fetches_new_commit(self):
+        self.get.return_value.json.return_value = {'sha': '6' * 40}
+        with patch('app.blueprints.updates.time.monotonic', return_value=100):
+            self.client.get('/api/updates/develop')
+        self.get.return_value.json.return_value = {'sha': '7' * 40}
+        with patch('app.blueprints.updates.time.monotonic', return_value=161):
+            self.assertEqual(self.client.get('/api/updates/develop').json['commit'], '7' * 40)
+        self.assertEqual(self.get.call_count, 2)
+
+    def test_network_failure_is_unknown_and_does_not_reuse_a_stale_success(self):
+        import requests
+        self.get.return_value.json.return_value = {'sha': '6' * 40}
+        with patch('app.blueprints.updates.time.monotonic', return_value=100):
+            self.client.get('/api/updates/develop')
+        self.get.side_effect = requests.ConnectionError('offline')
+        with patch('app.blueprints.updates.time.monotonic', return_value=161):
+            for _ in range(2):
+                result = self.client.get('/api/updates/develop')
+                self.assertEqual(result.status_code, 502)
+                self.assertNotIn('commit', result.json)
+                self.assertIn('unknown', result.json['error'])
+        self.assertEqual(self.get.call_count, 2)
+
+    def test_malformed_response_does_not_claim_to_know_latest_commit(self):
+        self.get.return_value.json.return_value = {'sha': 'not-a-commit'}
+        self.assertEqual(self.client.get('/api/updates/develop').status_code, 502)
+
 
 def container_fixture():
     return {
@@ -140,6 +204,7 @@ class DockerUpdaterTests(unittest.TestCase):
         self.docker = Mock()
         self.current = container_fixture()
         self.docker.container.side_effect = lambda name: self.current if name == 'gaps2' else None
+        self.docker.create.side_effect = lambda name, spec: self.current.update(Image=spec['Image'])
         self.docker.own_container.return_value = {
             'Mounts': [{'Destination': '/managed-data', 'Type': 'volume', 'Source': '/vol/data', 'RW': True}]}
         self.docker.image.side_effect = lambda name: {
@@ -189,7 +254,8 @@ class DockerUpdaterTests(unittest.TestCase):
         self.updater.tick()
         self.docker.pull.assert_called_once_with('primetime43/gaps-2:develop')
         self.assertEqual(self.docker.create.call_args.args[1]['Image'], 'sha256:new')
-        self.assertEqual(self.updater.status['message'], 'Updated to the latest Develop build.')
+        self.assertEqual(self.updater.status['message'], 'Last update installed the Develop image available from the registry at that time.')
+        self.assertGreater(self.updater.status['completedAt'], 0)
         self.assertFalse((self.updater.control / 'request.json').exists())
 
     def test_repeated_develop_checks_pull_but_do_not_restart_an_up_to_date_app(self):
@@ -202,7 +268,23 @@ class DockerUpdaterTests(unittest.TestCase):
         self.docker.stop.assert_not_called()
         self.docker.create.assert_not_called()
         self.assertEqual(self.updater.status['state'], 'done')
-        self.assertEqual(self.updater.status['message'], 'Develop is already up to date.')
+        self.assertEqual(self.updater.status['message'], 'At the last check, the running Develop image matched the registry image.')
+
+    def test_wrong_running_image_is_not_reported_as_success_even_when_health_passes(self):
+        self.docker.create.side_effect = None  # Simulate replacement not taking effect.
+        self.assertFalse(self.updater.switch({'channel': 'develop'}, 'a' * 32))
+        self.assertEqual(self.updater.status['state'], 'error')
+        self.assertIn('does not match', self.updater.status['message'])
+        self.assertIsNone(self.updater.status['completedAt'])
+        self.assertFalse((self.updater.state / 'selection.json').exists())
+
+    def test_heartbeat_does_not_refresh_completion_timestamp(self):
+        self.assertTrue(self.updater.switch({'channel': 'develop'}, 'a' * 32))
+        completed = self.updater.status['completedAt']
+        with patch('docker_updater.time.time', return_value=completed + 600):
+            self.updater.tick()
+        self.assertEqual(self.updater.status['completedAt'], completed)
+        self.assertEqual(self.updater.status['heartbeat'], completed + 600)
 
     def test_failed_start_restores_previous_image_and_settings(self):
         def health():
