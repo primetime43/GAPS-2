@@ -1,6 +1,7 @@
 import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { RouterTestingModule } from '@angular/router/testing';
+import { Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { Component, Input, Output, EventEmitter } from '@angular/core';
 import { of, Subject, throwError } from 'rxjs';
@@ -550,4 +551,75 @@ describe('RecommendedComponent', () => {
     expect(component.radarrRootFolderPath).toBe('');
     expect(component.downloaderLibraries).toEqual([]);
   });
+  function dashboardLink(type: 'movie' | 'tv'): void {
+    const router = TestBed.inject(Router);
+    const url = router.parseUrl(`/recommended?latest=1&type=${type}`);
+    spyOn(router, 'parseUrl').and.returnValue(url);
+    activeServerService.getActive.and.returnValue(of(activeServer('plex', 'Plex', [
+      { title: 'Movies', type: 'movie' }, { title: 'Shows', type: 'show' },
+    ])));
+  }
+
+  it('opens the latest TV scan from the dashboard in the Missing filter', () => {
+    dashboardLink('tv');
+    tvdbService.getScanProgress.and.returnValue(of({
+      status: 'done', phase: 'titles', processed: 10, total: 10, current_show: '', franchises_found: 1,
+      gaps: [{ tvdbId: 42, name: 'Missing Show', year: 2025, posterUrl: null, overview: '', slug: '', franchiseName: 'Series', owned: false }],
+      total_owned: 10, libraries: ['Shows'], completed_at: '2026-09-24T00:00:00Z', error: null,
+    }));
+    fixture.detectChanges();
+    expect(component.mediaType).toBe('tv');
+    expect(component.view).toBe('missing');
+    expect(component.allGaps[0].name).toBe('Missing Show');
+    expect(component.selectedLibraries).toEqual(['Shows']);
+    expect(component.downloaderLibraries).toEqual([]);
+    expect(recommendationService.getScanProgress).not.toHaveBeenCalled();
+  });
+
+  it('replaces stale cached results with an empty completed dashboard scan', () => {
+    dashboardLink('movie');
+    recommendationService.getScanProgress.and.returnValue(of({
+      status: 'done', processed: 10, total: 10, current_movie: '', collections_found: 0,
+      gaps: [], total_owned: 10, libraries: ['Movies'], completed_at: '2026-09-24T00:00:00Z', error: null,
+    }));
+    component.allGaps = [gap({ id: 1, name: 'Old results' })];
+    component.activeServerName = 'Plex';
+    (component as any).cacheCompletedScan(['Movies'], component.allGaps, 1);
+    component.radarrRootFolderPath = '/old';
+    (component as any).captureSavedScanParam();
+    (component as any).loadContext(false);
+    expect(component.allGaps).toEqual([]);
+    expect(component.scanMode).toBeTrue();
+    expect(component.totalOwned).toBe(10);
+    expect(component.loadingGaps).toBeFalse();
+    expect(component.radarrRootFolderPath).toBe('');
+    expect(recommendationService.cancelScan).not.toHaveBeenCalled();
+    libraryService.getMovies.and.returnValue(of({ movies: [] }));
+    component.loadItems();
+    expect(component.allGaps).toEqual([]);
+  });
+
+  it('attaches to a running dashboard scan without starting or cancelling another', fakeAsync(() => {
+    dashboardLink('movie');
+    recommendationService.getScanProgress.and.returnValue(of({
+      status: 'scanning', processed: 5, total: 10, current_movie: 'Movie', collections_found: 1,
+      gaps: [], total_owned: 10, libraries: ['Movies'], completed_at: null, error: null,
+    }));
+    fixture.detectChanges();
+    tick();
+    expect(component.loadingGaps).toBeTrue();
+    expect(component.scanProgress?.percent).toBe(50);
+    expect(recommendationService.startScan).not.toHaveBeenCalled();
+    expect(recommendationService.cancelScan).not.toHaveBeenCalled();
+    fixture.destroy();
+  }));
+
+  it('shows a useful message when the dashboard scan cannot be loaded', () => {
+    dashboardLink('tv');
+    tvdbService.getScanProgress.and.returnValue(throwError(() => new Error('offline')));
+    fixture.detectChanges();
+    expect(component.loadingGaps).toBeFalse();
+    expect(component.errorMessage).toContain('Could not load the latest scan');
+  });
+
 });

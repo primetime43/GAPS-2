@@ -73,7 +73,11 @@ export class IndexComponent implements OnInit {
       error: () => {}
     });
 
-    this.scanHistoryService.get().subscribe({
+    this.loadScanHistory();
+  }
+
+  loadScanHistory(): void {
+    this.scanHistoryService.get().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (resp) => {
         this.lastMovieScan = resp.lastMovie;
         this.lastTvScan = resp.lastTv;

@@ -1,0 +1,28 @@
+.scan-actions, .scan-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.library-picker, .scan-status {
+  margin-top: 16px;
+  padding: 16px;
+  background: #2d2d2d;
+  border: 1px solid #444;
+  border-radius: 8px;
+}
+
+.scan-heading { justify-content: space-between; margin-bottom: 8px; }
+h5 { color: #fff; font-size: 16px; margin: 0 0 8px; }
+.scan-heading h5 { margin: 0; }
+.scan-heading h5 span, .scan-help, .current-title { color: #ccc; font-size: 14px; }
+legend { font-size: 14px; color: #ccc; }
+.library-option { display: flex; align-items: center; gap: 8px; padding: 6px 0; overflow-wrap: anywhere; }
+.library-option input { accent-color: #00bc8c; }
+.scan-help { margin: 8px 0; overflow-wrap: anywhere; }
+.current-title { overflow-wrap: anywhere; margin-bottom: 0; }
+.scan-error { color: #ffbc9a; margin-bottom: 8px; }
+.progress { height: 8px; background: #444; }
+.progress-bar { background-color: #00bc8c; }
+.results-link { color: #72e4c7; }

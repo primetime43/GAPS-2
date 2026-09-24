@@ -5,8 +5,8 @@ import { catchError, filter, map, skip, switchMap, takeUntil } from 'rxjs/operat
 import { of } from 'rxjs';
 import { ActiveServerService } from '../../services/active-server.service';
 import { LibraryService } from '../../services/library.service';
-import { RecommendationService } from '../../services/recommendation.service';
-import { TvdbService } from '../../services/tvdb.service';
+import { RecommendationService, ScanProgress } from '../../services/recommendation.service';
+import { TvdbService, TvdbScanProgress } from '../../services/tvdb.service';
 import { Gap } from '../../models/recommendation.model';
 import { MediaLibrary } from '../../models/media-server.model';
 import { PreferencesService, MissingFilters } from '../../services/preferences.service';
@@ -333,11 +333,79 @@ export class RecommendedComponent implements OnInit, OnDestroy {
    * it works whether or not the route component was reused. */
   private captureSavedScanParam(): void {
     const qp = this.router.parseUrl(this.router.url).queryParams || {};
+    this.pendingLatestScan = qp['latest'] === '1';
+    if (this.pendingLatestScan) {
+      // A dashboard link must replace a reused view's old results without
+      // cancelling a movie or TV scan that is still running on the server.
+      this.cancelResultRequests();
+      this.stopPolling();
+      this.itemsChanged$.next();
+      this.mediaChanged$.next();
+      this.mediaType = qp['type'] === 'tv' ? 'tv' : 'movie';
+      this.pendingSavedScanId = null;
+      this.pendingIgnoreGap = null;
+      this.selectedItem = null;
+      this.selectedLibraries = [];
+      this.items = [];
+      this.loadingItems = false;
+      this.allGaps = [];
+      this.collectionGroups = [];
+      this.filteredGroups = [];
+      this.scanProgress = null;
+      this.savedScanInfo = null;
+      this.scanMode = false;
+      this.errorMessage = '';
+      this.searchFilter = '';
+      this.downloaderLibraries = [];
+      this.radarrRootFolderPath = '';
+      this.sonarrRootFolderPath = '';
+      return;
+    }
     const scanId = qp['scan'];
     if (!scanId) return;
     this.pendingSavedScanId = scanId;
     const type = qp['type'];
     if (type === 'tv' || type === 'movie') this.mediaType = type;
+  }
+
+  private pendingLatestScan = false;
+
+  private loadLatestScan(): void {
+    this.loadingGaps = true;
+    this.scanMode = true;
+    this.view = 'missing';
+    this.genreFilter = null;
+    const progress$: Observable<ScanProgress | TvdbScanProgress> = this.mediaType === 'tv'
+      ? this.tvdb.getScanProgress() : this.recommendationService.getScanProgress();
+    progress$.pipe(takeUntil(this.resultsChanged$), takeUntil(this.destroy$)).subscribe({
+      next: progress => {
+        this.selectedLibraries = (progress.libraries || []).filter(name => this.libraries.some(lib => lib.title === name));
+        // Progress has no server identity, so do not infer downloader mappings.
+        this.downloaderLibraries = [];
+        if (progress.status === 'scanning') {
+          this.scanProgress = this.normalizeProgress(progress);
+          this.startPolling(progress.libraries || []);
+          return;
+        }
+        this.loadingGaps = false;
+        if (progress.status === 'done') {
+          this.allGaps = this.normalizeGaps(progress.gaps || []);
+          this.totalOwned = progress.total_owned;
+          this.imdbRatingsLoaded = false;
+          this.applyFilter();
+          this.cacheCompletedScan(progress.libraries || [], this.allGaps, progress.total_owned);
+        } else {
+          this.scanMode = false;
+          this.errorMessage = progress.status === 'error' ? (progress.error || 'Scan failed.')
+            : progress.status === 'cancelled' ? 'The scan was cancelled.' : 'No scan results yet. Select libraries to run a scan.';
+        }
+      },
+      error: () => {
+        this.loadingGaps = false;
+        this.scanMode = false;
+        this.errorMessage = 'Could not load the latest scan. Please try again.';
+      },
+    });
   }
 
   ngOnDestroy(): void {
@@ -471,6 +539,12 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   }
 
   private finishInitialization(prefs: any, autoSelectLibrary: boolean): void {
+    if (this.pendingLatestScan) {
+      this.pendingLatestScan = false;
+      this.loading = false;
+      this.loadLatestScan();
+      return;
+    }
     // A saved scan was requested (Scan History → Missing view). Load it instead
     // of the normal last-scan restore, regardless of autoSelectLibrary.
     if (this.pendingSavedScanId) {

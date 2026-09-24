@@ -170,6 +170,8 @@ def scan_library_gaps():
 def scan_progress():
     """Poll for scan progress."""
     progress = current_app.tmdb_service.scan_progress
+    if request.args.get('summary') == 'true':
+        progress = {key: value for key, value in progress.items() if key != 'gaps'}
     return jsonify(progress)
 
 

@@ -132,8 +132,5 @@
 
   <!-- Quick Actions -->
   <h4 class="mt-4 text-primary">Quick Actions</h4>
-  <div class="quick-actions mt-3">
-    <a [routerLink]="['/recommended']" class="action-btn">Scan for Missing Movies</a>
-    <a [routerLink]="['/settings']" class="action-btn">Settings</a>
-  </div>
+  <app-scan-controls (scanFinished)="loadScanHistory()"></app-scan-controls>
 </div>

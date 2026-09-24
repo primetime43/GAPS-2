@@ -154,7 +154,10 @@ def scan_tv_gaps():
 
 @tvdb_bp.route('/scan/progress', methods=['GET'])
 def scan_progress():
-    return jsonify(current_app.tvdb_service.scan_progress)
+    progress = current_app.tvdb_service.scan_progress
+    if request.args.get('summary') == 'true':
+        progress = {key: value for key, value in progress.items() if key != 'gaps'}
+    return jsonify(progress)
 
 
 @tvdb_bp.route('/scan/cancel', methods=['POST'])
