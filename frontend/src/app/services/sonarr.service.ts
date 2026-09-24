@@ -13,6 +13,30 @@ export interface SonarrConfig {
   monitored: boolean;
   season_folder: boolean;
   search_on_add: boolean;
+  tags: number[];
+  library_root_folders: SonarrLibraryMapping[];
+}
+
+export interface SonarrTag {
+  id: number;
+  label: string;
+}
+
+export interface SonarrLibrary {
+  source: string;
+  server: string;
+  library: string;
+}
+
+export interface SonarrLibraryMapping extends SonarrLibrary {
+  root_folder_path: string;
+}
+
+export interface SonarrAddContext {
+  source: string;
+  server: string;
+  library_names: string[];
+  root_folder_path?: string;
 }
 
 export interface SonarrQualityProfile {
@@ -59,10 +83,19 @@ export class SonarrService {
     return this.http.get<{ tvdb_ids: number[] }>(`${environment.apiUrl}/sonarr/series`);
   }
 
-  addSeries(tvdbId: number, title: string): Observable<ApiMessage> {
+  getTags(): Observable<SonarrTag[]> {
+    return this.http.get<SonarrTag[]>(`${environment.apiUrl}/sonarr/tags`);
+  }
+
+  getLibraries(): Observable<SonarrLibrary[]> {
+    return this.http.get<SonarrLibrary[]>(`${environment.apiUrl}/sonarr/libraries`);
+  }
+
+  addSeries(tvdbId: number, title: string, context?: SonarrAddContext): Observable<ApiMessage> {
     return this.http.post<ApiMessage>(`${environment.apiUrl}/sonarr/add`, {
       tvdb_id: tvdbId,
       title,
+      ...context,
     });
   }
 }

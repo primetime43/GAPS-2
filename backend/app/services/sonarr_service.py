@@ -44,9 +44,33 @@ class SonarrService:
             'monitored': saved.get('monitored', True),
             'season_folder': saved.get('season_folder', True),
             'search_on_add': saved.get('search_on_add', True),
+            'tags': saved.get('tags', []),
+            'library_root_folders': saved.get('library_root_folders', []),
         }
 
     def save_config(self, data: dict) -> dict:
+        tags = data.get('tags', [])
+        if not isinstance(tags, list) or any(type(tag) is not int or tag <= 0 for tag in tags):
+            raise ValueError('Tags must be a list of positive integer IDs')
+        mappings = data.get('library_root_folders', [])
+        if not isinstance(mappings, list):
+            raise ValueError('Library root folders must be a list')
+        cleaned_mappings = []
+        seen = set()
+        for mapping in mappings:
+            fields = ('source', 'server', 'library', 'root_folder_path')
+            if not isinstance(mapping, dict) or any(
+                not isinstance(mapping.get(key), str) or not mapping[key].strip() for key in fields
+            ):
+                raise ValueError('Each library mapping requires a source, server, library, and root folder')
+            if mapping['source'] not in ('plex', 'jellyfin', 'emby'):
+                raise ValueError('Unknown library mapping source')
+            cleaned_mapping = {key: mapping[key].strip() for key in fields}
+            identity = tuple(cleaned_mapping[key] for key in ('source', 'server', 'library'))
+            if identity in seen:
+                raise ValueError('Only one root folder may be mapped to each library')
+            seen.add(identity)
+            cleaned_mappings.append(cleaned_mapping)
         cleaned = {
             'url': _normalize_url(data.get('url', '')),
             'api_key': (data.get('api_key') or '').strip(),
@@ -55,6 +79,8 @@ class SonarrService:
             'monitored': bool(data.get('monitored', True)),
             'season_folder': bool(data.get('season_folder', True)),
             'search_on_add': bool(data.get('search_on_add', True)),
+            'tags': list(dict.fromkeys(tags)),
+            'library_root_folders': cleaned_mappings,
         }
         config_store.put(CONFIG_KEY, cleaned)
         return self.get_config()
@@ -119,6 +145,15 @@ class SonarrService:
             for f in resp.json()
         ]
 
+    def get_tags(self) -> list[dict]:
+        creds = self._get_url_key()
+        if not creds:
+            return []
+        url, api_key = creds
+        resp = self._request('GET', f'{url}/api/v3/tag', api_key)
+        resp.raise_for_status()
+        return [{'id': tag['id'], 'label': tag['label']} for tag in resp.json()]
+
     def get_library_tvdb_ids(self) -> list[int]:
         """Return the TheTVDB ids of every series already in the Sonarr library."""
         creds = self._get_url_key()
@@ -149,7 +184,9 @@ class SonarrService:
             time.sleep(VERIFY_INTERVAL_SECONDS)
         return False
 
-    def add_series(self, tvdb_id: int, title: str = '') -> tuple[bool, str]:
+    def add_series(self, tvdb_id: int, title: str = '', *,
+                   source: str = '', server: str = '', library_names: list[str] | None = None,
+                   root_folder_path: str = '') -> tuple[bool, str]:
         """Add a series to Sonarr by TheTVDB id.
 
         Returns (success, message). Treats "already added" responses as success.
@@ -160,8 +197,31 @@ class SonarrService:
         url, api_key = creds
 
         cfg = self.get_config()
-        if not cfg['quality_profile_id'] or not cfg['root_folder_path']:
+        # An explicit destination wins; otherwise only route automatically when
+        # every selected library has the same mapping. Never guess between roots.
+        if not root_folder_path and library_names:
+            mappings = {
+                m['library']: m['root_folder_path']
+                for m in cfg.get('library_root_folders', [])
+                if m['source'] == source and m['server'] == server
+            }
+            paths = {mappings.get(name) for name in library_names}
+            mapped_paths = paths - {None}
+            if mapped_paths and len(paths) > 1:
+                return False, 'Selected libraries have different Sonarr destinations. Choose a Sonarr destination above the results.'
+            if mapped_paths:
+                root_folder_path = mapped_paths.pop()
+
+        if not cfg['quality_profile_id'] or not (root_folder_path or cfg['root_folder_path']):
             return False, 'Quality profile and root folder must be configured first'
+
+        if root_folder_path:
+            try:
+                folders = self.get_root_folders()
+            except requests.exceptions.RequestException:
+                return False, 'Could not verify the Sonarr destination. Check the connection and try again.'
+            if not any(f['path'] == root_folder_path and f['accessible'] for f in folders):
+                return False, 'The Sonarr destination is missing or inaccessible. Update the library mapping or choose another destination.'
 
         # Look up series metadata from Sonarr's TheTVDB proxy so the payload
         # includes images/seasons/titleSlug.
@@ -188,7 +248,8 @@ class SonarrService:
             'images': series.get('images', []),
             'seasons': series.get('seasons', []),
             'qualityProfileId': cfg['quality_profile_id'],
-            'rootFolderPath': cfg['root_folder_path'],
+            'rootFolderPath': root_folder_path or cfg['root_folder_path'],
+            'tags': cfg.get('tags', []),
             'monitored': cfg['monitored'],
             'seasonFolder': cfg['season_folder'],
             'addOptions': {
@@ -213,7 +274,7 @@ class SonarrService:
             return False, f'Sonarr request failed: {e}'
 
         if resp.status_code in (200, 201):
-            return True, f'Added "{payload["title"]}" to Sonarr'
+            return True, f'Added "{payload["title"]}" to Sonarr ({payload["rootFolderPath"]})'
 
         if resp.status_code == 400:
             try:

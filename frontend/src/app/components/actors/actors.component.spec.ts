@@ -5,6 +5,7 @@ import { FormsModule } from '@angular/forms';
 import { of, Subject, throwError } from 'rxjs';
 import { ActorsComponent } from './actors.component';
 import { RadarrDestinationComponent } from '../radarr-destination/radarr-destination.component';
+import { SonarrDestinationComponent } from '../sonarr-destination/sonarr-destination.component';
 import { ConfirmModalComponent } from '../confirm-modal/confirm-modal.component';
 import { CompactNumberPipe } from '../../pipes/compact-number.pipe';
 import { ActiveServerService } from '../../services/active-server.service';
@@ -39,7 +40,7 @@ describe('ActorsComponent', () => {
     tmdb = jasmine.createSpyObj('TmdbService', ['getGenres']);
     tmdb.getGenres.and.returnValue(of([]));
     await TestBed.configureTestingModule({
-      imports: [HttpClientTestingModule, RouterTestingModule, FormsModule, RadarrDestinationComponent],
+      imports: [HttpClientTestingModule, RouterTestingModule, FormsModule, RadarrDestinationComponent, SonarrDestinationComponent],
       declarations: [ActorsComponent, ConfirmModalComponent, CompactNumberPipe],
       providers: [
         { provide: ActorService, useValue: actors },
@@ -275,5 +276,26 @@ describe('ActorsComponent', () => {
   it('uses the release year for dateless movies like the Missing page', () => {
     component.selectActor(actor);
     expect(component.isFutureRelease({ ...component.allGaps[0], releaseDate: undefined, year: 2000 })).toBeFalse();
+  });
+
+  it('routes TV credits to Sonarr and resets destinations when changing media', () => {
+    actors.getActorGaps.and.returnValue(of({ actor: null, gaps: [
+      { ...credit, tvdbId: 202, name: 'Test show' },
+    ] } as any));
+    component.setMediaType('tv');
+    component.selectActor(actor);
+    component.downloaderEnabled = true;
+    component.sonarrRootFolderPath = '/tv';
+    component.radarrRootFolderPath = '/movies';
+    const sonarr = TestBed.inject(SonarrService);
+    sonarr.addSeries = jasmine.createSpy('addSeries').and.returnValue(of({ message: 'Added' }));
+    component.send(component.allGaps[0], new Event('click'));
+    expect(sonarr.addSeries).toHaveBeenCalledWith(202, 'Test show', {
+      source: 'jellyfin', server: 'Test server', library_names: ['TV'], root_folder_path: '/tv',
+    });
+    component.setMediaType('movie');
+    expect(component.sonarrRootFolderPath).toBe('');
+    expect(component.radarrRootFolderPath).toBe('');
+    expect(component.downloaderLibraries).toEqual(['Movies', 'More movies']);
   });
 });

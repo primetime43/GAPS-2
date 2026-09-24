@@ -117,6 +117,12 @@ For additions from **Missing**, **Actors**, and **Similar Movies**, the destinat
 
 Saved scans restored from disk do not retain server identity, so their automatic routing uses decade/default settings. Choose a destination above those results to override it. The result-level destination resets when starting a new lookup or scan. Default tags apply regardless of the destination.
 
+### Sonarr destinations and tags
+
+In **Settings > Sonarr**, select **Default tags** from the tags already defined in Sonarr and map your TV libraries under **Library root folders**. Tags are applied to every series added from GAPS. Refresh the tag list after creating tags in Sonarr, and use **Save Defaults** to save your selections.
+
+TV results in **Missing** and **Actors** include a **Sonarr destination** selector. The routing order is an explicit destination, then the selected libraries' mapping, then the default root folder. Conflicting or partially mapped library selections require an explicit destination. Mappings are scoped to the media-server type, server name, and library name, and use paths as Sonarr sees them. Missing or inaccessible mapped folders produce an error. Restored scans without server identity use the default unless you choose a destination. Movie and TV destinations are separate and reset on new lookups or media changes.
+
 > **TheTVDB API key:** create a free key on your [TheTVDB dashboard](https://thetvdb.com/dashboard/account/apikey). Some keys are tied to the *User Subscription* funding model and require your subscriber PIN; if so, GAPS will tell you, and you can enter the PIN on the TheTVDB settings page.
 
 ## License

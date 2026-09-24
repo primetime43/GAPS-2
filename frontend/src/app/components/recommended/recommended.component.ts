@@ -239,7 +239,8 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   activeSource: 'plex' | 'jellyfin' | 'emby' = 'plex';
   activeServerName = '';
   radarrRootFolderPath = '';
-  radarrLibraries: string[] = [];
+  sonarrRootFolderPath = '';
+  downloaderLibraries: string[] = [];
 
   // TheTVDB availability (TV mode)
   tvdbEnabled = false;
@@ -360,6 +361,9 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     this.itemsChanged$.next();
     this.mediaChanged$.next();
     this.mediaType = type;
+    this.radarrRootFolderPath = '';
+    this.sonarrRootFolderPath = '';
+    this.downloaderLibraries = [];
     this.pendingIgnoreGap = null;
     this.savedScanInfo = null;
     this.stopPolling();
@@ -511,7 +515,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
       if (validScan) {
         // Persisted progress has no server identity, so do not infer a mapping
         // from a different server that happens to have the same library names.
-        this.radarrLibraries = [];
+        this.downloaderLibraries = [];
         this.allGaps = this.normalizeGaps(progress!.gaps);
         this.totalOwned = progress!.total_owned;
         this.scanMode = true;
@@ -565,8 +569,9 @@ export class RecommendedComponent implements OnInit, OnDestroy {
           l => this.libraries.some(x => x.title === l),
         );
         this.savedScanInfo = { timestamp: resp.timestamp, libraries: resp.libraries || [] };
-        this.radarrLibraries = [];
+        this.downloaderLibraries = [];
         this.radarrRootFolderPath = '';
+        this.sonarrRootFolderPath = '';
         if (this.mediaType === 'tv') this.genreFilter = null;
         this.allGaps = this.normalizeGaps(resp.gaps || []);
         this.totalOwned = resp.totalOwned || 0;
@@ -588,7 +593,8 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   /** Load the browse list for the selected libraries, merged and de-duplicated. */
   loadItems(): void {
     this.radarrRootFolderPath = '';
-    this.radarrLibraries = [...this.selectedLibraries];
+    this.sonarrRootFolderPath = '';
+    this.downloaderLibraries = [...this.selectedLibraries];
     this.itemsChanged$.next();
     this.cancelResultRequests();
     this.items = [];
@@ -653,7 +659,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     const cached = this.completedScans.get(key);
     if (!cached?.gaps?.length) return;
     this.allGaps = cached.gaps;
-    this.radarrLibraries = [...cached.routingLibraries];
+    this.downloaderLibraries = [...cached.routingLibraries];
     this.totalOwned = cached.totalOwned;
     this.scanMode = true;
     this.applyFilter();
@@ -663,7 +669,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   private cacheCompletedScan(libraries: string[], gaps: Gap[], totalOwned: number): void {
     const key = this.scanKey(libraries);
     if (!key) return;
-    this.completedScans.set(key, { gaps, totalOwned, routingLibraries: [...this.radarrLibraries] });
+    this.completedScans.set(key, { gaps, totalOwned, routingLibraries: [...this.downloaderLibraries] });
   }
 
   private scanKey(libraries: string[]): string {
@@ -725,8 +731,9 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     this.errorMessage = '';
 
     const scanLibraries = [...this.selectedLibraries];
-    this.radarrLibraries = [...scanLibraries];
+    this.downloaderLibraries = [...scanLibraries];
     this.radarrRootFolderPath = '';
+    this.sonarrRootFolderPath = '';
 
     if (this.mediaType === 'tv') {
       this.tvdb.startScan({
@@ -882,8 +889,9 @@ export class RecommendedComponent implements OnInit, OnDestroy {
 
   private fetchGapsForSelectedItem(): void {
     if (!this.selectedItem) return;
-    this.radarrLibraries = [...this.selectedLibraries];
+    this.downloaderLibraries = [...this.selectedLibraries];
     this.radarrRootFolderPath = '';
+    this.sonarrRootFolderPath = '';
 
     if (this.mediaType === 'tv') {
       const tvdbId = this.selectedItem.tvdbId;
@@ -1326,7 +1334,10 @@ export class RecommendedComponent implements OnInit, OnDestroy {
         getConfig: () => this.sonarrService.getConfig(),
         ownedIds: () => this.sonarrService.getLibraryTvdbIds().pipe(
           map(res => res.tvdb_ids || []), catchError(() => of([] as number[]))),
-        add: (gap: Gap) => this.sonarrService.addSeries(gap.id, gap.name),
+        add: (gap: Gap) => this.sonarrService.addSeries(gap.id, gap.name, {
+          source: this.activeSource, server: this.activeServerName,
+          library_names: this.downloaderLibraries, root_folder_path: this.sonarrRootFolderPath,
+        }),
         eligible: (gap: Gap) => gap.sonarrEligible,
       };
     }
@@ -1338,7 +1349,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
         map(res => res.tmdb_ids || []), catchError(() => of([] as number[]))),
       add: (gap: Gap) => this.radarrService.addMovie(gap.id, gap.name, parseInt(String(gap.year), 10) || 0, {
         source: this.activeSource, server: this.activeServerName,
-        library_names: this.radarrLibraries, root_folder_path: this.radarrRootFolderPath,
+        library_names: this.downloaderLibraries, root_folder_path: this.radarrRootFolderPath,
       }),
       eligible: (gap: Gap) => gap.radarrEligible,
     };

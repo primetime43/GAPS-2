@@ -1,6 +1,7 @@
 import logging
 from flask import Blueprint, jsonify, request, current_app
 import requests
+from app.services.media_servers import media_service_for
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +26,10 @@ def save_config():
     if api_key and set(api_key) == {'•'}:
         from app.services import config_store
         data['api_key'] = (config_store.get('sonarr', {}) or {}).get('api_key', '')
-    saved = current_app.sonarr_service.save_config(data)
+    try:
+        saved = current_app.sonarr_service.save_config(data)
+    except ValueError as e:
+        return jsonify(error=str(e)), 400
     saved['api_key'] = '••••••' if saved.get('api_key') else ''
     return jsonify(saved)
 
@@ -67,6 +71,28 @@ def get_root_folders():
         return jsonify(error=str(e)), 502
 
 
+@sonarr_bp.route('/tags', methods=['GET'])
+def get_tags():
+    try:
+        return jsonify(current_app.sonarr_service.get_tags())
+    except requests.exceptions.RequestException as e:
+        return jsonify(error=str(e)), 502
+
+
+@sonarr_bp.route('/libraries', methods=['GET'])
+def get_libraries():
+    """Saved TV libraries, scoped to their server; never expose credentials."""
+    libraries = []
+    for source in ('plex', 'jellyfin', 'emby'):
+        active = media_service_for(current_app, source).get_active_server()
+        if not active:
+            continue
+        for library in active.get('libraries', []):
+            if library.get('type') in ('show', 'tvshows'):
+                libraries.append({'source': source, 'server': active['server'], 'library': library['title']})
+    return jsonify(libraries)
+
+
 @sonarr_bp.route('/series', methods=['GET'])
 def get_series():
     """Return TheTVDB ids already in the Sonarr library, so the UI can flag them."""
@@ -84,7 +110,21 @@ def add_series():
         return jsonify(error='tvdb_id is required'), 400
 
     title = data.get('title', '')
-    ok, msg = current_app.sonarr_service.add_series(tvdb_id, title=title)
+    source = data.get('source', '')
+    server = data.get('server', '')
+    names = data.get('library_names', [])
+    root = data.get('root_folder_path', '')
+    if (not isinstance(source, str) or source not in ('', 'plex', 'jellyfin', 'emby')
+            or not isinstance(server, str) or not isinstance(root, str)
+            or not isinstance(names, list)
+            or any(not isinstance(name, str) or not name.strip() for name in names)
+            or (names and (not source or not server))):
+        return jsonify(error='Invalid Sonarr library context'), 400
+
+    ok, msg = current_app.sonarr_service.add_series(
+        tvdb_id, title=title, source=source, server=server,
+        library_names=names, root_folder_path=root.strip(),
+    )
     if ok:
         return jsonify(message=msg)
     return jsonify(error=msg), 400

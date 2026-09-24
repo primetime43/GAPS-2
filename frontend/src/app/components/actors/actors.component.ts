@@ -41,7 +41,8 @@ export class ActorsComponent implements OnInit, OnDestroy {
   activeSource: 'plex' | 'jellyfin' | 'emby' = 'plex';
   activeServerName = '';
   radarrRootFolderPath = '';
-  radarrLibraries: string[] = [];
+  sonarrRootFolderPath = '';
+  downloaderLibraries: string[] = [];
 
   // Movies or TV shows — the actor's filmography is fetched accordingly.
   mediaType: MediaType = 'movie';
@@ -219,6 +220,9 @@ export class ActorsComponent implements OnInit, OnDestroy {
     this.gapsChanged$.next();
     this.pendingIgnoreGap = null;
     this.mediaType = type;
+    this.radarrRootFolderPath = '';
+    this.sonarrRootFolderPath = '';
+    this.downloaderLibraries = [];
     this.genreFilter = null;
     this.resultFilter = '';
     this.loadGenres();
@@ -319,8 +323,9 @@ export class ActorsComponent implements OnInit, OnDestroy {
     this.actorDetails = null;
 
     const libs = this.selectedLibraries.length ? this.selectedLibraries : this.libraries.map(l => l.title);
-    this.radarrLibraries = [...libs];
+    this.downloaderLibraries = [...libs];
     this.radarrRootFolderPath = '';
+    this.sonarrRootFolderPath = '';
     // TV gaps bundle IMDb ratings in the response (no on-demand button for TV),
     // so signal the toggle here; movies fetch ratings separately via the button.
     const wantTvImdb = this.mediaType === 'tv' && this.showImdbRatings;
@@ -730,10 +735,13 @@ export class ActorsComponent implements OnInit, OnDestroy {
     this.sendErrors.delete(gap.id);
 
     const add$ = this.mediaType === 'tv'
-      ? this.sonarrService.addSeries(gap.id, gap.name)
+      ? this.sonarrService.addSeries(gap.id, gap.name, {
+        source: this.activeSource, server: this.activeServerName,
+        library_names: this.downloaderLibraries, root_folder_path: this.sonarrRootFolderPath,
+      })
       : this.radarrService.addMovie(gap.id, gap.name, parseInt(String(gap.year), 10) || 0, {
         source: this.activeSource, server: this.activeServerName,
-        library_names: this.radarrLibraries, root_folder_path: this.radarrRootFolderPath,
+        library_names: this.downloaderLibraries, root_folder_path: this.radarrRootFolderPath,
       });
     add$.pipe(takeUntil(this.mediaChanged$), takeUntil(this.destroy$)).subscribe({
       next: () => this.sendStatus.set(gap.id, 'sent'),

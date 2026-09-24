@@ -6,6 +6,7 @@ import { Component, Input, Output, EventEmitter } from '@angular/core';
 import { of, Subject, throwError } from 'rxjs';
 import { RecommendedComponent } from './recommended.component';
 import { RadarrDestinationComponent } from '../radarr-destination/radarr-destination.component';
+import { SonarrDestinationComponent } from '../sonarr-destination/sonarr-destination.component';
 import { ActiveServerService, ActiveServer, MediaServerSource } from '../../services/active-server.service';
 import { MediaLibrary } from '../../models/media-server.model';
 import { LibraryService } from '../../services/library.service';
@@ -94,7 +95,7 @@ describe('RecommendedComponent', () => {
     tmdbService.getGenres.and.returnValue(of([]));
 
     await TestBed.configureTestingModule({
-      imports: [HttpClientTestingModule, FormsModule, RouterTestingModule, RadarrDestinationComponent],
+      imports: [HttpClientTestingModule, FormsModule, RouterTestingModule, RadarrDestinationComponent, SonarrDestinationComponent],
       declarations: [RecommendedComponent, MockConfirmModalComponent],
       providers: [
         { provide: ActiveServerService, useValue: activeServerService },
@@ -511,7 +512,7 @@ describe('RecommendedComponent', () => {
     component.refreshDownloaderStatus('radarr');
     component.activeSource = 'plex';
     component.activeServerName = 'Plex';
-    component.radarrLibraries = ['Movies'];
+    component.downloaderLibraries = ['Movies'];
     component.selectedLibraries = ['Other'];
     component.radarrRootFolderPath = '/movies';
     component.sendToDownloader(gap({ id: 123, name: 'Test', year: 2020, radarrEligible: true }), new Event('click'));
@@ -526,5 +527,27 @@ describe('RecommendedComponent', () => {
     expect(component.pendingIgnoreGap).toBeNull();
     component.onIgnoreConfirm();
     expect(tvdbService.addIgnored).not.toHaveBeenCalled();
+  });
+
+  it('sends TV library context and a Sonarr destination without using the Radarr override', () => {
+    component.setMediaType('tv');
+    component.activeSource = 'plex';
+    component.activeServerName = 'Plex';
+    component.downloaderLibraries = ['TV'];
+    component.sonarrRootFolderPath = '/tv';
+    component.radarrRootFolderPath = '/movies';
+    sonarrService.getConfig.and.returnValue(of({ enabled: true } as any));
+    sonarrService.getLibraryTvdbIds.and.returnValue(of({ tvdb_ids: [] }));
+    sonarrService.addSeries.and.returnValue(of({ message: 'Added' }));
+    component.refreshDownloaderStatus('sonarr');
+    component.sendToDownloader(gap({ id: 123, name: 'Test show', sonarrEligible: true }), new Event('click'));
+    expect(sonarrService.addSeries).toHaveBeenCalledWith(123, 'Test show', {
+      source: 'plex', server: 'Plex', library_names: ['TV'], root_folder_path: '/tv',
+    });
+    expect(radarrService.addMovie).not.toHaveBeenCalled();
+    component.setMediaType('movie');
+    expect(component.sonarrRootFolderPath).toBe('');
+    expect(component.radarrRootFolderPath).toBe('');
+    expect(component.downloaderLibraries).toEqual([]);
   });
 });
