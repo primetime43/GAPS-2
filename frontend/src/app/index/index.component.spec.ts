@@ -28,7 +28,12 @@ describe('IndexComponent', () => {
   });
 
   function flushInitRequests(options?: {
-    tmdb?: { hasKey: boolean };
+    tmdb?: { hasKey: boolean; apiKey?: string };
+    radarr?: any;
+    sonarr?: any;
+    tvdb?: any;
+    failedCheck?: string;
+    disconnectedMedia?: boolean;
     plex?: any;
     jellyfin?: any;
     emby?: any;
@@ -45,6 +50,20 @@ describe('IndexComponent', () => {
       .flush(options?.jellyfin ?? {});
     httpMock.expectOne(`${environment.apiUrl}/emby/active-server`)
       .flush(options?.emby ?? {});
+    for (const service of ['radarr', 'sonarr', 'tvdb'] as const) {
+      httpMock.expectOne(`${environment.apiUrl}/${service}/config`)
+        .flush(options?.[service] ?? { enabled: false });
+    }
+    const checks = ['tmdb/test-key', 'plex/test-active', 'jellyfin/test-active', 'emby/test-active', 'radarr/test', 'sonarr/test', 'tvdb/test'];
+    for (const endpoint of checks) {
+      for (const request of httpMock.match(`${environment.apiUrl}/${endpoint}`)) {
+        if (options?.failedCheck === endpoint) {
+          request.flush({}, { status: 503, statusText: 'Unavailable' });
+        } else {
+          request.flush({ connected: !options?.disconnectedMedia, message: 'OK' });
+        }
+      }
+    }
     httpMock.expectOne(`${environment.apiUrl}/schedule`)
       .flush(options?.schedule ?? { enabled: false, preset: '', next_run: null, last_run: null, run_history: [], presets: {} });
     httpMock.expectOne(`${environment.apiUrl}/scan-history`)
@@ -55,71 +74,109 @@ describe('IndexComponent', () => {
     expect(component).toBeTruthy();
   });
 
-  it('should start in loading state', () => {
-    expect(component.loading).toBeTrue();
-    expect(component.tmdbConfigured).toBeFalse();
-    expect(component.mediaServerConnected).toBeFalse();
+  it('starts each connection in a checking state', () => {
+    expect(component.checkingConnections).toBeTrue();
+    expect(component.connectionAlerts).toEqual([]);
   });
 
-  it('should detect TMDB is configured', fakeAsync(() => {
-    flushInitRequests({ tmdb: { hasKey: true } });
-    tick();
-
-    expect(component.tmdbConfigured).toBeTrue();
-  }));
-
-  it('should detect Plex as connected media server', fakeAsync(() => {
+  it('shows all five connected services in the strip without alerts', () => {
     flushInitRequests({
+      tmdb: { hasKey: true, apiKey: 'test-key' },
       plex: { server: 'My Plex', libraries: [] },
+      radarr: { enabled: true, url: 'http://radarr', api_key: '••••••' },
+      sonarr: { enabled: true, url: 'http://sonarr', api_key: '••••••' },
+      tvdb: { enabled: true, api_key: '••••••', pin: '' },
     });
-    tick();
+    fixture.detectChanges();
+    expect(component.connections.every(connection => connection.state === 'connected')).toBeTrue();
+    expect(fixture.nativeElement.querySelectorAll('.connection').length).toBe(5);
+    expect(fixture.nativeElement.querySelectorAll('.connection-alert').length).toBe(0);
+    expect(component.connections[1].detail).toBe('My Plex');
+  });
 
-    expect(component.mediaServerConnected).toBeTrue();
-    expect(component.mediaServerName).toBe('My Plex');
-    expect(component.mediaServerType).toBe('Plex');
-    expect(component.loading).toBeFalse();
-  }));
-
-  it('should detect Jellyfin as connected media server', fakeAsync(() => {
-    flushInitRequests({
-      jellyfin: { server: 'My Jellyfin', libraries: [] },
+  for (const [source, name] of [['plex', 'Plex'], ['jellyfin', 'Jellyfin'], ['emby', 'Emby']]) {
+    it(`checks the active ${name} server and links to its settings`, () => {
+      flushInitRequests({ [source]: { server: `My ${name}`, libraries: [] } });
+      fixture.detectChanges();
+      expect(component.connections[1].name).toBe(name);
+      expect(component.connections[1].state).toBe('connected');
+      expect(component.connections[1].settings).toBe(`/settings/${source}`);
+      expect(fixture.nativeElement.querySelectorAll('.connection')[1].getAttribute('href')).toBe(`/settings/${source}`);
     });
-    tick();
+  }
 
-    expect(component.mediaServerConnected).toBeTrue();
-    expect(component.mediaServerName).toBe('My Jellyfin');
-    expect(component.mediaServerType).toBe('Jellyfin');
-  }));
+  it('prioritizes Plex when multiple media servers are saved', () => {
+    flushInitRequests({ plex: { server: 'Plex' }, jellyfin: { server: 'Jellyfin' }, emby: { server: 'Emby' } });
+    expect(component.connections[1].name).toBe('Plex');
+  });
 
-  it('should detect Emby as connected media server', fakeAsync(() => {
-    flushInitRequests({
-      emby: { server: 'My Emby', libraries: [] },
-    });
-    tick();
-
-    expect(component.mediaServerConnected).toBeTrue();
-    expect(component.mediaServerName).toBe('My Emby');
-    expect(component.mediaServerType).toBe('Emby');
-  }));
-
-  it('should prioritize Plex over Jellyfin and Emby', fakeAsync(() => {
-    flushInitRequests({
-      plex: { server: 'Plex', libraries: [] },
-      jellyfin: { server: 'Jellyfin', libraries: [] },
-      emby: { server: 'Emby', libraries: [] },
-    });
-    tick();
-
-    expect(component.mediaServerType).toBe('Plex');
-  }));
-
-  it('should show no server connected when none are active', fakeAsync(() => {
+  it('keeps disabled optional services neutral and shows setup alerts for required services', () => {
     flushInitRequests();
-    tick();
+    fixture.detectChanges();
+    expect(component.connections.slice(2).every(connection => connection.state === 'disabled')).toBeTrue();
+    expect(component.connectionAlerts.map(connection => connection.name)).toEqual(['TMDB', 'Media server']);
+    expect(fixture.nativeElement.querySelectorAll('.connection-alert').length).toBe(2);
+    expect(component.checkingConnections).toBeFalse();
+  });
 
-    expect(component.mediaServerConnected).toBeFalse();
-    expect(component.loading).toBeFalse();
+  it('warns about incomplete enabled integrations without testing their connections', () => {
+    flushInitRequests({ radarr: { enabled: true, url: '', api_key: '' }, tvdb: { enabled: true, api_key: '' } });
+    expect(component.connections[2].label).toBe('Setup needed');
+    expect(component.connections[4].label).toBe('Setup needed');
+    httpMock.expectNone(`${environment.apiUrl}/radarr/test`);
+    httpMock.expectNone(`${environment.apiUrl}/tvdb/test`);
+  });
+
+  for (const [index, service] of [[0, 'tmdb'], [2, 'radarr'], [3, 'sonarr'], [4, 'tvdb']] as const) {
+    it(`shows an alert when ${service} credentials or connection fail`, () => {
+      flushInitRequests({
+        tmdb: { hasKey: true, apiKey: 'test-key' },
+        [service]: service === 'tmdb' ? { hasKey: true, apiKey: 'test-key' } : { enabled: true, url: 'http://service', api_key: '••••••' },
+        failedCheck: service === 'tmdb' ? 'tmdb/test-key' : `${service}/test`,
+      });
+      expect(component.connections[index].state).toBe('attention');
+      expect(component.connections[index].label).toBe('Check failed');
+    });
+  }
+
+  it('does not mark a saved but unreachable media server connected', () => {
+    flushInitRequests({ plex: { server: 'My Plex' }, disconnectedMedia: true });
+    expect(component.connections[1].state).toBe('attention');
+    expect(component.connections[1].detail).toContain('My Plex');
+  });
+
+  it('keeps scan summaries visible while checks are pending and allows retry after a timeout', fakeAsync(() => {
+    flushInitRequests();
+    component.checkConnections();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.last-scan-card')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('.check-connections').disabled).toBeTrue();
+    // Leave the network requests pending to exercise timeout handling.
+    const pending = httpMock.match(() => true);
+    tick(30000);
+    fixture.detectChanges();
+    expect(component.checkingConnections).toBeFalse();
+    expect(pending.every(request => request.cancelled)).toBeTrue();
+    expect(fixture.nativeElement.querySelector('.check-connections').disabled).toBeFalse();
+    fixture.nativeElement.querySelector('.check-connections').click();
+    httpMock.expectOne(`${environment.apiUrl}/tmdb/status`).flush({ hasKey: false });
+    for (const source of ['plex', 'jellyfin', 'emby']) {
+      httpMock.expectOne(`${environment.apiUrl}/${source}/active-server`).flush({});
+    }
+    for (const source of ['radarr', 'sonarr', 'tvdb']) {
+      httpMock.expectOne(`${environment.apiUrl}/${source}/config`).flush({ enabled: false });
+    }
+    expect(component.connections[2].state).toBe('disabled');
   }));
+
+  it('cancels pending connection requests when leaving the dashboard', () => {
+    fixture.detectChanges();
+    const pending = httpMock.match(request => !request.url.endsWith('/schedule') && !request.url.endsWith('/scan-history'));
+    httpMock.expectOne(`${environment.apiUrl}/schedule`).flush({});
+    httpMock.expectOne(`${environment.apiUrl}/scan-history`).flush({});
+    fixture.destroy();
+    expect(pending.every(request => request.cancelled)).toBeTrue();
+  });
 
   it('should load schedule status', fakeAsync(() => {
     flushInitRequests({

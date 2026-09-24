@@ -1,3 +1,81 @@
+.connections {
+  display: flex;
+  align-items: center;
+  gap: 8px 16px;
+  padding: 8px 12px;
+  background: #2d2d2d;
+  border: 1px solid #444;
+  border-radius: 8px;
+}
+
+.connection-list {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  gap: 4px 20px;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.connection {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 0;
+  color: #eee;
+  text-decoration: none;
+  font-size: 13px;
+
+  &:hover .connection-name { text-decoration: underline; }
+  &[data-state='connected'] .connection-icon { color: #51d9b5; }
+  &[data-state='attention'] .connection-icon { color: #ffbc70; }
+  &[data-state='disabled'], &[data-state='checking'] { color: #bbb; }
+}
+
+.connection-icon { width: 18px; height: 18px; flex-shrink: 0; }
+.connection-name { font-weight: 600; }
+.connection-label { color: #bbb; }
+
+.check-connections {
+  background: transparent;
+  border: 0;
+  padding: 6px;
+  color: #51d9b5;
+  font-size: 13px;
+
+  &:disabled { color: #bbb; }
+}
+
+.connection:focus-visible, .check-connections:focus-visible, .connection-alert a:focus-visible {
+  outline: 2px solid #51d9b5;
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
+.connection-alert {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  margin-top: 12px;
+  padding: 14px 16px;
+  background: #332d26;
+  border: 1px solid #66513a;
+  border-left: 4px solid #ffbc70;
+  border-radius: 8px;
+
+  h5 { color: #ffcf96; font-size: 16px; margin-bottom: 4px; }
+  p { color: #ddd; margin: 0; }
+  a { color: #72e4c7; white-space: nowrap; }
+}
+
+@media (max-width: 575px) {
+  .connections { align-items: flex-start; }
+  .connection-list { flex-direction: column; gap: 0; }
+}
+
 .status-card {
   display: flex;
   align-items: center;
