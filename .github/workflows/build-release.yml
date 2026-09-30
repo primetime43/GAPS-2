@@ -12,6 +12,8 @@ permissions:
 jobs:
   build-docker:
     runs-on: ubuntu-latest
+    outputs:
+      image-version: ${{ steps.meta.outputs.version }}
     steps:
       - uses: actions/checkout@v4
 
@@ -58,8 +60,24 @@ jobs:
     needs: build-docker
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare Docker installation notes and Compose download
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          IMAGE_VERSION: ${{ needs.build-docker.outputs.image-version }}
+        run: |
+          python3 .github/scripts/prepare_release.py \
+            --tag "$RELEASE_TAG" \
+            --image-version "$IMAGE_VERSION" \
+            --output-dir release-assets
+          docker compose -f release-assets/compose.yml config --quiet
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          body_path: release-assets/docker-notes.md
+          files: release-assets/compose.yml
+          fail_on_unmatched_files: true
           generate_release_notes: true
           prerelease: ${{ contains(github.ref_name, '-') }}
