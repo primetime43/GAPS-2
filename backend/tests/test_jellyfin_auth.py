@@ -115,8 +115,9 @@ class JellyfinAuthTests(unittest.TestCase):
                         self.assertEqual(call.kwargs['headers'], self.headers)
                         self.assertEqual(call.kwargs['params']['StartIndex'], str(index))
 
-    @patch('app.blueprints.libraries.http_requests.get')
-    def test_poster_proxy_uses_each_servers_auth(self, get):
+    @patch('app.blueprints.libraries._poster_session')
+    def test_poster_proxy_uses_each_servers_auth(self, session):
+        get = session.return_value.get
         emby = EmbyService()
         emby._server_url = 'http://emby.test'
         emby._api_key = 'emby-key'

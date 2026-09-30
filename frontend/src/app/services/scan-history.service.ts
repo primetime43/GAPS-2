@@ -40,6 +40,7 @@ export interface ScanHistoryResponse {
 // A saved scan's gaps rehydrated (posters/ratings pulled from cache) in the same
 // shape a live scan returns, so the Missing view can reopen it like a fresh scan.
 export interface ScanHistoryGapsResponse {
+  rating_filter_complete?: boolean;
   gaps: any[];
   mediaType: 'movie' | 'tv';
   libraries: string[];

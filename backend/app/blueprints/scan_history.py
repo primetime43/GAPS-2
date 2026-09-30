@@ -60,4 +60,5 @@ def get_scan_entry_gaps(entry_id: str):
         libraries=entry.get('libraries') or [],
         totalOwned=entry.get('totalOwned') or 0,
         timestamp=entry.get('timestamp'),
+        rating_filter_complete=bool(entry.get('rating_filter_complete')),
     )

@@ -80,9 +80,10 @@ class ConnectionCacheTests(unittest.TestCase):
 
 
 class PosterCacheTests(unittest.TestCase):
-    @patch('app.blueprints.libraries.http_requests.get')
+    @patch('app.blueprints.libraries._poster_session')
     @patch('app.services.config_store.get', return_value={'imageCacheEnabled': True})
-    def test_artwork_cache_is_scoped_to_server_and_credentials(self, config_get, get):
+    def test_artwork_cache_is_scoped_to_server_and_credentials(self, config_get, session):
+        get = session.return_value.get
         _image_cache.clear()
         self.addCleanup(_image_cache.clear)
         app = Flask(__name__)

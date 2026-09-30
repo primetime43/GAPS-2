@@ -3,6 +3,7 @@ import threading
 from urllib.parse import quote
 import requests
 from app.services import config_store
+from app.services.poster_urls import poster_url
 
 logger = logging.getLogger(__name__)
 
@@ -289,9 +290,10 @@ class JellyfinService:
                     except ValueError:
                         pass
 
-                poster_url = None
+                image_url = None
                 if item.get('ImageTags', {}).get('Primary'):
-                    poster_url = f"/api/libraries/image-proxy?source=jellyfin&itemId={item['Id']}"
+                    image_url = poster_url('jellyfin', self._server_url, self._api_key,
+                                           item_id=item['Id'], image_tag=item['ImageTags']['Primary'])
 
                 year = item.get('ProductionYear')
 
@@ -299,7 +301,7 @@ class JellyfinService:
                     'name': item.get('Name', ''),
                     'year': year,
                     'overview': item.get('Overview', ''),
-                    'posterUrl': poster_url,
+                    'posterUrl': image_url,
                     'imdbId': imdb_id,
                     'tmdbId': tmdb_id,
                     'tvdbId': tvdb_id,
@@ -395,15 +397,16 @@ class JellyfinService:
                     except ValueError:
                         pass
 
-                poster_url = None
+                image_url = None
                 if item.get('ImageTags', {}).get('Primary'):
-                    poster_url = f"/api/libraries/image-proxy?source=jellyfin&itemId={item['Id']}"
+                    image_url = poster_url('jellyfin', self._server_url, self._api_key,
+                                           item_id=item['Id'], image_tag=item['ImageTags']['Primary'])
 
                 show_data.append({
                     'name': item.get('Name', ''),
                     'year': item.get('ProductionYear'),
                     'overview': item.get('Overview', ''),
-                    'posterUrl': poster_url,
+                    'posterUrl': image_url,
                     'imdbId': imdb_id,
                     'tmdbId': tmdb_id,
                     'tvdbId': tvdb_id,

@@ -119,7 +119,7 @@ class TmdbService:
         # Seeded from the last persisted scan so the "Last Scan" card and gaps
         # list survive a backend restart.
         self._scan = ScanProgressTracker(
-            extra_fields={'current_movie': '', 'collections_found': 0},
+            extra_fields={'current_movie': '', 'collections_found': 0, 'rating_filter_complete': False},
             seed_key='last_scan',
         )
 
@@ -170,6 +170,14 @@ class TmdbService:
         if self._min_vote_count and vote_count < self._min_vote_count:
             return False
         return True
+
+    def notification_gaps(self, gaps: list[dict]) -> list[dict]:
+        """Apply notification thresholds without discarding stored scan results."""
+        return [g for g in gaps if self._passes_quality_filter({
+            'release_date': g.get('releaseDate'),
+            'vote_average': g.get('voteAverage'),
+            'vote_count': g.get('voteCount'),
+        })]
 
     def clear_cache(self) -> None:
         """Clear all TMDB response caches for a fresh scan."""
@@ -610,11 +618,8 @@ class TmdbService:
                     is_owned = True
             if not show_existing and is_owned:
                 continue
-            # Drop low-tier missing movies at scan time (issue #47) so they're
-            # excluded from the results — and from scheduled scans, which share
-            # this path. Owned titles are never filtered; the user already has them.
-            if not is_owned and not self._passes_quality_filter(part):
-                continue
+            # Retain every title: rating/vote thresholds are reversible view
+            # filters. Scheduled notifications apply their thresholds separately.
             poster = part.get("poster_path")
             release_date = part.get("release_date") or ""
             entries.append({
@@ -713,6 +718,10 @@ class TmdbService:
         prior = config_store.get('last_scan')
         if not isinstance(prior, dict):
             return None
+        # Old scans discarded low-rated titles. Rebuild once using the warm
+        # cache instead of carrying an incomplete result set into quick updates.
+        if not prior.get('rating_filter_complete'):
+            return None
         if not isinstance(prior.get('gaps'), list) or not isinstance(prior.get('owned_keys'), list):
             return None
         if set(prior.get('libraries') or []) != set(libraries):
@@ -772,6 +781,7 @@ class TmdbService:
                 'libraries': list(libraries),
                 'completed_at': completed_at,
                 'owned_keys': [self._movie_key(m) for m in owned_movies],
+                'rating_filter_complete': True,
             })
         except OSError as e:
             logger.warning("Failed to persist last_scan: %s", e)
@@ -796,6 +806,7 @@ class TmdbService:
                 gaps, _ = self.find_collection_gaps(api_key, owned_movies, owned_tmdb_ids, show_existing, generation)
             completed_at = datetime.now(timezone.utc).isoformat()
             final_gaps = gaps or []
+            self._scan.update(generation, rating_filter_complete=True)
             # A newer scan or a cancel superseded us — leave their state alone.
             if not self._scan.finish(generation, gaps=final_gaps,
                                      total_owned=len(owned_tmdb_ids), completed_at=completed_at):

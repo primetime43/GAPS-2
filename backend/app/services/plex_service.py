@@ -1,9 +1,9 @@
 import logging
 import threading
-from urllib.parse import quote
 from plexapi.myplex import MyPlexPinLogin, MyPlexAccount
 from plexapi.server import PlexServer
 from app.services import config_store
+from app.services.poster_urls import poster_url
 
 logger = logging.getLogger(__name__)
 
@@ -315,15 +315,16 @@ class PlexService:
                         elif gid.startswith('tvdb://'):
                             tvdb_id = gid[7:]
 
-                poster_url = None
+                image_url = None
                 if movie.thumb:
-                    poster_url = f"/api/libraries/image-proxy?source=plex&thumb={quote(movie.thumb, safe='')}"
+                    image_url = poster_url('plex', self._active_server.get('serverUrl') or server._baseurl,
+                                           self._active_server.get('token', ''), thumb=movie.thumb)
 
                 movie_data.append({
                     'name': movie.title,
                     'year': movie.year,
                     'overview': getattr(movie, 'summary', ''),
-                    'posterUrl': poster_url,
+                    'posterUrl': image_url,
                     'imdbId': imdb_id,
                     'tmdbId': tmdb_id,
                     'tvdbId': tvdb_id,
@@ -396,15 +397,16 @@ class PlexService:
                             except ValueError:
                                 pass
 
-                poster_url = None
+                image_url = None
                 if show.thumb:
-                    poster_url = f"/api/libraries/image-proxy?source=plex&thumb={quote(show.thumb, safe='')}"
+                    image_url = poster_url('plex', self._active_server.get('serverUrl') or server._baseurl,
+                                           self._active_server.get('token', ''), thumb=show.thumb)
 
                 show_data.append({
                     'name': show.title,
                     'year': show.year,
                     'overview': getattr(show, 'summary', ''),
-                    'posterUrl': poster_url,
+                    'posterUrl': image_url,
                     'imdbId': imdb_id,
                     'tmdbId': tmdb_id,
                     'tvdbId': tvdb_id,
