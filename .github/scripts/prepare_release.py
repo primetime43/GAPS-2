@@ -54,9 +54,6 @@ docker compose up -d
 Open http://localhost:4277. The Compose file uses this release's exact image version and stores settings in the persistent `gaps2-data` Docker volume. If you already have a GAPS installation, set `GAPS_DATA_VOLUME` in a `.env` file to your existing volume name before starting.
 
 For optional in-app updates and channel switching, see the [release switching guide](https://github.com/primetime43/GAPS-2/blob/main/docs/release-switching.md).
-
----
-
 """
     output_dir.mkdir(parents=True, exist_ok=True)
     (output_dir / "compose.yml").write_text(compose, encoding="utf-8")
