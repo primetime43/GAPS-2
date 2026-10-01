@@ -304,7 +304,7 @@
                   <input class="form-check-input" type="checkbox" id="recShowFuture"
                          [(ngModel)]="showFuture" (ngModelChange)="onFilterChange()">
                   <label class="form-check-label" for="recShowFuture"
-                         title="Include titles that haven't been released yet">Future releases</label>
+                         title="Include unreleased titles and titles with no known release date or year">Future releases</label>
                 </div>
               </li>
               <li *ngIf="ignoredIds.size > 0">
