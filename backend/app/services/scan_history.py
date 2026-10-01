@@ -31,8 +31,8 @@ def _is_future_release(gap: dict, today: str, current_year: int) -> bool:
     frontend/src/app/components/recommended/recommended.component.ts — kept in
     sync so scheduled scans count gaps the same way the dashboard displays them.
     Prefer an exact date (movie release / TV first-aired); with no date, fall
-    back to the year, the same for movies and TV (an unparseable year counts as
-    released).
+    back to the year, the same for movies and TV. Without a usable year, treat
+    the title as unreleased until a release is known.
     """
     release_date = gap.get('releaseDate') or ''
     if release_date:
@@ -40,8 +40,8 @@ def _is_future_release(gap: dict, today: str, current_year: int) -> bool:
     try:
         year = int(str(gap.get('year'))[:4])
     except (TypeError, ValueError):
-        return False
-    return year > current_year
+        return True
+    return year <= 0 or year > current_year
 
 
 def actionable_missing(media_type: str, gaps: list[dict]) -> list[dict]:

@@ -391,6 +391,8 @@ describe('RecommendedComponent', () => {
       gap({ id: 4, name: 'Owned future', year: '2099', releaseDate: future, groupName: 'C', owned: true }),
       gap({ id: 5, name: 'Future year only', year: '2099', groupName: 'C', owned: false }),
       gap({ id: 6, name: 'Past year only', year: '1999', groupName: 'C', owned: false }),
+      gap({ id: 7, name: 'Missing date', year: '', groupName: 'C', owned: false }),
+      gap({ id: 8, name: 'Owned unknown date', year: 'N/A', groupName: 'C', owned: true }),
     ];
     component.ignoredIds = new Set();
     component.view = 'all';
@@ -402,10 +404,17 @@ describe('RecommendedComponent', () => {
     expect(titles).toContain('Released');
     expect(titles).toContain('Owned future');
     expect(titles).not.toContain('Future');
-    expect(titles).toContain('Unknown date');
+    expect(titles).not.toContain('Unknown date');
+    expect(titles).not.toContain('Missing date');
+    expect(titles).toContain('Owned unknown date');
     expect(titles).toContain('Past year only');
     expect(titles).not.toContain('Future year only');
-    expect(component.missingCount).toBe(3);
+    expect(component.missingCount).toBe(2);
+
+    component.showFuture = true;
+    component.applyFilter();
+    expect(component.filteredGroups.flatMap(g => g.gaps).length).toBe(8);
+    expect(component.missingCount).toBe(6);
   });
 
   it('toggleIgnore should request confirmation before ignoring an item', () => {
@@ -575,26 +584,27 @@ describe('RecommendedComponent', () => {
   it('filters ratings immediately, preserves raw results, and keeps notifications separate', () => {
     fixture.detectChanges();
     component.allGaps = [
-      gap({ id: 1, name: 'Low rating', tmdbRating: 5.9, tmdbVotes: 200 }),
-      gap({ id: 2, name: 'Few votes', tmdbRating: 8, tmdbVotes: 109 }),
-      gap({ id: 3, name: 'At threshold', tmdbRating: 6, tmdbVotes: 110 }),
+      gap({ id: 1, name: 'Low rating', year: '2000', tmdbRating: 5.9, tmdbVotes: 200 }),
+      gap({ id: 2, name: 'Few votes', year: '2000', tmdbRating: 8, tmdbVotes: 109 }),
+      gap({ id: 3, name: 'At threshold', year: '2000', tmdbRating: 6, tmdbVotes: 110 }),
       gap({ id: 4, name: 'Owned', owned: true, tmdbRating: 2, tmdbVotes: 2 }),
       gap({ id: 5, name: 'Future', releaseDate: '2099-01-01', tmdbRating: 0, tmdbVotes: 0 }),
-      gap({ id: 6, name: 'Unknown rating' }),
+      gap({ id: 6, name: 'Unknown rating', year: '2000' }),
+      gap({ id: 7, name: 'Unknown release', year: 'N/A', tmdbRating: 0, tmdbVotes: 0 }),
     ];
     component.minRating = 6;
     component.minVoteCount = 110;
     component.onRatingFilterChange();
-    expect(component.filteredGroups.flatMap(g => g.gaps.map(x => x.id))).toEqual([3, 4, 5, 6]);
+    expect(component.filteredGroups.flatMap(g => g.gaps.map(x => x.id))).toEqual([3, 4, 5, 6, 7]);
     expect(component.ratingHiddenCount).toBe(2);
-    expect(component.missingCount).toBe(3);
-    expect(component.allGaps.length).toBe(6);
+    expect(component.missingCount).toBe(4);
+    expect(component.allGaps.length).toBe(7);
     expect(preferencesService.save).toHaveBeenCalledWith({ missingFilters: jasmine.objectContaining({ minRating: 6, minVoteCount: 110 }) });
     expect(recommendationService.startScan).not.toHaveBeenCalled();
     component.exportResults('csv');
-    expect(exportService.exportGaps.calls.mostRecent().args[0].map(g => g.id)).toEqual([3, 4, 5, 6]);
+    expect(exportService.exportGaps.calls.mostRecent().args[0].map(g => g.id)).toEqual([3, 4, 5, 6, 7]);
     component.clearRatingFilter();
-    expect(component.filteredGroups.flatMap(g => g.gaps).length).toBe(6);
+    expect(component.filteredGroups.flatMap(g => g.gaps).length).toBe(7);
     expect(component.ratingHiddenCount).toBe(0);
   });
 
@@ -602,7 +612,7 @@ describe('RecommendedComponent', () => {
     fixture.detectChanges();
     component.hasServer = true;
     component.scanMode = true;
-    component.allGaps = [gap({ id: 1, name: 'Hidden title', tmdbRating: 2, tmdbVotes: 10 })];
+    component.allGaps = [gap({ id: 1, name: 'Hidden title', year: '2000', tmdbRating: 2, tmdbVotes: 10 })];
     component.minRating = 6;
     component.onRatingFilterChange();
     fixture.detectChanges();
