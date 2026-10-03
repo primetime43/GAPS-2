@@ -10,6 +10,7 @@ import { RadarrService } from '../../services/radarr.service';
 import { SonarrService } from '../../services/sonarr.service';
 import { TvdbService } from '../../services/tvdb.service';
 import { GapViewService } from '../../services/gap-view.service';
+import { ImdbRatingsLoader } from '../../services/imdb-ratings-loader';
 import { TmdbService, TmdbGenre } from '../../services/tmdb/tmdb.service';
 import { Gap } from '../../models/recommendation.model';
 import { PersonResult, PersonDetails } from '../../models/actor.model';
@@ -95,9 +96,10 @@ export class ActorsComponent implements OnInit, OnDestroy {
   externalLinkProvider: 'tmdb' | 'imdb' = 'tmdb';
   tvLinkProvider: 'tvdb' | 'imdb' = 'tvdb';
 
-  // Movie credits include TMDB ratings; TV credits can request IMDb ratings.
+  // Movie IMDb ratings load separately; TV ratings arrive with the credits.
   showImdbRatings = false;
   showTmdbRatings = true;
+  readonly imdbRatings = new ImdbRatingsLoader(this.gapView);
 
   // Fuller profile for the selected actor, shown as a header above the results.
   actorDetails: PersonDetails | null = null;
@@ -178,6 +180,7 @@ export class ActorsComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.imdbRatings.reset();
     this.renderObserver?.disconnect();
     this.destroy$.next();
     this.destroy$.complete();
@@ -312,6 +315,7 @@ export class ActorsComponent implements OnInit, OnDestroy {
 
   selectActor(actor: PersonResult): void {
     this.gapsChanged$.next();
+    this.imdbRatings.reset();
     this.searching = false;
     this.selectedActor = actor;
     this.searchResults = [];
@@ -326,8 +330,7 @@ export class ActorsComponent implements OnInit, OnDestroy {
     this.downloaderLibraries = [...libs];
     this.radarrRootFolderPath = '';
     this.sonarrRootFolderPath = '';
-    // TV gaps bundle IMDb ratings in the response (no on-demand button for TV),
-    // so signal the toggle here; movies fetch ratings separately via the button.
+    // TV gaps bundle IMDb ratings in the response; movies load them separately.
     const wantTvImdb = this.mediaType === 'tv' && this.showImdbRatings;
     this.actorService.getActorGaps(actor.id, libs, this.activeSource, true, this.showMinor, this.mediaType, wantTvImdb)
       .pipe(takeUntil(this.gapsChanged$), takeUntil(this.destroy$)).subscribe({
@@ -336,6 +339,7 @@ export class ActorsComponent implements OnInit, OnDestroy {
         this.allGaps = this.normalizeGaps(res.gaps);
         this.applyFilter();
         this.loadingGaps = false;
+        this.loadImdbRatings();
       },
       error: (err) => {
         this.errorMessage = err.error?.error || "Failed to load this actor's filmography.";
@@ -346,6 +350,7 @@ export class ActorsComponent implements OnInit, OnDestroy {
 
   clearActor(): void {
     this.gapsChanged$.next();
+    this.imdbRatings.reset();
     this.searching = false;
     this.pendingIgnoreGap = null;
     this.loadingGaps = false;
@@ -446,11 +451,20 @@ export class ActorsComponent implements OnInit, OnDestroy {
   onRatingPrefsChange(): void {
     this.preferencesService.save(this.mediaType === 'tv'
       ? { showImdbRatings: this.showImdbRatings }
-      : { showTmdbRatings: this.showTmdbRatings }
+      : { showImdbRatings: this.showImdbRatings, showTmdbRatings: this.showTmdbRatings }
     ).subscribe({ next: () => {}, error: () => {} });
     if (this.mediaType === 'tv' && this.showImdbRatings && this.selectedActor) {
       this.selectActor(this.selectedActor);
     }
+    this.applyFilter();
+    this.loadImdbRatings();
+  }
+
+  loadImdbRatings(retry = false): void {
+    if (this.mediaType !== 'movie' || !this.showImdbRatings) return;
+    this.imdbRatings.load(this.allGaps, () => {
+      this.applyFilter();
+    }, retry);
   }
 
   setView(view: 'all' | 'owned' | 'missing'): void {
@@ -571,7 +585,9 @@ export class ActorsComponent implements OnInit, OnDestroy {
     if (this.genreFilter != null) {
       filtered = filtered.filter(g => (g.genreIds || []).includes(this.genreFilter as number));
     }
-    filtered = this.gapView.sortGaps(filtered, this.sortBy);
+    filtered = this.sortBy === 'rating' && !this.showImdbRatings
+      ? [...filtered].sort((a, b) => (b.tmdbRating ?? 0) - (a.tmdbRating ?? 0))
+      : this.gapView.sortGaps(filtered, this.sortBy);
 
     const groups = new Map<string, Gap[]>();
     for (const gap of filtered) {

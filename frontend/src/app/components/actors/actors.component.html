@@ -216,7 +216,7 @@
                     <label class="form-check-label" for="actorShowIgnored">Ignored ({{ ignoredIds.size }})</label>
                   </div>
                 </li>
-                <li *ngIf="mediaType === 'tv'">
+                <li>
                   <div class="form-check">
                     <input class="form-check-input" type="checkbox" id="actorShowImdb"
                            [(ngModel)]="showImdbRatings" (ngModelChange)="onRatingPrefsChange()">
@@ -307,6 +307,24 @@
           (ngModelChange)="applyFilter()"
         >
 
+        <div *ngIf="mediaType === 'movie' && showImdbRatings && allGaps.length" class="imdb-status text-muted small d-flex align-items-center flex-wrap gap-2 mb-3" role="status">
+          <ng-container *ngIf="imdbRatings.loading">
+            <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+            Loading IMDb ratings… You can keep browsing.
+          </ng-container>
+          <ng-container *ngIf="!imdbRatings.loading">
+            <span *ngIf="imdbRatings.error" class="text-warning">{{ imdbRatings.error }}</span>
+            <ng-container *ngIf="!imdbRatings.error && imdbRatings.loaded">
+              <span *ngIf="imdbRatings.ratingCount">IMDb ratings available for {{ imdbRatings.ratingCount }} of {{ allGaps.length }} movies.</span>
+              <span *ngIf="!imdbRatings.ratingCount">No IMDb ratings were found.</span>
+            </ng-container>
+            <ng-container *ngIf="imdbRatings.error || (imdbRatings.loaded && imdbRatings.ratingCount < allGaps.length)">
+              <a [routerLink]="['/settings/imdb']">IMDb settings</a>
+              <button type="button" class="btn btn-sm btn-outline-secondary" (click)="loadImdbRatings(true)">Retry IMDb ratings</button>
+            </ng-container>
+          </ng-container>
+        </div>
+
         <!-- Groups (one per actor) -->
         <div *ngFor="let group of visibleGroups; trackBy: trackByGroupName" class="collection-group mb-4">
           <div class="d-flex align-items-center mb-2">
@@ -347,8 +365,8 @@
                   {{ gap.name }}
                 </a>
                 <div class="rec-year">{{ gap.year }}</div>
-                <div class="card-ratings" *ngIf="(mediaType === 'tv' && showImdbRatings && gap.imdbRating) || (mediaType === 'movie' && showTmdbRatings && gap.tmdbRating)">
-                  <span *ngIf="mediaType === 'tv' && showImdbRatings && gap.imdbRating" class="rating-chip imdb" [title]="(gap.imdbVotes | number) + ' votes on IMDb'">
+                <div class="card-ratings" *ngIf="(showImdbRatings && gap.imdbRating != null) || (mediaType === 'movie' && showTmdbRatings && gap.tmdbRating)">
+                  <span *ngIf="showImdbRatings && gap.imdbRating != null" class="rating-chip imdb" [title]="(gap.imdbVotes | number) + ' votes on IMDb'">
                     <img class="rating-logo" src="assets/images/imdb-logo.svg" alt="IMDb"> {{ gap.imdbRating | number:'1.1-1' }}
                     <span class="rating-votes">({{ gap.imdbVotes | compactNumber }})</span>
                   </span>

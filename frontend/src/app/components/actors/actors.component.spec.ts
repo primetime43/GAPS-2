@@ -16,6 +16,7 @@ import { TvdbService } from '../../services/tvdb.service';
 import { RadarrService } from '../../services/radarr.service';
 import { SonarrService } from '../../services/sonarr.service';
 import { TmdbService } from '../../services/tmdb/tmdb.service';
+import { ImdbService } from '../../services/imdb.service';
 
 describe('ActorsComponent', () => {
   let fixture: ComponentFixture<ActorsComponent>;
@@ -24,6 +25,7 @@ describe('ActorsComponent', () => {
   let preferences: jasmine.SpyObj<PreferencesService>;
   let tvdb: jasmine.SpyObj<TvdbService>;
   let tmdb: jasmine.SpyObj<TmdbService>;
+  let imdb: jasmine.SpyObj<ImdbService>;
   const actor = { id: 1, name: 'Test Actor', profileUrl: null, knownFor: '' };
   const credit = { tmdbId: 101, name: 'Test title', year: 2020, releaseDate: '2020-01-01', voteAverage: 8, voteCount: 100 };
 
@@ -39,6 +41,8 @@ describe('ActorsComponent', () => {
     tvdb.addIgnoredBulk.and.returnValue(of({} as any));
     tmdb = jasmine.createSpyObj('TmdbService', ['getGenres']);
     tmdb.getGenres.and.returnValue(of([]));
+    imdb = jasmine.createSpyObj('ImdbService', ['getRatings']);
+    imdb.getRatings.and.returnValue(of({ ratings: {} }));
     await TestBed.configureTestingModule({
       imports: [HttpClientTestingModule, RouterTestingModule, FormsModule, RadarrDestinationComponent, SonarrDestinationComponent],
       declarations: [ActorsComponent, ConfirmModalComponent, CompactNumberPipe],
@@ -47,6 +51,7 @@ describe('ActorsComponent', () => {
         { provide: PreferencesService, useValue: preferences },
         { provide: TvdbService, useValue: tvdb },
         { provide: TmdbService, useValue: tmdb },
+        { provide: ImdbService, useValue: imdb },
         { provide: ActiveServerService, useValue: { getActive: () => of({
           source: 'jellyfin', server: 'Test server', libraries: [
             { title: 'Movies', type: 'movie' }, { title: 'More movies', type: 'movies' },
@@ -129,12 +134,70 @@ describe('ActorsComponent', () => {
     expect(component.selectedActor).toBe(actor);
   });
 
-  it('only offers the movie rating provider that is actually populated', () => {
+  it('offers both movie rating providers and loads IMDb when enabled', () => {
     component.selectActor(actor);
     fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('#actorShowImdb')).toBeNull();
+    expect(fixture.nativeElement.querySelector('#actorShowImdb')).not.toBeNull();
     expect(fixture.nativeElement.querySelector('#actorShowTmdb')).not.toBeNull();
     expect(fixture.nativeElement.querySelector('.rating-chip.tmdb')).not.toBeNull();
+    expect(imdb.getRatings).not.toHaveBeenCalled();
+
+    imdb.getRatings.and.returnValue(of({ ratings: {
+      '101': { imdbId: 'tt123', aggregateRating: 7.5, voteCount: 1200 },
+    } }));
+    fixture.nativeElement.querySelector('#actorShowImdb').click();
+    fixture.detectChanges();
+    expect(imdb.getRatings).toHaveBeenCalledOnceWith([101]);
+    expect(fixture.nativeElement.querySelector('.rating-chip.imdb').textContent).toContain('7.5');
+    expect(fixture.nativeElement.querySelector('.rating-chip.imdb').title).toBe('1,200 votes on IMDb');
+    expect(preferences.save).toHaveBeenCalledWith({ showImdbRatings: true, showTmdbRatings: true });
+  });
+
+  it('loads movie ratings automatically and sorts by the enabled provider', () => {
+    actors.getActorGaps.and.returnValue(of({ actor: null, gaps: [
+      credit, { ...credit, tmdbId: 102, voteAverage: 6 },
+    ] } as any));
+    imdb.getRatings.and.returnValue(of({ ratings: {
+      '101': { imdbId: 'tt123', aggregateRating: 5, voteCount: 100 },
+      '102': { imdbId: 'tt456', aggregateRating: 9, voteCount: 200 },
+    } }));
+    component.showImdbRatings = true;
+    component.sortBy = 'rating';
+    component.selectActor(actor);
+    expect(component.filteredGroups[0].gaps.map(g => g.id)).toEqual([102, 101]);
+    component.showImdbRatings = false;
+    component.onRatingPrefsChange();
+    expect(component.filteredGroups[0].gaps.map(g => g.id)).toEqual([101, 102]);
+  });
+
+  it('offers a retry after a movie rating failure', () => {
+    imdb.getRatings.and.returnValue(throwError(() => new Error('offline')));
+    component.showImdbRatings = true;
+    component.selectActor(actor);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Could not load IMDb ratings');
+    expect(fixture.nativeElement.querySelector('.rec-title-link')).not.toBeNull();
+    imdb.getRatings.and.returnValue(of({ ratings: {} }));
+    fixture.nativeElement.querySelector('.imdb-status button').click();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('No IMDb ratings were found.');
+  });
+
+  it('cancels movie rating requests when changing media or clearing the actor', () => {
+    const pending = new Subject<any>();
+    imdb.getRatings.and.returnValue(pending);
+    component.showImdbRatings = true;
+    component.selectActor(actor);
+    expect(pending.observed).toBeTrue();
+    component.setMediaType('tv');
+    expect(pending.observed).toBeFalse();
+    expect(component.imdbRatings.loading).toBeFalse();
+    expect(imdb.getRatings).toHaveBeenCalledTimes(1);
+    component.setMediaType('movie');
+    expect(pending.observed).toBeTrue();
+    component.clearActor();
+    expect(pending.observed).toBeFalse();
+    expect(component.imdbRatings.loaded).toBeFalse();
   });
 
   it('uses TVDB/IMDb links and only IMDb ratings for TV cards', () => {

@@ -138,11 +138,11 @@ describe('SimilarComponent', () => {
     fixture.detectChanges();
 
     expect(gapView.applyImdbRatings).toHaveBeenCalledOnceWith(component.allSimilar, { suppressErrors: false });
-    expect(component.loadingImdbRatings).toBeTrue();
+    expect(component.imdbRatings.loading).toBeTrue();
     expect(fixture.nativeElement.querySelectorAll('.rec-card').length).toBe(1);
     expect(fixture.nativeElement.textContent).toContain('Loading IMDb ratings');
     pending.next();
-    expect(component.loadingImdbRatings).toBeFalse();
+    expect(component.imdbRatings.loading).toBeFalse();
   });
 
   it('loads ratings when enabled and reuses them after toggling off and on', () => {
@@ -202,14 +202,14 @@ describe('SimilarComponent', () => {
     component.selectMovie(seed);
     fixture.detectChanges();
 
-    expect(component.loadingImdbRatings).toBeFalse();
-    expect(component.imdbRatingsLoaded).toBeFalse();
+    expect(component.imdbRatings.loading).toBeFalse();
+    expect(component.imdbRatings.loaded).toBeFalse();
     expect(fixture.nativeElement.textContent).toContain('Could not load IMDb ratings');
     expect(component.filteredSimilar.length).toBe(1);
     gapView.applyImdbRatings.and.returnValue(of(undefined));
     fixture.nativeElement.querySelector('.imdb-status button').click();
-    expect(component.imdbRatingsError).toBe('');
-    expect(component.imdbRatingsLoaded).toBeTrue();
+    expect(component.imdbRatings.error).toBe('');
+    expect(component.imdbRatings.loaded).toBeTrue();
     expect(recommendationService.getSimilarMovies).toHaveBeenCalledTimes(1);
   });
 
@@ -243,10 +243,10 @@ describe('SimilarComponent', () => {
     component.selectMovie(seed);
     component.selectMovie({ ...seed, tmdbId: 999 });
     previous.next();
-    expect(component.loadingImdbRatings).toBeTrue();
-    expect(component.imdbRatingsLoaded).toBeFalse();
+    expect(component.imdbRatings.loading).toBeTrue();
+    expect(component.imdbRatings.loaded).toBeFalse();
     current.next();
-    expect(component.loadingImdbRatings).toBeFalse();
+    expect(component.imdbRatings.loading).toBeFalse();
   });
 
   it('allows going back while the similar search is still loading', () => {
@@ -372,7 +372,7 @@ describe('SimilarComponent', () => {
 
     component.loadImdbRatings();
 
-    expect(component.imdbRatingsLoaded).toBeTrue();
+    expect(component.imdbRatings.loaded).toBeTrue();
     expect(component.filteredSimilar.map(movie => movie.name)).toEqual(['IMDb Winner', 'TMDB Winner']);
 
     component.showImdbRatings = false;
