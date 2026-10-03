@@ -521,13 +521,29 @@ class TvdbService:
                     'name': meta.get('name') or g.get('name', 'Unknown'),
                     'year': meta.get('year') or g.get('year') or 'N/A',
                     'releaseDate': first_aired,
-                    'posterUrl': meta.get('image'),
+                    'posterUrl': meta.get('image') or g.get('posterUrl'),
                     'overview': meta.get('overview', ''),
                     'slug': meta.get('slug'),
                     'franchiseName': g.get('franchiseName', ''),
                     'owned': bool(g.get('owned', False)),
                 })
         return out
+
+    def get_history_posters(self, series_ids: list[int]) -> dict[int, str | None]:
+        """Recover posters for legacy history entries after the series cache expires."""
+        if not series_ids or not self.is_configured:
+            return {}
+
+        def lookup(sid):
+            try:
+                meta = self._get_series_extended(sid)
+                return (sid, meta.get('image')) if meta is not None else None
+            except (requests.RequestException, ValueError) as e:
+                logger.warning("Failed to recover poster for TVDB %s: %s", sid, e)
+                return None
+
+        with ThreadPoolExecutor(max_workers=_SCAN_WORKERS) as pool:
+            return dict(result for result in pool.map(lookup, series_ids) if result is not None)
 
     # -- Scan orchestration --
 

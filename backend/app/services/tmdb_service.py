@@ -658,10 +658,9 @@ class TmdbService:
         """Re-attach display fields (poster, ratings, genres, release date) to a
         list of stored/stripped movie gaps by reading the warm collection cache —
         the same data a live scan builds, with no network calls. Used to reopen a
-        saved scan (scan history) in the Missing view. A gap whose movie isn't in
-        the cache (miss or expired TTL) is returned unchanged (its stored fields,
-        poster None); the frontend's future-release filter falls back to the
-        stored year, so the title still shows without a poster.
+        saved scan (scan history) in the Missing view. Cache misses keep their
+        stored fields, including poster URLs. The history route recovers posters
+        for legacy entries that predate persisted URLs.
         """
         out = []
         with self._cache_lock:
@@ -679,7 +678,7 @@ class TmdbService:
                     "name": part.get("title") or g.get("name", "Unknown"),
                     "year": release_date[:4] if release_date else g.get("year", "N/A"),
                     "releaseDate": release_date,
-                    "posterUrl": f"{self._image_base_url}{poster}" if poster else None,
+                    "posterUrl": f"{self._image_base_url}{poster}" if poster else g.get("posterUrl"),
                     "overview": part.get("overview", ""),
                     "collectionName": g.get("collectionName", ""),
                     "owned": bool(g.get("owned", False)),
@@ -689,6 +688,29 @@ class TmdbService:
                     "popularity": part.get("popularity") or 0,
                 })
         return out
+
+    def get_history_posters(self, movie_ids: list[int]) -> dict[int, str | None]:
+        """Recover posters for legacy history entries after the collection cache expires."""
+        if not movie_ids or not self._api_key:
+            return {}
+
+        def lookup(mid):
+            try:
+                resp = self._session.get(
+                    f"{self._base_url}/movie/{mid}",
+                    params={"api_key": self._api_key, "language": self._language},
+                    timeout=10,
+                )
+                if resp.status_code != 200:
+                    return None
+                poster = resp.json().get('poster_path')
+                return mid, f"{self._image_base_url}{poster}" if poster else None
+            except (requests.RequestException, ValueError) as e:
+                logger.warning("Failed to recover poster for TMDB %s: %s", mid, e)
+                return None
+
+        with ThreadPoolExecutor(max_workers=_EXTERNAL_ID_WORKERS) as pool:
+            return dict(result for result in pool.map(lookup, movie_ids) if result is not None)
 
     @property
     def scan_progress(self) -> dict:

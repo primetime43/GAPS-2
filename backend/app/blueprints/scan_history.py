@@ -40,12 +40,9 @@ def get_scan_entry(entry_id: str):
 def get_scan_entry_gaps(entry_id: str):
     """Return a saved scan's gap list rehydrated for the Missing view.
 
-    History stores only a stripped gap (id/name/year/group/owned) to keep the
-    blob small; here the display fields (posters, ratings, genres, release date)
-    are re-attached from the warm TMDB/TheTVDB caches — a cache hit, no network —
-    so a past scan reopens looking like a live one. Cache misses fall back to the
-    stored fields. The shape mirrors a live scan's gaps so the frontend renders
-    both through the same path.
+    Display fields are re-attached from the warm TMDB/TheTVDB caches, with
+    stored poster URLs surviving cache expiry. Legacy entries missing posters
+    recover them from the provider and save them for subsequent visits.
     """
     entry = scan_history.get_by_id(entry_id)
     if not entry:
@@ -54,6 +51,18 @@ def get_scan_entry_gaps(entry_id: str):
     stored = entry.get('gaps') or []
     service = current_app.tvdb_service if media_type == 'tv' else current_app.tmdb_service
     gaps = service.hydrate_gaps(stored)
+    id_key = 'tvdbId' if media_type == 'tv' else 'tmdbId'
+    missing_ids = list(dict.fromkeys(
+        g[id_key] for g in gaps if 'posterUrl' not in g and g.get(id_key)
+    ))
+    if missing_ids:
+        posters = service.get_history_posters(missing_ids)
+        gaps = [
+            {**g, 'posterUrl': posters[g[id_key]]} if g.get(id_key) in posters else g
+            for g in gaps
+        ]
+    if any('posterUrl' not in g for g in stored):
+        scan_history.save_posters(entry_id, media_type, gaps)
     return jsonify(
         gaps=gaps,
         mediaType=media_type,
