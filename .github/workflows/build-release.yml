@@ -79,5 +79,5 @@ jobs:
           body_path: release-assets/docker-notes.md
           files: release-assets/compose.yml
           fail_on_unmatched_files: true
-          generate_release_notes: true
+          generate_release_notes: false
           prerelease: ${{ contains(github.ref_name, '-') }}

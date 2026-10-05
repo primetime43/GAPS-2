@@ -70,9 +70,12 @@ def actionable_missing(media_type: str, gaps: list[dict]) -> list[dict]:
 
 
 def _strip_gap(media_type: str, gap: dict) -> dict:
-    """Keep only the fields the export needs, so the persisted blob stays small."""
+    """Keep compact export/display fields, including posters independently of caches."""
+    # Preserve absence for legacy gaps so reopening can retry a failed lookup.
+    poster = {'posterUrl': gap['posterUrl']} if 'posterUrl' in gap else {}
     if media_type == 'tv':
         return {
+            **poster,
             'tvdbId': gap.get('tvdbId'),
             'name': gap.get('name', ''),
             'year': gap.get('year', ''),
@@ -80,6 +83,7 @@ def _strip_gap(media_type: str, gap: dict) -> dict:
             'owned': bool(gap.get('owned', False)),
         }
     return {
+        **poster,
         'tmdbId': gap.get('tmdbId'),
         'name': gap.get('name', ''),
         'year': gap.get('year', ''),
@@ -184,3 +188,27 @@ def get_by_id(entry_id: str) -> dict | None:
         if entry.get('id') == entry_id:
             return entry
     return None
+
+
+def save_posters(entry_id: str, media_type: str, gaps: list[dict]) -> None:
+    """Backfill legacy poster fields without replacing a concurrent history update."""
+    id_key = 'tvdbId' if media_type == 'tv' else 'tmdbId'
+    posters = {g.get(id_key): g['posterUrl'] for g in gaps if 'posterUrl' in g}
+    if not posters:
+        return
+    try:
+        with _RECORD_LOCK:
+            history = _load_raw()
+            for entry in history:
+                if entry.get('id') != entry_id:
+                    continue
+                changed = False
+                for gap in entry.get('gaps') or []:
+                    if 'posterUrl' not in gap and gap.get(id_key) in posters:
+                        gap['posterUrl'] = posters[gap[id_key]]
+                        changed = True
+                if changed:
+                    config_store.put(HISTORY_KEY, history)
+                break
+    except OSError as e:
+        logger.warning("Failed to save scan history posters: %s", e)

@@ -175,17 +175,17 @@
       </div>
 
       <div *ngIf="showImdbRatings && allSimilar.length" class="imdb-status text-muted small d-flex align-items-center flex-wrap gap-2 mb-3" role="status">
-        <ng-container *ngIf="loadingImdbRatings">
+        <ng-container *ngIf="imdbRatings.loading">
           <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
           Loading IMDb ratings… You can keep browsing.
         </ng-container>
-        <ng-container *ngIf="!loadingImdbRatings">
-          <span *ngIf="imdbRatingsError" class="text-warning">{{ imdbRatingsError }}</span>
-          <ng-container *ngIf="!imdbRatingsError && imdbRatingsLoaded">
-            <span *ngIf="imdbRatingCount">IMDb ratings available for {{ imdbRatingCount }} of {{ allSimilar.length }} movies.</span>
-            <span *ngIf="!imdbRatingCount">No IMDb ratings were found.</span>
+        <ng-container *ngIf="!imdbRatings.loading">
+          <span *ngIf="imdbRatings.error" class="text-warning">{{ imdbRatings.error }}</span>
+          <ng-container *ngIf="!imdbRatings.error && imdbRatings.loaded">
+            <span *ngIf="imdbRatings.ratingCount">IMDb ratings available for {{ imdbRatings.ratingCount }} of {{ allSimilar.length }} movies.</span>
+            <span *ngIf="!imdbRatings.ratingCount">No IMDb ratings were found.</span>
           </ng-container>
-          <ng-container *ngIf="imdbRatingsError || (imdbRatingsLoaded && imdbRatingCount < allSimilar.length)">
+          <ng-container *ngIf="imdbRatings.error || (imdbRatings.loaded && imdbRatings.ratingCount < allSimilar.length)">
             <a [routerLink]="['/settings/imdb']">IMDb settings</a>
             <button type="button" class="btn btn-sm btn-outline-secondary" (click)="loadImdbRatings(true)">Retry IMDb ratings</button>
           </ng-container>
