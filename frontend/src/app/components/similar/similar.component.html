@@ -14,28 +14,29 @@
 
   <div *ngIf="!loading && hasServer">
     <app-discovery-header section="intro" idPrefix="similar" title="Similar If You Liked"
-      description="Pick a movie you own and browse TMDB recommendations. Results show what is already in your selected libraries."
+      [description]="'Pick a ' + seedLabel + ' you own and browse TMDB recommendations. Results show what is already in your selected libraries.'"
+      [showMediaToggle]="true" [mediaType]="mediaType" (mediaTypeChange)="setMediaType($event)"
       [libraries]="libraries" [selectedLibraries]="selectedLibraries" [serverName]="activeServerName"
       (libraryToggle)="toggleLibrarySelection($event)">
     </app-discovery-header>
 
     <div *ngIf="loadingMovies" class="text-center mt-4">
       <div class="spinner"></div>
-      <p class="text-muted mt-2">Loading your movies...</p>
+      <p class="text-muted mt-2">Loading your {{ mediaLabel }}...</p>
     </div>
 
     <div *ngIf="errorMessage" class="alert alert-danger mt-3">{{ errorMessage }}</div>
 
     <div *ngIf="!loadingMovies && !loadingSimilar && selectedLibraries.length > 0 && movies.length === 0" class="alert alert-info">
-      No movies with TMDB IDs were found in the selected libraries.
+      No {{ mediaLabel }} with {{ mediaType === 'tv' ? 'TMDB, TVDB, or IMDb' : 'TMDB' }} IDs were found in the selected libraries.
     </div>
 
     <div *ngIf="!loadingMovies && !loadingSimilar && movies.length > 0 && !selectedMovie">
-      <h5 class="regular-text">Choose a movie you liked</h5>
+      <h5 class="regular-text">Choose a {{ seedLabel }} you liked</h5>
       <input
         class="form-control dark-input mb-3"
         type="text"
-        placeholder="Filter your movies by name..."
+        [placeholder]="'Filter your ' + mediaLabel + ' by name...'"
         [(ngModel)]="movieFilter"
         (ngModelChange)="currentPage = 1"
       >
@@ -55,7 +56,7 @@
         </button>
       </div>
 
-      <p *ngIf="filteredMovies.length === 0" class="text-muted">No movies match your search.</p>
+      <p *ngIf="filteredMovies.length === 0" class="text-muted">No {{ mediaLabel }} match your search.</p>
 
       <div *ngIf="totalPages > 1" class="mt-3 d-flex align-items-center justify-content-center gap-3">
         <button class="btn btn-sm btn-outline-light" [disabled]="currentPage === 1" (click)="onPageChange(-1)">
@@ -69,14 +70,15 @@
     </div>
 
     <div *ngIf="selectedMovie">
-      <app-radarr-destination [(rootFolderPath)]="radarrRootFolderPath"></app-radarr-destination>
+      <app-radarr-destination *ngIf="mediaType === 'movie'" [(rootFolderPath)]="radarrRootFolderPath"></app-radarr-destination>
+      <app-sonarr-destination *ngIf="mediaType === 'tv'" [(rootFolderPath)]="sonarrRootFolderPath"></app-sonarr-destination>
       <app-discovery-header idPrefix="similar"
         [title]="'Because you liked ' + selectedMovie.name + ' (' + selectedMovie.year + ')'" (back)="clearResults()"
-        [loading]="loadingSimilar" loadingMessage="Finding similar movies on TMDB..."
+        [loading]="loadingSimilar" [loadingMessage]="'Finding similar ' + mediaLabel + ' on TMDB...'"
         [view]="view" (viewChange)="setView($event)" [allCount]="allSimilar.length" [ownedCount]="ownedCount" [missingCount]="missingCount"
         [(showImdbRatings)]="showImdbRatings" (showImdbRatingsChange)="onRatingPrefsChange()"
         [(showTmdbRatings)]="showTmdbRatings" (showTmdbRatingsChange)="onRatingPrefsChange()"
-        [(search)]="resultFilter" (searchChange)="applyFilter()" searchPlaceholder="Filter similar movies..."
+        [(search)]="resultFilter" (searchChange)="applyFilter()" [searchPlaceholder]="'Filter similar ' + mediaLabel + '...'"
         [(sortBy)]="sortBy" (sortByChange)="applyFilter()" [sortOptions]="sortOptions"
         [(sortDirection)]="sortDirection" (sortDirectionChange)="applyFilter()"
         [(ratingSource)]="ratingSource" (ratingSourceChange)="onRatingSourceChange()"
@@ -129,12 +131,18 @@
               (click)="sendToRadarr(movie, $event)">
               {{ radarrLabel(movie.id) }}
             </button>
+            <button *ngIf="mediaType === 'tv' && sonarrEnabled && !movie.owned"
+              class="btn btn-sm radarr-btn" [class.btn-success]="sonarrStatus(movie) === 'sent'"
+              [class.btn-outline-danger]="sonarrStatus(movie) === 'error'" [class.btn-outline-primary]="!sonarrStatus(movie)"
+              [disabled]="!movie.tvdbId || sonarrStatus(movie) === 'sending' || sonarrStatus(movie) === 'sent'"
+              [title]="!movie.tvdbId ? 'Sonarr requires a TVDB ID. TMDB has no TVDB mapping for this show.' : sonarrError(movie) || 'Add this TV show to Sonarr'"
+              (click)="sendToSonarr(movie, $event)">{{ sonarrLabel(movie) }}</button>
           </div>
         </article>
       </div>
 
       <p *ngIf="filteredSimilar.length === 0 && !errorMessage" class="text-muted">
-        {{ allSimilar.length === 0 ? 'TMDB did not return any similar movies for this title.' : 'No movies match the current filters.' }}
+        {{ allSimilar.length === 0 ? 'TMDB did not return any similar ' + mediaLabel + ' for this title.' : 'No ' + mediaLabel + ' match the current filters.' }}
       </p>
       </ng-container>
     </div>

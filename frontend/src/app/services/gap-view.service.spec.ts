@@ -109,4 +109,15 @@ describe('GapViewService', () => {
     service.applyImdbRatings([gap()], { suppressErrors: false }).subscribe({ error: reported });
     expect(reported).toHaveBeenCalledWith(failure);
   });
+  it('uses the TMDB TV ID rather than a TVDB card ID for IMDb ratings', () => {
+    const shows = [gap({ id: 300, tmdbId: 10, tvdbId: 300 })];
+    imdbService.getRatings.and.returnValue(of({ ratings: {
+      '10': { imdbId: 'tt100', aggregateRating: 8, voteCount: 500 },
+    } }));
+    service.applyImdbRatings(shows, { mediaType: 'tv' }).subscribe();
+    expect(imdbService.getRatings).toHaveBeenCalledWith([10], 'tv');
+    expect(shows[0].imdbRating).toBe(8);
+    expect(shows[0].imdbId).toBe('tt100');
+  });
+
 });

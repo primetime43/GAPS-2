@@ -18,7 +18,7 @@ GAPS 2 connects to your Plex, Jellyfin, or Emby server, looks at what you own, a
 **Find what's missing**
 - **Multi-server support** — Plex (OAuth), Jellyfin, and Emby
 - **Find missing movies** from TMDB collections, and **missing TV shows** from TheTVDB's official franchise lists
-- **Discover similar movies** from a title you own, with owned/missing status powered by TMDB IDs
+- **Discover similar movies and TV shows** from a title you own, using TMDB recommendations with owned/missing status
 - **Unified "Missing" view** with a Movies / TV Shows toggle — browse a library, scan it for gaps, or click a single title to check just its collection/franchise
 - **Find gaps by actor/actress** — search a performer (e.g. *Will Smith*) on the **Actors** page and see their full filmography split into what you own and what you're missing
 
@@ -117,11 +117,17 @@ For additions from **Missing**, **Actors**, and **Similar Movies**, the destinat
 
 Saved scans restored from disk do not retain server identity, so their automatic routing uses decade/default settings. Choose a destination above those results to override it. The result-level destination resets when starting a new lookup or scan. Default tags apply regardless of the destination.
 
+### Similar movies and TV shows
+
+In **Similar**, choose **Movies** or **TV Shows**, select the libraries to check, and pick a title you liked. Each mode remembers its library selection. Recommendations come from TMDB; rating and vote filters can use either TMDB or IMDb, with ascending or descending sorting.
+
+TV seeds can have a TMDB, TVDB, or IMDb series ID. GAPS resolves external IDs through TMDB and matches ownership across those IDs and title/year. **Send to Sonarr** requires a TVDB mapping; shows without one remain visible. Similar TV recommendations use your existing TMDB API key and do not require a separate TheTVDB API key.
+
 ### Sonarr destinations and tags
 
 In **Settings > Sonarr**, select **Default tags** from the tags already defined in Sonarr and map your TV libraries under **Library root folders**. Tags are applied to every series added from GAPS. Refresh the tag list after creating tags in Sonarr, and use **Save Defaults** to save your selections.
 
-TV results in **Missing** and **Actors** include a **Sonarr destination** selector. The routing order is an explicit destination, then the selected libraries' mapping, then the default root folder. Conflicting or partially mapped library selections require an explicit destination. Mappings are scoped to the media-server type, server name, and library name, and use paths as Sonarr sees them. Missing or inaccessible mapped folders produce an error. Restored scans without server identity use the default unless you choose a destination. Movie and TV destinations are separate and reset on new lookups or media changes.
+TV results in **Missing**, **Actors**, and **Similar** include a **Sonarr destination** selector. The routing order is an explicit destination, then the selected libraries' mapping, then the default root folder. Conflicting or partially mapped library selections require an explicit destination. Mappings are scoped to the media-server type, server name, and library name, and use paths as Sonarr sees them. Missing or inaccessible mapped folders produce an error. Restored scans without server identity use the default unless you choose a destination. Movie and TV destinations are separate and reset on new lookups or media changes.
 
 > **TheTVDB API key:** create a free key on your [TheTVDB dashboard](https://thetvdb.com/dashboard/account/apikey). Some keys are tied to the *User Subscription* funding model and require your subscriber PIN; if so, GAPS will tell you, and you can enter the PIN on the TheTVDB settings page.
 

@@ -122,7 +122,7 @@
     <ng-container *ngIf="!imdbState.loading">
       <span *ngIf="imdbState.error" class="text-warning">{{ imdbState.error }}</span>
       <ng-container *ngIf="!imdbState.error && imdbState.loaded">
-        <span *ngIf="imdbState.ratingCount">IMDb ratings available for {{ imdbState.ratingCount }} of {{ allCount }} movies.</span>
+        <span *ngIf="imdbState.ratingCount">IMDb ratings available for {{ imdbState.ratingCount }} of {{ allCount }} titles.</span>
         <span *ngIf="!imdbState.ratingCount">No IMDb ratings were found.</span>
       </ng-container>
       <ng-container *ngIf="imdbState.error || (imdbState.loaded && imdbState.ratingCount < allCount)">

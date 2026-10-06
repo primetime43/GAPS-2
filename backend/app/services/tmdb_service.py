@@ -1074,18 +1074,22 @@ class TmdbService:
         return results, None
 
     def find_similar_movies(
-        self,
-        api_key: str,
-        tmdb_id: int,
-        owned_tmdb_ids: set[int],
-        owned_title_year: set[str] | None = None,
-        pages: int = 3,
+        self, api_key: str, tmdb_id: int, owned_tmdb_ids: set[int],
+        owned_title_year: set[str] | None = None, pages: int = 3,
     ) -> tuple[list[dict] | None, str | None]:
-        """Return TMDB movie recommendations in provider order with ownership metadata.
+        return self._find_recommendations(api_key, tmdb_id, owned_tmdb_ids, owned_title_year, pages, 'movie')
 
-        The /similar endpoint only matches genres and keywords; it is not the
-        recommendation feed intended for a "because you liked" view.
-        """
+    def find_similar_shows(
+        self, api_key: str, tmdb_id: int, owned_tmdb_ids: set[int],
+        owned_title_year: set[str] | None = None, pages: int = 3,
+    ) -> tuple[list[dict] | None, str | None]:
+        return self._find_recommendations(api_key, tmdb_id, owned_tmdb_ids, owned_title_year, pages, 'tv')
+
+    def _find_recommendations(
+        self, api_key: str, tmdb_id: int, owned_tmdb_ids: set[int],
+        owned_title_year: set[str] | None, pages: int, media_type: str,
+    ) -> tuple[list[dict] | None, str | None]:
+        """Preserve provider order. The looser /similar feed is not a fallback."""
         entries: list[dict] = []
         seen_ids = {tmdb_id}
         page_count = max(1, min(pages, 5))
@@ -1093,7 +1097,7 @@ class TmdbService:
         for page in range(1, page_count + 1):
             try:
                 resp = self._session.get(
-                    f"{self._base_url}/movie/{tmdb_id}/recommendations",
+                    f"{self._base_url}/{media_type}/{tmdb_id}/recommendations",
                     params={
                         "api_key": api_key,
                         "language": self._language,
@@ -1109,7 +1113,7 @@ class TmdbService:
             except (requests.exceptions.RequestException, ValueError) as e:
                 logger.warning("TMDB recommendations lookup failed for %s: %s", tmdb_id, e)
                 if page == 1:
-                    return None, "Failed to fetch movie recommendations from TMDB"
+                    return None, "Failed to fetch recommendations from TMDB"
                 break
 
             for movie in payload.get("results", []):
@@ -1118,8 +1122,8 @@ class TmdbService:
                     continue
                 seen_ids.add(movie_id)
 
-                release_date = movie.get("release_date") or ""
-                title = movie.get("title") or "Unknown"
+                release_date = movie.get("first_air_date" if media_type == 'tv' else "release_date") or ""
+                title = movie.get("name" if media_type == 'tv' else "title") or "Unknown"
                 title_year = f"{title.strip().lower()}|{release_date[:4]}"
                 is_owned = movie_id in owned_tmdb_ids
                 if not is_owned and owned_title_year:
@@ -1133,7 +1137,7 @@ class TmdbService:
                     "releaseDate": release_date,
                     "posterUrl": f"{self._image_base_url}{poster}" if poster else None,
                     "overview": movie.get("overview", ""),
-                    "collectionName": "Similar Movies",
+                    "collectionName": "Similar TV Shows" if media_type == 'tv' else "Similar Movies",
                     "owned": is_owned,
                     "voteAverage": movie.get("vote_average") or 0,
                     "voteCount": movie.get("vote_count") or 0,
@@ -1145,6 +1149,25 @@ class TmdbService:
                 break
 
         return entries, None
+
+    def resolve_tv_tmdb_id(self, tvdb_id=None, imdb_id=None):
+        """Resolve an exact external series ID; never guess by title."""
+        for external_id, source in ((tvdb_id, 'tvdb_id'), (imdb_id, 'imdb_id')):
+            if not external_id:
+                continue
+            try:
+                response = self._session.get(
+                    f"{self._base_url}/find/{external_id}",
+                    params={'api_key': self.api_key, 'external_source': source},
+                    timeout=10,
+                )
+                response.raise_for_status()
+                matches = response.json().get('tv_results') or []
+                if len(matches) == 1:
+                    return matches[0].get('id'), None
+            except (requests.exceptions.RequestException, ValueError):
+                return None, 'Failed to resolve the TV show on TMDB. Please try again.'
+        return None, 'This TV show has no matching series ID on TMDB.'
 
     # -- Actor / actress gaps (issue #49) --
     # Unlike collection gaps (a background scan of the whole library), an actor

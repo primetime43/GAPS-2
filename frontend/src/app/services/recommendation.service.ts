@@ -4,6 +4,7 @@ import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { environment } from '../../environments/environment';
 import { CollectionGap } from '../models/recommendation.model';
+import { Show } from '../models/show.model';
 import { Movie } from '../models/movie.model';
 import { ScanStatus } from '../models/scan-status.model';
 
@@ -77,6 +78,17 @@ export class RecommendationService {
     return this.http.get<{ gaps: CollectionGap[] }>(
       environment.apiUrl + '/recommendations/similar',
       { params }
+    ).pipe(map(res => res.gaps));
+  }
+
+  getSimilarShows(show: Show, libraryNames: string[], source = 'plex'): Observable<CollectionGap[]> {
+    let params = new HttpParams().set('source', source);
+    if (show.tmdbId) params = params.set('tmdbId', show.tmdbId);
+    if (show.tvdbId) params = params.set('tvdbId', show.tvdbId);
+    if (show.imdbId) params = params.set('imdbId', show.imdbId);
+    for (const name of libraryNames) params = params.append('libraryNames', name);
+    return this.http.get<{ gaps: CollectionGap[] }>(
+      `${environment.apiUrl}/recommendations/similar/tv`, { params },
     ).pipe(map(res => res.gaps));
   }
 

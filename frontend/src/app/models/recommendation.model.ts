@@ -1,4 +1,6 @@
 export interface CollectionGap {
+  tvdbId?: number;
+  imdbId?: string;
   tmdbId: number;
   name: string;
   year: string;
@@ -18,7 +20,7 @@ export interface CollectionGap {
  * collections) and TV shows (TheTVDB franchises).
  */
 export interface Gap {
-  id: number;            // tmdbId for movies, tvdbId for shows
+  id: number;            // TMDB ID for Similar; otherwise TMDB movies / TVDB shows
   name: string;
   year: string | number;
   releaseDate?: string;  // movies only; used for "hide future releases"

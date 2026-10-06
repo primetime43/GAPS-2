@@ -43,10 +43,10 @@ export class ImdbService {
     return this.http.post<ImdbStatus>(`${environment.apiUrl}/imdb/refresh`, {});
   }
 
-  /** Resolve IMDb ratings for movies, keyed by TMDB id (as a string). */
-  getRatings(tmdbIds: number[]): Observable<{ ratings: Record<string, ImdbRating> }> {
+  /** Resolve IMDb ratings for the selected media type, keyed by TMDB id (as a string). */
+  getRatings(tmdbIds: number[], mediaType: 'movie' | 'tv' = 'movie'): Observable<{ ratings: Record<string, ImdbRating> }> {
     return this.http.post<{ ratings: Record<string, ImdbRating> }>(
-      `${environment.apiUrl}/imdb/ratings`, { tmdbIds }
+      `${environment.apiUrl}/imdb/ratings`, { tmdbIds, mediaType }
     );
   }
 }

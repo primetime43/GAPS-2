@@ -73,18 +73,18 @@ export class GapViewService {
   }
 
   /**
-   * Fetch IMDb ratings for the given movie gaps and patch them in place, emitting
+   * Fetch IMDb ratings for the given gaps and patch them in place, emitting
    * once when done. Callers with a retry UI can opt into error reporting.
    * Resolving each title's IMDb id requires a cached TMDB lookup.
    */
-  applyImdbRatings(gaps: Gap[], options: { suppressErrors?: boolean } = {}): Observable<void> {
-    const ids = gaps.map(g => g.id).filter((id): id is number => !!id);
+  applyImdbRatings(gaps: Gap[], options: { suppressErrors?: boolean; mediaType?: 'movie' | 'tv' } = {}): Observable<void> {
+    const ids = gaps.map(g => options.mediaType === 'tv' ? g.tmdbId : g.id).filter((id): id is number => !!id);
     if (!ids.length) return of(undefined);
-    return this.imdbService.getRatings(ids).pipe(
+    return (options.mediaType === 'tv' ? this.imdbService.getRatings(ids, 'tv') : this.imdbService.getRatings(ids)).pipe(
       map(res => {
         const ratings = res.ratings || {};
         for (const gap of gaps) {
-          const r = ratings[String(gap.id)];
+          const r = ratings[String(options.mediaType === 'tv' ? gap.tmdbId : gap.id)];
           if (r) {
             gap.imdbId = r.imdbId;
             gap.imdbRating = r.aggregateRating;

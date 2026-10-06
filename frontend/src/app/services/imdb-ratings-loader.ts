@@ -2,7 +2,7 @@ import { Subscription } from 'rxjs';
 import { Gap } from '../models/recommendation.model';
 import { GapViewService } from './gap-view.service';
 
-/** Per-view loading state backed by the shared movie rating fetch and mapping. */
+/** Per-view loading state backed by the shared rating fetch and mapping. */
 export class ImdbRatingsLoader {
   loading = false;
   loaded = false;
@@ -12,11 +12,11 @@ export class ImdbRatingsLoader {
 
   constructor(private gapView: GapViewService) {}
 
-  load(gaps: Gap[], onLoaded: () => void, retry = false): void {
+  load(gaps: Gap[], onLoaded: () => void, retry = false, mediaType: 'movie' | 'tv' = 'movie'): void {
     if (!gaps.length || this.loading || (this.loaded && !retry)) return;
     this.loading = true;
     this.error = '';
-    this.request = this.gapView.applyImdbRatings(gaps, { suppressErrors: false }).subscribe({
+    this.request = this.gapView.applyImdbRatings(gaps, mediaType === 'tv' ? { suppressErrors: false, mediaType } : { suppressErrors: false }).subscribe({
       next: () => {
         this.loading = false;
         this.loaded = true;
@@ -25,7 +25,7 @@ export class ImdbRatingsLoader {
       },
       error: () => {
         this.loading = false;
-        this.error = 'Could not load IMDb ratings. You can still open movies on IMDb.';
+        this.error = 'Could not load IMDb ratings. You can still open titles on IMDb.';
       },
     });
   }

@@ -96,6 +96,55 @@ def get_similar_movies():
     return jsonify(gaps=movies)
 
 
+@recommendations_bp.route('/similar/tv', methods=['GET'])
+def get_similar_shows():
+    """Recommend series and match ownership across TV provider IDs."""
+    tmdb = current_app.tmdb_service
+    tmdb_id = request.args.get('tmdbId', type=int)
+    tvdb_id = request.args.get('tvdbId', type=int)
+    imdb_id = request.args.get('imdbId', '').strip()
+    names = request.args.getlist('libraryNames')
+    if not any((tmdb_id, tvdb_id, imdb_id)):
+        return jsonify(error='A TMDB, TVDB, or IMDb series ID is required'), 400
+    if not names:
+        return jsonify(error='At least one libraryNames parameter is required'), 400
+    if not tmdb.api_key:
+        return jsonify(error='No TMDB API key configured'), 400
+
+    cache, error = load_library_cache(_get_service(request.args.get('source', 'plex')), names, 'tv')
+    if error:
+        return jsonify(error=error), 502
+    if not tmdb_id:
+        tmdb_id, error = tmdb.resolve_tv_tmdb_id(tvdb_id, imdb_id)
+        if error:
+            return jsonify(error=error), 502
+
+    owned = {key: set() for key in ('tmdbId', 'tvdbId', 'imdbId')}
+    title_year = set()
+    for name in names:
+        for show in cache.get(name, {}).get('shows', []):
+            for key, values in owned.items():
+                if show.get(key):
+                    values.add(str(show[key]))
+            title, year = (show.get('name') or '').strip().lower(), str(show.get('year') or '')
+            if title and year.isdigit():
+                title_year.add(f'{title}|{year}')
+    rows, error = tmdb.find_similar_shows(
+        api_key=tmdb.api_key, tmdb_id=tmdb_id,
+        owned_tmdb_ids={int(value) for value in owned['tmdbId'] if value.isdigit()},
+        owned_title_year=title_year,
+    )
+    if error:
+        return jsonify(error=error), 502
+    mappings = tmdb.get_tv_external_ids_batch([row['tmdbId'] for row in rows])
+    for row, mapping in zip(rows, mappings):
+        row.update(mapping)
+        row['owned'] = row['owned'] or any(
+            row.get(key) and str(row[key]) in values for key, values in owned.items()
+        )
+    return jsonify(gaps=rows)
+
+
 @recommendations_bp.route('/scan', methods=['POST'])
 def scan_library_gaps():
     """Start a library scan in the background."""
