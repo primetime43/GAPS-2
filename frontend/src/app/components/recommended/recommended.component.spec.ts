@@ -154,19 +154,74 @@ describe('RecommendedComponent', () => {
     expect(component.filteredGroups[0].gaps[0].id).toBe(1);
   });
 
-  it('shows IMDb source failures and retries without changing the selected source', () => {
-    component.ratingSource = 'imdb';
-    component.allGaps = [gap({ id: 1, year: 2000 })];
-    imdbService.getRatings.and.returnValue(throwError(() => new Error('offline')));
+  it('loads IMDb badges independently of TMDB filtering and sorting without duplicate requests', () => {
+    fixture.detectChanges();
+    component.ratingSource = 'tmdb';
+    component.showImdbRatings = false;
+    component.sortBy = 'rating';
+    component.minRating = 6;
+    component.allGaps = [
+      gap({ id: 1, year: 2000, groupName: 'A', tmdbRating: 9 }),
+      gap({ id: 2, year: 2000, groupName: 'B', tmdbRating: 7 }),
+      gap({ id: 3, year: 2000, groupName: 'C', tmdbRating: 4 }),
+    ];
     component.applyFilter();
-    expect(component.imdbRatings.error).toContain('Could not load');
+    expect(imdbService.getRatings).not.toHaveBeenCalled();
+
+    const pending = new Subject<any>();
+    imdbService.getRatings.and.returnValue(pending);
+    component.showImdbRatings = true;
+    component.onRatingPrefsChange();
+    expect(component.imdbRatings.loading).toBeTrue();
+    expect(imdbService.getRatings).toHaveBeenCalledOnceWith([1, 2, 3]);
     component.applyFilter();
     expect(imdbService.getRatings).toHaveBeenCalledTimes(1);
-    imdbService.getRatings.and.returnValue(of({ ratings: {} }));
-    component.loadImdbRatings(true);
-    expect(component.imdbRatings.loaded).toBeTrue();
-    expect(component.ratingSource).toBe('imdb');
+
+    pending.next({ ratings: {
+      '1': { imdbId: 'tt1', aggregateRating: 2, voteCount: 100 },
+      '2': { imdbId: 'tt2', aggregateRating: 8, voteCount: 200 },
+      '3': { imdbId: 'tt3', aggregateRating: 10, voteCount: 300 },
+    } });
+    pending.complete();
+    expect(component.allGaps[0].imdbRating).toBe(2);
+    expect(component.imdbRatings.ratingCount).toBe(3);
+    expect(component.ratingSource).toBe('tmdb');
+    expect(component.filteredGroups.flatMap(g => g.gaps.map(g => g.id))).toEqual([1, 2]);
+    component.showImdbRatings = false;
+    component.onRatingPrefsChange();
+    component.showImdbRatings = true;
+    component.onRatingPrefsChange();
+    expect(imdbService.getRatings).toHaveBeenCalledTimes(1);
   });
+
+  it('loads IMDb for new results when badges were already enabled with TMDB selected', () => {
+    component.ratingSource = 'tmdb';
+    component.showImdbRatings = true;
+    component.allGaps = [gap({ id: 1, year: 2000 })];
+    component.applyFilter();
+    expect(imdbService.getRatings).toHaveBeenCalledOnceWith([1]);
+    component.allGaps = [gap({ id: 2, year: 2000 })];
+    component.applyFilter();
+    expect(imdbService.getRatings).toHaveBeenCalledTimes(2);
+    expect(imdbService.getRatings.calls.mostRecent().args).toEqual([[2]]);
+  });
+
+  for (const source of ['imdb', 'tmdb'] as const) {
+    it(`shows IMDb failures and retries while keeping the ${source} source selected`, () => {
+      component.showImdbRatings = source === 'tmdb';
+      component.ratingSource = source;
+      component.allGaps = [gap({ id: 1, year: 2000 })];
+      imdbService.getRatings.and.returnValue(throwError(() => new Error('offline')));
+      component.applyFilter();
+      expect(component.imdbRatings.error).toContain('Could not load');
+      component.applyFilter();
+      expect(imdbService.getRatings).toHaveBeenCalledTimes(1);
+      imdbService.getRatings.and.returnValue(of({ ratings: {} }));
+      component.loadImdbRatings(true);
+      expect(component.imdbRatings.loaded).toBeTrue();
+      expect(component.ratingSource).toBe(source);
+    });
+  }
 
   it('cancels a pending IMDb source load when the results are cleared', () => {
     const pending = new Subject<any>();

@@ -1493,7 +1493,8 @@ export class RecommendedComponent implements OnInit, OnDestroy {
       ).map(gap => this.groupByName.get(gap.groupName)!);
     }
     this.renderLimit = this.RENDER_CHUNK;
-    if (this.ratingSource === 'imdb' && !this.imdbRatings.error) this.loadImdbRatings();
+    // The loader checks both the display toggle and the chosen rating source.
+    if (!this.imdbRatings.error) this.loadImdbRatings();
   }
 
   // -- Radarr (movies) / Sonarr (TV) --
