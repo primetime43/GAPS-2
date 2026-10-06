@@ -89,12 +89,15 @@ describe('DiscoveryHeaderComponent', () => {
 
   it('labels sources explicitly and separates the source selector from badge toggles', async () => {
     fixture.componentRef.setInput('ratingSource', 'imdb');
+    fixture.componentRef.setInput('sortBy', 'popularity');
     fixture.detectChanges();
     await fixture.whenStable();
     const text = fixture.nativeElement.textContent;
     expect(text).toContain('Rating (IMDb)');
     expect(text).toContain('Vote count (IMDb)');
-    expect(text).toContain('Popularity (TMDB)');
+    expect(text).toContain('TMDB popularity');
+    expect(text).toContain('Sorting by TMDB popularity.');
+    expect(text).toContain('Rating and vote filters use IMDb.');
     expect(text).toContain('Minimum IMDb rating');
     expect(text).toContain('Minimum IMDb votes');
     expect(text).toContain('display only');
@@ -104,5 +107,12 @@ describe('DiscoveryHeaderComponent', () => {
     select.dispatchEvent(new Event('change'));
     expect(source).toHaveBeenCalledWith('tmdb');
     expect(fixture.componentInstance.showImdbRatings).toBeFalse();
+
+    fixture.componentRef.setInput('ratingSource', 'tmdb');
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Rating (TMDB)');
+    expect(fixture.nativeElement.textContent).toContain('Vote count (TMDB)');
+    expect(fixture.nativeElement.textContent).toContain('Rating and vote filters use TMDB.');
+    expect(fixture.nativeElement.textContent).not.toContain('Rating (IMDb)');
   });
 });

@@ -77,7 +77,7 @@
           </select>
           <p class="text-muted small mb-3">Rating and vote-count sorting{{ showRatingLimits ? ', and both minimums,' : '' }} use {{ ratingSourceLabel }} only. Missing values sort last.</p>
         </ng-container>
-        <p *ngIf="popularityAvailable" class="text-muted small mb-3">Popularity uses TMDB’s popularity score. It is separate from ratings and vote counts.</p>
+        <p *ngIf="popularityAvailable" class="text-muted small mb-3">TMDB popularity always uses TMDB’s score. To rank by the number of {{ ratingSourceLabel }} ratings instead, choose Vote count ({{ ratingSourceLabel }}).</p>
         <div *ngIf="ratingsAvailable" class="text-muted small mb-2">Show ratings on cards (display only)</div>
         <div *ngIf="ratingsAvailable" class="form-check mb-2">
           <input class="form-check-input" type="checkbox" [id]="idPrefix + 'ShowImdb'"
@@ -109,6 +109,10 @@
       </select>
     </div>
   </div>
+
+  <p *ngIf="!loading && sortBy === 'popularity' && popularityAvailable" class="text-muted small mb-3" role="status">
+    Sorting by TMDB popularity.<ng-container *ngIf="showRatingLimits"> Rating and vote filters use {{ ratingSourceLabel }}.</ng-container>
+  </p>
 
   <div *ngIf="!loading && (showImdbRatings || ratingSource === 'imdb') && allCount && imdbState" class="imdb-status text-muted small d-flex align-items-center flex-wrap gap-2 mb-3" role="status">
     <ng-container *ngIf="imdbState.loading">
