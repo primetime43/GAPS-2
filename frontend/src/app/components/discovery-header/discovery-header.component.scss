@@ -15,6 +15,7 @@
 }
 
 .result-sort { width: 190px; }
+.result-direction { width: 235px; }
 .rating-filter-button, .link-preference { white-space: nowrap; }
 .link-preference select { width: 110px; }
 .rating-filter-menu {
@@ -33,6 +34,6 @@
   }
 
   .result-toolbar .btn-group { margin-left: 0 !important; }
-  .result-sort, .result-controls > input { width: 100%; flex: none; }
+  .result-sort, .result-direction, .result-controls > input { width: 100%; flex: none; }
   .rating-filter-button, .result-controls > .dropdown { width: 100%; }
 }

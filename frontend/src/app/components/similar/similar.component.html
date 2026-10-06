@@ -78,6 +78,7 @@
         [(showTmdbRatings)]="showTmdbRatings" (showTmdbRatingsChange)="onRatingPrefsChange()"
         [(search)]="resultFilter" (searchChange)="applyFilter()" searchPlaceholder="Filter similar movies..."
         [(sortBy)]="sortBy" (sortByChange)="applyFilter()" [sortOptions]="sortOptions"
+        [(sortDirection)]="sortDirection" (sortDirectionChange)="applyFilter()"
         [(ratingSource)]="ratingSource" (ratingSourceChange)="onRatingSourceChange()"
         [(minRating)]="minRating" (minRatingChange)="applyFilter()"
         [(minVoteCount)]="minVoteCount" (minVoteCountChange)="applyFilter()"

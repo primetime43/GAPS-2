@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../environments/environment';
-import type { GapSortKey, RatingSource } from './gap-view.service';
+import type { GapSortKey, RatingSource, SortDirection } from './gap-view.service';
 
 /** Remembered Missing-view display filters (persisted as opaque UI state,
  * separate from the scan-affecting hideOwned/hideFuture defaults). */
@@ -10,6 +10,7 @@ export interface MissingFilters {
   view: 'all' | 'owned' | 'missing';
   // Older saved preferences may still contain the removed popularity sort.
   sortBy: GapSortKey | 'popularity';
+  sortDirection?: SortDirection;
   genreFilter: number | null;
   showFuture: boolean;
   minRating?: number;

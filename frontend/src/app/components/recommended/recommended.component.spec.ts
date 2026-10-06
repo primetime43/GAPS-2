@@ -197,6 +197,29 @@ describe('RecommendedComponent', () => {
     expect(preferencesService.save).toHaveBeenCalledWith({ missingFilters: jasmine.objectContaining({ sortBy: 'votes' }) });
   });
 
+  it('restores ascending sorting and orders collections by their first visible title', () => {
+    preferencesService.load.and.returnValue(of({ ...DEFAULT_PREFERENCES, missingFilters: {
+      view: 'all', sortBy: 'year', sortDirection: 'asc', genreFilter: null, showFuture: true,
+    } }));
+    fixture.detectChanges();
+    component.allGaps = [
+      gap({ id: 1, groupName: 'A', year: 2000, tmdbRating: 8 }),
+      gap({ id: 2, groupName: 'A', year: 1980, tmdbRating: 2 }),
+      gap({ id: 3, groupName: 'A', year: 2010, tmdbRating: 8 }),
+      gap({ id: 4, groupName: 'B', year: 1990, tmdbRating: 8 }),
+    ];
+    component.minRating = 6;
+    component.applyFilter();
+    expect(component.sortDirection).toBe('asc');
+    expect(component.filteredGroups.map(g => g.name)).toEqual(['B', 'A']);
+    expect(component.filteredGroups[1].gaps.map(g => g.year)).toEqual([2000, 2010]);
+    component.sortDirection = 'desc';
+    component.onResultFilterChange();
+    expect(component.filteredGroups.map(g => g.name)).toEqual(['A', 'B']);
+    expect(component.filteredGroups[0].gaps.map(g => g.year)).toEqual([2010, 2000]);
+    expect(preferencesService.save).toHaveBeenCalledWith({ missingFilters: jasmine.objectContaining({ sortDirection: 'desc' }) });
+  });
+
   it('applies and remembers changes made through the shared results toolbar', async () => {
     fixture.detectChanges();
     component.hasServer = true;
@@ -215,6 +238,13 @@ describe('RecommendedComponent', () => {
     expect(component.sortBy).toBe('year');
     expect(component.filteredGroups[0].name).toBe('B');
     expect(preferencesService.save).toHaveBeenCalledWith({ missingFilters: jasmine.objectContaining({ sortBy: 'year' }) });
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const direction = toolbar.querySelector('[aria-label="Sort direction"]');
+    direction.value = 'asc';
+    direction.dispatchEvent(new Event('change'));
+    expect(component.filteredGroups[0].name).toBe('A');
+    expect(preferencesService.save).toHaveBeenCalledWith({ missingFilters: jasmine.objectContaining({ sortDirection: 'asc' }) });
     const search = toolbar.querySelector('.result-controls input');
     search.value = 'Older';
     search.dispatchEvent(new Event('input'));

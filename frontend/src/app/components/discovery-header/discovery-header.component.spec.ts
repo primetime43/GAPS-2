@@ -71,6 +71,26 @@ describe('DiscoveryHeaderComponent', () => {
     expect(back).toHaveBeenCalled();
   });
 
+  it('shows meaningful direction choices and hides them for default or relevance ordering', async () => {
+    expect(fixture.nativeElement.querySelector('[aria-label="Sort direction"]').value).toBe('desc');
+    expect(fixture.nativeElement.textContent).toContain('Ascending (oldest first)');
+    const changed = spyOn(fixture.componentInstance.sortDirectionChange, 'emit');
+    const select = fixture.nativeElement.querySelector('[aria-label="Sort direction"]');
+    select.value = 'asc';
+    select.dispatchEvent(new Event('change'));
+    expect(changed).toHaveBeenCalledWith('asc');
+    fixture.componentRef.setInput('sortBy', 'name');
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(select.value).toBe('asc');
+    expect(fixture.nativeElement.textContent).toContain('Descending (Z–A)');
+    for (const sort of ['default', 'relevance']) {
+      fixture.componentRef.setInput('sortBy', sort);
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('[aria-label="Sort direction"]')).toBeNull();
+    }
+  });
+
   it('normalizes cleared and out-of-range rating limits from the inputs', () => {
     const rating = spyOn(fixture.componentInstance.minRatingChange, 'emit');
     const votes = spyOn(fixture.componentInstance.minVoteCountChange, 'emit');

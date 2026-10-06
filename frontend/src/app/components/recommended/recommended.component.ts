@@ -13,7 +13,7 @@ import { PreferencesService, MissingFilters } from '../../services/preferences.s
 import { ExportService, ExportFormat } from '../../services/export.service';
 import { RadarrService } from '../../services/radarr.service';
 import { SonarrService } from '../../services/sonarr.service';
-import { GapViewService, GapSortKey, RatingSource } from '../../services/gap-view.service';
+import { GapViewService, GapSortKey, RatingSource, SortDirection } from '../../services/gap-view.service';
 import { ImdbRatingsLoader } from '../../services/imdb-ratings-loader';
 import { ScanHistoryService } from '../../services/scan-history.service';
 import { TmdbService, TmdbGenre } from '../../services/tmdb/tmdb.service';
@@ -110,6 +110,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   ratingSource: RatingSource = 'tmdb';
 
   sortBy: GapSortKey = 'default';
+  sortDirection?: SortDirection;
   genreFilter: number | null = null;
   // True once preferences have been loaded and applied; gates saveMissingFilters
   // so early/initial state changes don't clobber the persisted filters.
@@ -540,6 +541,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
           this.minVoteCount = mf.minVoteCount ?? this.minVoteCount;
           if (mf.view) this.view = mf.view;
           if (mf.sortBy) this.sortBy = mf.sortBy === 'popularity' ? 'votes' : mf.sortBy;
+          this.sortDirection = mf.sortDirection === 'asc' || mf.sortDirection === 'desc' ? mf.sortDirection : undefined;
           this.genreFilter = this.mediaType === 'movie' ? (mf.genreFilter ?? null) : null;
           if (typeof mf.showFuture === 'boolean') this.showFuture = mf.showFuture;
         }
@@ -1160,6 +1162,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     const missingFilters: MissingFilters = {
       view: this.view,
       sortBy: this.sortBy,
+      sortDirection: this.sortDirection,
       genreFilter: this.genreFilter,
       showFuture: this.showFuture,
       minRating: this.minRating,
@@ -1450,7 +1453,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     if (this.genreFilter != null) {
       filtered = filtered.filter(matchesGenre);
     }
-    filtered = this.gapView.sortGaps(filtered, this.sortBy, this.ratingSource);
+    filtered = this.gapView.sortGaps(filtered, this.sortBy, this.ratingSource, this.sortDirection);
 
     const groups = new Map<string, Gap[]>();
     for (const gap of filtered) {
@@ -1486,7 +1489,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
       // Each group's remaining titles are already sorted. Reorder the groups
       // by their first visible title so hidden titles cannot set their position.
       this.filteredGroups = this.gapView.sortGaps(
-        this.filteredGroups.map(group => group.gaps[0]), this.sortBy, this.ratingSource,
+        this.filteredGroups.map(group => group.gaps[0]), this.sortBy, this.ratingSource, this.sortDirection,
       ).map(gap => this.groupByName.get(gap.groupName)!);
     }
     this.renderLimit = this.RENDER_CHUNK;

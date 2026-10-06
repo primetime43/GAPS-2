@@ -4,7 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
 import { ImdbRatingsLoader } from '../../services/imdb-ratings-loader';
 import { MediaLibrary } from '../../models/media-server.model';
-import { RatingSource } from '../../services/gap-view.service';
+import { RatingSource, SortDirection } from '../../services/gap-view.service';
 
 /** Shared introduction/library picker and results toolbar for discovery views.
  * Views retain their data loading, filtering, and saved preferences. */
@@ -41,12 +41,13 @@ export class DiscoveryHeaderComponent<Sort extends string, Link extends string> 
   @Input() search = '';
   @Input() searchPlaceholder = 'Filter results by title...';
   @Input() sortBy: Sort;
+  @Input() sortDirection?: SortDirection;
   @Input() sortOptions: ReadonlyArray<{ value: string; label: string }> = [
     { value: 'default', label: 'Default' },
     { value: 'rating', label: 'Rating' },
     { value: 'votes', label: 'Vote count' },
-    { value: 'year', label: 'Year (newest)' },
-    { value: 'name', label: 'Title (A–Z)' },
+    { value: 'year', label: 'Year' },
+    { value: 'name', label: 'Title' },
   ];
   @Input() showImdbRatings = false;
   @Input() showTmdbRatings = true;
@@ -71,6 +72,7 @@ export class DiscoveryHeaderComponent<Sort extends string, Link extends string> 
   @Output() viewChange = new EventEmitter<'all' | 'owned' | 'missing'>();
   @Output() searchChange = new EventEmitter<string>();
   @Output() sortByChange = new EventEmitter<Sort>();
+  @Output() sortDirectionChange = new EventEmitter<SortDirection>();
   @Output() showImdbRatingsChange = new EventEmitter<boolean>();
   @Output() showTmdbRatingsChange = new EventEmitter<boolean>();
   @Output() minRatingChange = new EventEmitter<number>();
@@ -80,6 +82,18 @@ export class DiscoveryHeaderComponent<Sort extends string, Link extends string> 
   @Output() retryImdb = new EventEmitter<void>();
 
   get ratingSourceLabel(): string { return this.ratingSource === 'imdb' ? 'IMDb' : 'TMDB'; }
+
+  get effectiveSortDirection(): SortDirection {
+    return this.sortDirection ?? (this.sortBy === 'name' ? 'asc' : 'desc');
+  }
+
+  directionLabel(direction: SortDirection): string {
+    const ascending = direction === 'asc';
+    const meaning = this.sortBy === 'name' ? (ascending ? 'A–Z' : 'Z–A')
+      : this.sortBy === 'year' ? (ascending ? 'oldest first' : 'newest first')
+      : (ascending ? 'low to high' : 'high to low');
+    return `${ascending ? 'Ascending' : 'Descending'} (${meaning})`;
+  }
 
   sortLabel(option: { value: string; label: string }): string {
     if (option.value === 'rating') return `Rating (${this.ratingSourceLabel})`;

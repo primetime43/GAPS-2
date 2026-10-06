@@ -126,6 +126,7 @@
           [(showTmdbRatings)]="showTmdbRatings" (showTmdbRatingsChange)="onRatingPrefsChange()"
           [(search)]="resultFilter" (searchChange)="applyFilter()"
           [(sortBy)]="sortBy" (sortByChange)="onSortChange()" [allowTmdbRatings]="mediaType === 'movie'"
+        [(sortDirection)]="sortDirection" (sortDirectionChange)="applyFilter()"
           [showRatingLimits]="false" ratingHelp=""
           [ratingSource]="effectiveRatingSource" (ratingSourceChange)="onRatingSourceChange($event)" [allowTmdbSource]="mediaType === 'movie'"
           [linkProvider]="mediaType === 'tv' ? tvLinkProvider : externalLinkProvider" (linkProviderChange)="setResultLinkProvider($event)"

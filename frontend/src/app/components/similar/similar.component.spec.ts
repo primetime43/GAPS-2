@@ -71,7 +71,7 @@ describe('SimilarComponent', () => {
     const sorting = new GapViewService(null);
     gapView.ratingOf.and.callFake((gap, source) => sorting.ratingOf(gap, source));
     gapView.votesOf.and.callFake((gap, source) => sorting.votesOf(gap, source));
-    gapView.sortGaps.and.callFake((gaps, sort, source) => sorting.sortGaps(gaps, sort, source));
+    gapView.sortGaps.and.callFake((gaps, sort, source, direction) => sorting.sortGaps(gaps, sort, source, direction));
     gapView.applyImdbRatings.and.returnValue(of(undefined));
     libraryService.getMovies.and.returnValue(of({ movies: [seed] }));
     radarrService.getConfig.and.returnValue(of({ enabled: false } as any));
@@ -118,6 +118,13 @@ describe('SimilarComponent', () => {
     sort.value = 'year';
     sort.dispatchEvent(new Event('change'));
     expect(component.filteredSimilar.map(g => g.id)).toEqual([3, 2]);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const direction = toolbar.querySelector('[aria-label="Sort direction"]');
+    direction.value = 'asc';
+    direction.dispatchEvent(new Event('change'));
+    expect(component.sortDirection).toBe('asc');
+    expect(component.filteredSimilar.map(g => g.id)).toEqual([2, 3]);
     const minimum = toolbar.querySelector('#similarMinRating');
     minimum.value = '6';
     minimum.dispatchEvent(new Event('input'));

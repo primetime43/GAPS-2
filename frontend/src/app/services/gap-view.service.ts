@@ -6,6 +6,7 @@ import { TmdbGenre } from './tmdb/tmdb.service';
 import { ImdbService } from './imdb.service';
 
 export type RatingSource = 'tmdb' | 'imdb';
+export type SortDirection = 'asc' | 'desc';
 export type GapSortKey = 'default' | 'rating' | 'votes' | 'year' | 'name';
 
 /**
@@ -38,17 +39,25 @@ export class GapViewService {
   }
 
   /** Sort a copy of the list by the selected key, leaving the source untouched. */
-  sortGaps(list: Gap[], sortBy: GapSortKey, source?: RatingSource): Gap[] {
-    // Unknown values follow even an actual zero rating/vote count.
-    const rating = (g: Gap) => source === 'imdb' ? (g.imdbRating ?? -1)
-      : source === 'tmdb' ? (g.tmdbRating ?? -1) : this.ratingOf(g);
-    const votes = (g: Gap) => source === 'imdb' ? (g.imdbVotes ?? -1)
-      : source === 'tmdb' ? (g.tmdbVotes ?? -1) : this.votesOf(g);
+  sortGaps(list: Gap[], sortBy: GapSortKey, source?: RatingSource,
+           direction: SortDirection = sortBy === 'name' ? 'asc' : 'desc'): Gap[] {
+    const sign = direction === 'asc' ? 1 : -1;
+    // Missing metadata stays last in either direction; actual zeroes are valid.
+    const compare = (a: number | undefined, b: number | undefined): number => {
+      if (a == null) return b == null ? 0 : 1;
+      if (b == null) return -1;
+      return sign * (a - b);
+    };
+    const rating = (g: Gap) => source === 'imdb' ? g.imdbRating
+      : source === 'tmdb' ? g.tmdbRating : (g.imdbRating ?? g.tmdbRating);
+    const votes = (g: Gap) => source === 'imdb' ? g.imdbVotes
+      : source === 'tmdb' ? g.tmdbVotes : (g.imdbRating != null ? g.imdbVotes : g.tmdbVotes);
+    const year = (g: Gap) => this.yearNum(g) > 0 ? this.yearNum(g) : undefined;
     switch (sortBy) {
-      case 'rating': return [...list].sort((a, b) => rating(b) - rating(a));
-      case 'votes': return [...list].sort((a, b) => votes(b) - votes(a));
-      case 'year': return [...list].sort((a, b) => this.yearNum(b) - this.yearNum(a));
-      case 'name': return [...list].sort((a, b) => String(a.name).localeCompare(String(b.name)));
+      case 'rating': return [...list].sort((a, b) => compare(rating(a), rating(b)));
+      case 'votes': return [...list].sort((a, b) => compare(votes(a), votes(b)));
+      case 'year': return [...list].sort((a, b) => compare(year(a), year(b)));
+      case 'name': return [...list].sort((a, b) => sign * String(a.name).localeCompare(String(b.name)));
       default: return list;
     }
   }

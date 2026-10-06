@@ -9,7 +9,7 @@ import { ExportService, ExportFormat } from '../../services/export.service';
 import { RadarrService } from '../../services/radarr.service';
 import { SonarrService } from '../../services/sonarr.service';
 import { TvdbService } from '../../services/tvdb.service';
-import { GapViewService, RatingSource } from '../../services/gap-view.service';
+import { GapViewService, RatingSource, SortDirection } from '../../services/gap-view.service';
 import { ImdbRatingsLoader } from '../../services/imdb-ratings-loader';
 import { TmdbService, TmdbGenre } from '../../services/tmdb/tmdb.service';
 import { Gap } from '../../models/recommendation.model';
@@ -107,6 +107,7 @@ export class ActorsComponent implements OnInit, OnDestroy {
 
   // Results sort + genre filter (reuse fields already on each gap).
   sortBy: 'default' | 'rating' | 'votes' | 'year' | 'name' = 'default';
+  sortDirection?: SortDirection;
   genreFilter: number | null = null;
   genres: TmdbGenre[] = [];
   availableGenres: TmdbGenre[] = [];
@@ -613,7 +614,7 @@ export class ActorsComponent implements OnInit, OnDestroy {
     if (this.genreFilter != null) {
       filtered = filtered.filter(g => (g.genreIds || []).includes(this.genreFilter as number));
     }
-    filtered = this.gapView.sortGaps(filtered, this.sortBy, this.effectiveRatingSource);
+    filtered = this.gapView.sortGaps(filtered, this.sortBy, this.effectiveRatingSource, this.sortDirection);
 
     const groups = new Map<string, Gap[]>();
     for (const gap of filtered) {

@@ -6,7 +6,7 @@ import { LibraryService } from '../../services/library.service';
 import { PreferencesService } from '../../services/preferences.service';
 import { RecommendationService } from '../../services/recommendation.service';
 import { RadarrService } from '../../services/radarr.service';
-import { GapViewService, RatingSource } from '../../services/gap-view.service';
+import { GapViewService, RatingSource, SortDirection } from '../../services/gap-view.service';
 import { ImdbRatingsLoader } from '../../services/imdb-ratings-loader';
 import { MediaLibrary } from '../../models/media-server.model';
 import { Movie } from '../../models/movie.model';
@@ -48,12 +48,13 @@ export class SimilarComponent implements OnInit, OnDestroy {
   resultFilter = '';
   view: ResultView = 'all';
   sortBy: ResultSort = 'relevance';
+  sortDirection?: SortDirection;
   readonly sortOptions = [
     { value: 'relevance', label: 'TMDB relevance' },
     { value: 'rating', label: 'Rating' },
     { value: 'votes', label: 'Vote count' },
-    { value: 'year', label: 'Year (newest)' },
-    { value: 'name', label: 'Title (A–Z)' },
+    { value: 'year', label: 'Year' },
+    { value: 'name', label: 'Title' },
   ];
   ownedCount = 0;
   missingCount = 0;
@@ -331,7 +332,7 @@ export class SimilarComponent implements OnInit, OnDestroy {
     }
 
     this.filteredSimilar = this.gapView.sortGaps(rows,
-      this.sortBy === 'relevance' ? 'default' : this.sortBy, this.ratingSource);
+      this.sortBy === 'relevance' ? 'default' : this.sortBy, this.ratingSource, this.sortDirection);
   }
 
   private ratingOf(movie: Gap): number {

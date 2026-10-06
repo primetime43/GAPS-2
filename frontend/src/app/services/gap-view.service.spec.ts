@@ -73,6 +73,31 @@ describe('GapViewService', () => {
     expect(movies.map(g => g.id)).toEqual([1, 2, 3, 4]);
   });
 
+  it('sorts ratings and votes in both directions with unknown values last', () => {
+    const movies = [
+      gap({ id: 1, imdbRating: 8, imdbVotes: 500, tmdbRating: 4, tmdbVotes: 10 }),
+      gap({ id: 2, imdbRating: 0, imdbVotes: 0, tmdbRating: 9, tmdbVotes: 1000 }),
+      gap({ id: 3 }),
+    ];
+    for (const sort of ['rating', 'votes'] as const) {
+      expect(service.sortGaps(movies, sort, 'imdb', 'asc').map(g => g.id)).toEqual([2, 1, 3]);
+      expect(service.sortGaps(movies, sort, 'imdb', 'desc').map(g => g.id)).toEqual([1, 2, 3]);
+      expect(service.sortGaps(movies, sort, 'tmdb', 'asc').map(g => g.id)).toEqual([1, 2, 3]);
+      expect(service.sortGaps(movies, sort, 'tmdb', 'desc').map(g => g.id)).toEqual([2, 1, 3]);
+    }
+    expect(movies.map(g => g.id)).toEqual([1, 2, 3]);
+  });
+
+  it('sorts years and titles in both directions while preserving default ordering', () => {
+    const movies = [gap({ id: 1, name: 'Bravo', year: '2020' }), gap({ id: 2, name: 'Alpha', year: 1990 }), gap({ id: 3, name: 'Charlie', year: 'N/A' })];
+    expect(service.sortGaps(movies, 'year', 'tmdb', 'asc').map(g => g.id)).toEqual([2, 1, 3]);
+    expect(service.sortGaps(movies, 'year', 'tmdb', 'desc').map(g => g.id)).toEqual([1, 2, 3]);
+    expect(service.sortGaps(movies, 'name', 'tmdb', 'asc').map(g => g.id)).toEqual([2, 1, 3]);
+    expect(service.sortGaps(movies, 'name', 'tmdb', 'desc').map(g => g.id)).toEqual([3, 1, 2]);
+    expect(service.sortGaps(movies, 'default', 'tmdb', 'asc')).toBe(movies);
+    expect(service.sortGaps(movies, 'default', 'tmdb', 'desc')).toBe(movies);
+  });
+
   it('reports failures to callers with retry controls while preserving the default behavior', () => {
     const failure = new Error('offline');
     imdbService.getRatings.and.returnValue(throwError(() => failure));

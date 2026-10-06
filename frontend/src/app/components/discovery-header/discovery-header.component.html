@@ -62,6 +62,11 @@
             [ngModel]="sortBy" (ngModelChange)="sortByChange.emit($event)">
       <option *ngFor="let option of sortOptions" [value]="option.value" [disabled]="!sortAvailable(option.value)">{{ sortLabel(option) }}</option>
     </select>
+    <select *ngIf="sortBy !== 'default' && sortBy !== 'relevance'" class="form-select dark-select result-direction"
+            aria-label="Sort direction" [ngModel]="effectiveSortDirection" (ngModelChange)="sortDirectionChange.emit($event)">
+      <option value="asc">{{ directionLabel('asc') }}</option>
+      <option value="desc">{{ directionLabel('desc') }}</option>
+    </select>
     <div class="dropdown">
       <button class="btn btn-outline-secondary dropdown-toggle rating-filter-button" type="button"
               data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
