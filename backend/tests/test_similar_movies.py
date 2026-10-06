@@ -1,6 +1,10 @@
 import unittest
 from unittest.mock import Mock
 
+from flask import Flask
+from requests.exceptions import Timeout
+
+from app.blueprints.recommendations import recommendations_bp
 from app.services.tmdb_service import TmdbService
 
 
@@ -87,6 +91,51 @@ class SimilarMoviesTests(unittest.TestCase):
         self.assertEqual(rows[1]['year'], 'N/A')
         for call in self.service._session.get.call_args_list:
             self.assertEqual(call.args[0], 'https://api.themoviedb.org/3/tv/100/recommendations')
+
+    def test_later_page_failures_discard_partial_results_for_movies_and_tv(self):
+        for lookup in (self.service.find_similar_movies, self.service.find_similar_shows):
+            for failed_page in (2, 3):
+                for failure in ('http', 'timeout', 'invalid_json'):
+                    with self.subTest(lookup=lookup.__name__, page=failed_page, failure=failure):
+                        responses = [self.response([{'id': page}], pages=3)
+                                     for page in range(1, failed_page)]
+                        responses.append({
+                            'http': self.response([], status=503),
+                            'timeout': Timeout('TMDB timed out'),
+                            'invalid_json': Mock(status_code=200, json=Mock(side_effect=ValueError('Invalid JSON'))),
+                        }[failure])
+                        self.service._session.get.reset_mock()
+                        self.service._session.get.side_effect = responses
+                        rows, error = lookup('key', 100, set())
+                        self.assertIsNone(rows)
+                        self.assertIn(f'page {failed_page}', error)
+                        self.assertIn('Please try again', error)
+                        self.assertEqual(self.service._session.get.call_count, failed_page)
+
+    def test_api_reports_later_page_failure_and_a_new_lookup_can_recover(self):
+        app = Flask(__name__)
+        app.register_blueprint(recommendations_bp, url_prefix='/api/recommendations')
+        app.tmdb_service = self.service
+        self.service._api_key = 'key'
+        self.service.get_tv_external_ids_batch = Mock(return_value=[{}])
+        app.plex_service = Mock(movies_cache={'Library': {'movies': [], 'tmdbIds': []}},
+                                shows_cache={'Library': {'shows': []}})
+        client = app.test_client()
+        for path, id_param in (('/similar', 'movieId'), ('/similar/tv', 'tmdbId')):
+            with self.subTest(path=path):
+                self.service._session.get.side_effect = [
+                    self.response([{'id': 1}], pages=2), self.response([], status=503),
+                    self.response([{'id': 2}]),
+                ]
+                query = {id_param: 100, 'libraryNames': 'Library'}
+                failed = client.get('/api/recommendations' + path, query_string=query)
+                self.assertEqual(failed.status_code, 502)
+                self.assertIn('page 2 (503)', failed.json['error'])
+                self.assertNotIn('gaps', failed.json)
+
+                retried = client.get('/api/recommendations' + path, query_string=query)
+                self.assertEqual(retried.status_code, 200)
+                self.assertEqual([row['tmdbId'] for row in retried.json['gaps']], [2])
 
     def test_external_seed_lookup_uses_exact_series_matches(self):
         self.service._api_key = 'key'

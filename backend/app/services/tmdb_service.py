@@ -1106,15 +1106,11 @@ class TmdbService:
                     timeout=10,
                 )
                 if resp.status_code != 200:
-                    if page == 1:
-                        return None, f"TMDB recommendations request failed ({resp.status_code})"
-                    break
+                    return None, f"TMDB recommendations request failed on page {page} ({resp.status_code}). Please try again."
                 payload = resp.json()
             except (requests.exceptions.RequestException, ValueError) as e:
                 logger.warning("TMDB recommendations lookup failed for %s: %s", tmdb_id, e)
-                if page == 1:
-                    return None, "Failed to fetch recommendations from TMDB"
-                break
+                return None, f"Failed to fetch recommendations from TMDB on page {page}. Please try again."
 
             for movie in payload.get("results", []):
                 movie_id = movie.get("id")
