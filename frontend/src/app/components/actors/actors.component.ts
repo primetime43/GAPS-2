@@ -317,6 +317,13 @@ export class ActorsComponent implements OnInit, OnDestroy {
   }
 
   selectActor(actor: PersonResult): void {
+    this.radarrRootFolderPath = '';
+    this.sonarrRootFolderPath = '';
+    this.loadActorGaps(actor);
+  }
+
+  /** Refresh the current results without changing the chosen download destination. */
+  private loadActorGaps(actor: PersonResult): void {
     this.gapsChanged$.next();
     this.imdbRatings.reset();
     this.searching = false;
@@ -331,8 +338,6 @@ export class ActorsComponent implements OnInit, OnDestroy {
 
     const libs = this.selectedLibraries.length ? this.selectedLibraries : this.libraries.map(l => l.title);
     this.downloaderLibraries = [...libs];
-    this.radarrRootFolderPath = '';
-    this.sonarrRootFolderPath = '';
     // TV gaps bundle IMDb ratings in the response; movies load them separately.
     const wantTvImdb = this.mediaType === 'tv' && (this.showImdbRatings || this.sortBy === 'rating' || this.sortBy === 'votes');
     this.actorService.getActorGaps(actor.id, libs, this.activeSource, true, this.showMinor, this.mediaType, wantTvImdb)
@@ -468,7 +473,7 @@ export class ActorsComponent implements OnInit, OnDestroy {
 
   onSortChange(): void {
     if (this.mediaType === 'tv' && this.selectedActor && (this.sortBy === 'rating' || this.sortBy === 'votes')) {
-      this.selectActor(this.selectedActor);
+      this.loadActorGaps(this.selectedActor);
     } else {
       this.applyFilter();
     }
@@ -483,7 +488,7 @@ export class ActorsComponent implements OnInit, OnDestroy {
       : { showImdbRatings: this.showImdbRatings, showTmdbRatings: this.showTmdbRatings }
     ).subscribe({ next: () => {}, error: () => {} });
     if (this.mediaType === 'tv' && this.showImdbRatings && this.selectedActor) {
-      this.selectActor(this.selectedActor);
+      this.loadActorGaps(this.selectedActor);
     }
     this.applyFilter();
     this.loadImdbRatings();

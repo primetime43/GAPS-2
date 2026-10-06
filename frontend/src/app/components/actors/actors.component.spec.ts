@@ -1,5 +1,6 @@
 import { DiscoveryHeaderComponent } from '../discovery-header/discovery-header.component';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 import { FormsModule } from '@angular/forms';
@@ -224,6 +225,56 @@ describe('ActorsComponent', () => {
     expect(actors.getActorGaps.calls.mostRecent().args[6]).toBeTrue();
     expect(component.effectiveRatingSource).toBe('imdb');
     expect(imdb.getRatings).not.toHaveBeenCalled();
+  });
+
+  for (const control of ['rating', 'votes', 'imdb'] as const) {
+    it(`preserves the Sonarr destination through a ${control} refresh and uses it when sending`, () => {
+      component.setMediaType('tv');
+      component.selectActor(actor);
+      component.sonarrRootFolderPath = '/chosen-tv';
+      const pending = new Subject<any>();
+      actors.getActorGaps.and.returnValue(pending);
+
+      if (control === 'imdb') {
+        component.showImdbRatings = true;
+        component.onRatingPrefsChange();
+      } else {
+        component.sortBy = control;
+        component.onSortChange();
+      }
+      expect(component.loadingGaps).toBeTrue();
+      expect(component.sonarrRootFolderPath).toBe('/chosen-tv');
+      expect(actors.getActorGaps.calls.mostRecent().args[6]).toBeTrue();
+
+      pending.next({ actor: null, gaps: [{ ...credit, tvdbId: 202 }] });
+      pending.complete();
+      expect(component.loadingGaps).toBeFalse();
+      expect(component.sonarrRootFolderPath).toBe('/chosen-tv');
+      fixture.detectChanges();
+      const destination = fixture.debugElement.query(By.directive(SonarrDestinationComponent)).componentInstance;
+      expect(destination.rootFolderPath).toBe('/chosen-tv');
+
+      component.downloaderEnabled = true;
+      const sonarr = TestBed.inject(SonarrService);
+      sonarr.addSeries = jasmine.createSpy('addSeries').and.returnValue(of({ message: 'Added' }));
+      component.send(component.allGaps[0], new Event('click'));
+      expect(sonarr.addSeries).toHaveBeenCalledWith(202, 'Test title', {
+        source: 'jellyfin', server: 'Test server', library_names: ['TV'], root_folder_path: '/chosen-tv',
+      });
+    });
+  }
+
+  it('still resets the Sonarr destination for a new actor or library selection', () => {
+    component.setMediaType('tv');
+    component.selectActor(actor);
+    component.sonarrRootFolderPath = '/chosen-tv';
+    component.selectActor({ ...actor, id: 2, name: 'Another actor' });
+    expect(component.sonarrRootFolderPath).toBe('');
+
+    component.sonarrRootFolderPath = '/chosen-tv';
+    component.toggleLibrarySelection('More TV');
+    expect(component.sonarrRootFolderPath).toBe('');
+    expect(component.downloaderLibraries).toEqual(['TV', 'More TV']);
   });
 
   it('cancels movie rating requests when changing media or clearing the actor', () => {
