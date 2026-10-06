@@ -303,6 +303,7 @@ describe('ActorsComponent', () => {
     component.selectActor(actor);
     fixture.detectChanges();
     expect(component.allGaps[0].externalUrl).toBe('https://thetvdb.com/dereferrer/series/201');
+    expect(fixture.nativeElement.textContent).not.toContain('TMDB');
     expect(fixture.nativeElement.querySelector('#actorShowTmdb')).toBeNull();
     expect(fixture.nativeElement.querySelector('.rating-chip.tmdb')).toBeNull();
     expect(fixture.nativeElement.querySelector('.rating-chip.imdb')).not.toBeNull();

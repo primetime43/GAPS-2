@@ -81,7 +81,12 @@ export class DiscoveryHeaderComponent<Sort extends string, Link extends string> 
   @Output() linkProviderChange = new EventEmitter<Link>();
   @Output() retryImdb = new EventEmitter<void>();
 
-  get ratingSourceLabel(): string { return this.ratingSource === 'imdb' ? 'IMDb' : 'TMDB'; }
+  get effectiveRatingSource(): RatingSource { return this.mediaType === 'tv' ? 'imdb' : this.ratingSource; }
+  get ratingSourceLabel(): string { return this.effectiveRatingSource === 'imdb' ? 'IMDb' : 'TMDB'; }
+  get visibleLinkOptions() {
+    return this.mediaType === 'tv' ? this.linkOptions.filter(option => option.value !== 'tmdb') : this.linkOptions;
+  }
+
 
   get effectiveSortDirection(): SortDirection {
     return this.sortDirection ?? (this.sortBy === 'name' ? 'asc' : 'desc');
@@ -96,6 +101,7 @@ export class DiscoveryHeaderComponent<Sort extends string, Link extends string> 
   }
 
   sortLabel(option: { value: string; label: string }): string {
+    if (this.mediaType === 'tv' && option.value === 'relevance') return 'Relevance';
     if (!this.ratingsAvailable) return option.label;
     if (option.value === 'rating') return `Rating (${this.ratingSourceLabel})`;
     if (option.value === 'votes') return `Vote count (${this.ratingSourceLabel})`;

@@ -132,4 +132,27 @@ describe('DiscoveryHeaderComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('Vote count (TMDB)');
     expect(fixture.nativeElement.textContent).not.toContain('Rating (IMDb)');
   });
+  it('enforces TV provider visibility centrally and restores movie options on switching back', async () => {
+    fixture.componentRef.setInput('mediaType', 'tv');
+    fixture.componentRef.setInput('linkProvider', 'imdb');
+    fixture.componentRef.setInput('sortOptions', [
+      { value: 'relevance', label: 'TMDB relevance' },
+      { value: 'rating', label: 'Rating' }, { value: 'votes', label: 'Vote count' },
+    ]);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(fixture.nativeElement.textContent).not.toContain('TMDB');
+    expect(fixture.nativeElement.querySelector('#testShowTmdb')).toBeNull();
+    expect(fixture.nativeElement.querySelector('#testRatingSource').value).toBe('imdb');
+    expect(fixture.nativeElement.querySelector('#testLinkProvider option[value="tmdb"]')).toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('Minimum IMDb rating');
+    fixture.componentRef.setInput('mediaType', 'movie');
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(fixture.nativeElement.querySelector('#testShowTmdb')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('#testLinkProvider option[value="tmdb"]')).not.toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('TMDB relevance');
+    expect(fixture.nativeElement.querySelector('#testRatingSource').value).toBe('tmdb');
+  });
+
 });

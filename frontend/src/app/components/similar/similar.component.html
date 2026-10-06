@@ -72,17 +72,16 @@
     <div *ngIf="selectedMovie">
       <app-radarr-destination *ngIf="mediaType === 'movie'" [(rootFolderPath)]="radarrRootFolderPath"></app-radarr-destination>
       <app-sonarr-destination *ngIf="mediaType === 'tv'" [(rootFolderPath)]="sonarrRootFolderPath"></app-sonarr-destination>
-      <app-discovery-header idPrefix="similar"
+      <app-discovery-header idPrefix="similar" [mediaType]="mediaType"
         [title]="'Because you liked ' + selectedMovie.name + ' (' + selectedMovie.year + ')'" (back)="clearResults()"
         [loading]="loadingSimilar" [loadingMessage]="'Finding similar ' + mediaLabel + '...'"
         [view]="view" (viewChange)="setView($event)" [allCount]="allSimilar.length" [ownedCount]="ownedCount" [missingCount]="missingCount"
         [(showImdbRatings)]="showImdbRatings" (showImdbRatingsChange)="onRatingPrefsChange()"
         [(showTmdbRatings)]="showTmdbRatings" (showTmdbRatingsChange)="onRatingPrefsChange()"
         [(search)]="resultFilter" (searchChange)="applyFilter()" [searchPlaceholder]="'Filter similar ' + mediaLabel + '...'"
-        [(sortBy)]="sortBy" (sortByChange)="applyFilter()" [sortOptions]="resultSortOptions"
+        [(sortBy)]="sortBy" (sortByChange)="applyFilter()" [sortOptions]="sortOptions"
         [(sortDirection)]="sortDirection" (sortDirectionChange)="applyFilter()"
         [ratingSource]="effectiveRatingSource" (ratingSourceChange)="ratingSource = $event; onRatingSourceChange()"
-        [allowTmdbSource]="mediaType === 'movie'" [allowTmdbRatings]="mediaType === 'movie'"
         [(minRating)]="minRating" (minRatingChange)="applyFilter()"
         [(minVoteCount)]="minVoteCount" (minVoteCountChange)="applyFilter()"
         [linkProvider]="effectiveLinkProvider" (linkProviderChange)="externalLinkProvider = $event; onLinkProviderChange()"

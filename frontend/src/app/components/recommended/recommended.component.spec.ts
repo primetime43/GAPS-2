@@ -307,6 +307,22 @@ describe('RecommendedComponent', () => {
     expect(toolbar.querySelector('#recShowFuture')).toBeTruthy();
   });
 
+  it('hides TMDB throughout Missing TV results even when movie preferences enable it', () => {
+    fixture.detectChanges();
+    component.hasServer = true;
+    component.scanMode = true;
+    component.mediaType = 'tv';
+    component.tvdbEnabled = true;
+    component.ratingSource = 'tmdb';
+    component.showTmdbRatings = true;
+    component.allGaps = [gap({ id: 1, name: 'Show', year: 2020, groupName: 'Franchise', tmdbRating: 8 })];
+    component.applyFilter();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('app-discovery-header:not([section="intro"])')).not.toBeNull();
+    expect(fixture.nativeElement.textContent).not.toContain('TMDB');
+    expect(fixture.nativeElement.querySelector('.rating-chip.tmdb')).toBeNull();
+  });
+
   it('offers a first scan, then a quick update after a completed scan with no gaps', fakeAsync(() => {
     activeServerService.getActive.and.returnValue(of(activeServer('plex', 'Plex', [
       { title: 'Movies', type: 'movie' }, { title: 'Other Movies', type: 'movie' },

@@ -140,11 +140,6 @@ export class SimilarComponent implements OnInit, OnDestroy {
 
   get effectiveRatingSource(): RatingSource { return this.mediaType === 'tv' ? 'imdb' : this.ratingSource; }
   get effectiveLinkProvider(): 'tmdb' | 'imdb' { return this.mediaType === 'tv' ? 'imdb' : this.externalLinkProvider; }
-  get resultSortOptions() {
-    return this.mediaType === 'tv'
-      ? this.sortOptions.map(option => option.value === 'relevance' ? { ...option, label: 'Relevance' } : option)
-      : this.sortOptions;
-  }
   readonly tvLinkOptions = [{ value: 'imdb', label: 'IMDb' }];
   readonly movieLinkOptions = [{ value: 'tmdb', label: 'TMDB' }, { value: 'imdb', label: 'IMDb' }];
 

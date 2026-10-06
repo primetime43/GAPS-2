@@ -120,15 +120,15 @@
       <div *ngIf="!loadingGaps && selectedActor">
         <app-radarr-destination *ngIf="mediaType === 'movie'" [(rootFolderPath)]="radarrRootFolderPath"></app-radarr-destination>
         <app-sonarr-destination *ngIf="mediaType === 'tv'" [(rootFolderPath)]="sonarrRootFolderPath"></app-sonarr-destination>
-        <app-discovery-header idPrefix="actor" [title]="selectedActor.name" (back)="clearActor()"
+        <app-discovery-header idPrefix="actor" [mediaType]="mediaType" [title]="selectedActor.name" (back)="clearActor()"
           [view]="view" (viewChange)="setView($event)" [allCount]="allGaps.length" [ownedCount]="ownedCount" [missingCount]="missingCount"
           [(showImdbRatings)]="showImdbRatings" (showImdbRatingsChange)="onRatingPrefsChange()"
           [(showTmdbRatings)]="showTmdbRatings" (showTmdbRatingsChange)="onRatingPrefsChange()"
           [(search)]="resultFilter" (searchChange)="applyFilter()"
-          [(sortBy)]="sortBy" (sortByChange)="onSortChange()" [allowTmdbRatings]="mediaType === 'movie'"
+          [(sortBy)]="sortBy" (sortByChange)="onSortChange()"
         [(sortDirection)]="sortDirection" (sortDirectionChange)="applyFilter()"
           [showRatingLimits]="false" ratingHelp=""
-          [ratingSource]="effectiveRatingSource" (ratingSourceChange)="onRatingSourceChange($event)" [allowTmdbSource]="mediaType === 'movie'"
+          [ratingSource]="effectiveRatingSource" (ratingSourceChange)="onRatingSourceChange($event)"
           [linkProvider]="mediaType === 'tv' ? tvLinkProvider : externalLinkProvider" (linkProviderChange)="setResultLinkProvider($event)"
           [linkOptions]="mediaType === 'tv' ? tvLinkOptions : movieLinkOptions"
           [imdbState]="mediaType === 'movie' ? imdbRatings : null" (retryImdb)="loadImdbRatings(true)">

@@ -217,7 +217,7 @@
     <div *ngIf="!loadingGaps && (scanMode || selectedItem) && allGaps.length > 0">
       <app-radarr-destination *ngIf="mediaType === 'movie'" [(rootFolderPath)]="radarrRootFolderPath"></app-radarr-destination>
       <app-sonarr-destination *ngIf="mediaType === 'tv'" [(rootFolderPath)]="sonarrRootFolderPath"></app-sonarr-destination>
-      <app-discovery-header idPrefix="rec" backLabel="Your Library" (back)="browseLibrary()"
+      <app-discovery-header idPrefix="rec" [mediaType]="mediaType" backLabel="Your Library" (back)="browseLibrary()"
         [title]="selectedItem ? ((mediaType === 'tv' ? 'Franchise' : 'Collection') + ' for: ' + selectedItem.name + ' (' + selectedItem.year + ')') : ('Found ' + missingCount + ' missing ' + (mediaType === 'tv' ? 'shows' : 'movies'))"
         [view]="view" (viewChange)="setView($event)" [allCount]="allGaps.length" [ownedCount]="ownedCount" [missingCount]="missingCount"
         [(showImdbRatings)]="showImdbRatings" (showImdbRatingsChange)="onRatingPrefsChange()"

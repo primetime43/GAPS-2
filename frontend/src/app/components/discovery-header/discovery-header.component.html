@@ -76,8 +76,8 @@
         <ng-container *ngIf="ratingsAvailable">
           <label class="form-label small mb-1" [for]="idPrefix + 'RatingSource'">Rating &amp; vote source</label>
           <select class="form-select form-select-sm dark-select mb-2" [id]="idPrefix + 'RatingSource'"
-                  [ngModel]="ratingSource" (ngModelChange)="ratingSourceChange.emit($event)">
-            <option *ngIf="allowTmdbSource" value="tmdb">TMDB only</option>
+                  [ngModel]="effectiveRatingSource" (ngModelChange)="ratingSourceChange.emit($event)">
+            <option *ngIf="mediaType === 'movie' && allowTmdbSource" value="tmdb">TMDB only</option>
             <option value="imdb">IMDb only</option>
           </select>
           <p class="text-muted small mb-3">Rating and vote-count sorting{{ showRatingLimits ? ', and both minimums,' : '' }} use {{ ratingSourceLabel }} only. Missing values sort last.</p>
@@ -88,7 +88,7 @@
                  [ngModel]="showImdbRatings" (ngModelChange)="showImdbRatingsChange.emit($event)">
           <label class="form-check-label" [for]="idPrefix + 'ShowImdb'">IMDb ratings</label>
         </div>
-        <div *ngIf="ratingsAvailable && allowTmdbRatings" class="form-check mb-3">
+        <div *ngIf="ratingsAvailable && mediaType === 'movie' && allowTmdbRatings" class="form-check mb-3">
           <input class="form-check-input" type="checkbox" [id]="idPrefix + 'ShowTmdb'"
                  [ngModel]="showTmdbRatings" (ngModelChange)="showTmdbRatingsChange.emit($event)">
           <label class="form-check-label" [for]="idPrefix + 'ShowTmdb'">TMDB ratings</label>
@@ -109,12 +109,12 @@
       <label [for]="idPrefix + 'LinkProvider'" class="text-muted small mb-0">Open in</label>
       <select [id]="idPrefix + 'LinkProvider'" class="form-select dark-select"
               [ngModel]="linkProvider" (ngModelChange)="linkProviderChange.emit($event)">
-        <option *ngFor="let option of linkOptions" [value]="option.value">{{ option.label }}</option>
+        <option *ngFor="let option of visibleLinkOptions" [value]="option.value">{{ option.label }}</option>
       </select>
     </div>
   </div>
 
-  <div *ngIf="!loading && (showImdbRatings || ratingSource === 'imdb') && allCount && imdbState" class="imdb-status text-muted small d-flex align-items-center flex-wrap gap-2 mb-3" role="status">
+  <div *ngIf="!loading && (showImdbRatings || effectiveRatingSource === 'imdb') && allCount && imdbState" class="imdb-status text-muted small d-flex align-items-center flex-wrap gap-2 mb-3" role="status">
     <ng-container *ngIf="imdbState.loading">
       <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
       Loading IMDb ratings… You can keep browsing.
