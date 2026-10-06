@@ -225,7 +225,7 @@
         [(search)]="searchFilter" (searchChange)="applyFilter()"
         [searchPlaceholder]="mediaType === 'tv' ? 'Filter results by show or franchise name...' : 'Filter results by movie or collection name...'"
         [(sortBy)]="sortBy" (sortByChange)="onResultFilterChange()"
-        [showRatingLimits]="mediaType === 'movie'" [ratingsAvailable]="mediaType === 'movie'" [popularityAvailable]="mediaType === 'movie'"
+        [showRatingLimits]="mediaType === 'movie'" [ratingsAvailable]="mediaType === 'movie'"
         [(ratingSource)]="ratingSource" (ratingSourceChange)="onRatingSourceChange()"
         [imdbState]="mediaType === 'movie' ? imdbRatings : null" (retryImdb)="loadImdbRatings(true)"
         [(minRating)]="minRating" (minRatingChange)="onRatingFilterChange()"

@@ -8,7 +8,8 @@ import type { GapSortKey, RatingSource } from './gap-view.service';
  * separate from the scan-affecting hideOwned/hideFuture defaults). */
 export interface MissingFilters {
   view: 'all' | 'owned' | 'missing';
-  sortBy: GapSortKey;
+  // Older saved preferences may still contain the removed popularity sort.
+  sortBy: GapSortKey | 'popularity';
   genreFilter: number | null;
   showFuture: boolean;
   minRating?: number;

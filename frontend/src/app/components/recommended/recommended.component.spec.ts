@@ -182,6 +182,21 @@ describe('RecommendedComponent', () => {
     expect(component.filteredGroups).toEqual([]);
   });
 
+  it('migrates a saved popularity sort to vote count using the selected rating source', () => {
+    preferencesService.load.and.returnValue(of({ ...DEFAULT_PREFERENCES, ratingSource: 'imdb', missingFilters: {
+      view: 'all', sortBy: 'popularity', genreFilter: null, showFuture: true,
+    } }));
+    fixture.detectChanges();
+    expect(component.sortBy).toBe('votes');
+    component.allGaps = [
+      gap({ id: 1, groupName: 'A', imdbVotes: 10, tmdbVotes: 500 }),
+      gap({ id: 2, groupName: 'B', imdbVotes: 200, tmdbVotes: 5 }),
+    ];
+    component.onResultFilterChange();
+    expect(component.filteredGroups.map(g => g.name)).toEqual(['B', 'A']);
+    expect(preferencesService.save).toHaveBeenCalledWith({ missingFilters: jasmine.objectContaining({ sortBy: 'votes' }) });
+  });
+
   it('applies and remembers changes made through the shared results toolbar', async () => {
     fixture.detectChanges();
     component.hasServer = true;

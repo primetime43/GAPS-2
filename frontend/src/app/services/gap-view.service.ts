@@ -6,7 +6,7 @@ import { TmdbGenre } from './tmdb/tmdb.service';
 import { ImdbService } from './imdb.service';
 
 export type RatingSource = 'tmdb' | 'imdb';
-export type GapSortKey = 'default' | 'rating' | 'votes' | 'popularity' | 'year' | 'name';
+export type GapSortKey = 'default' | 'rating' | 'votes' | 'year' | 'name';
 
 /**
  * Shared logic for the gap result grids used by both the Missing/Recommended
@@ -47,7 +47,6 @@ export class GapViewService {
     switch (sortBy) {
       case 'rating': return [...list].sort((a, b) => rating(b) - rating(a));
       case 'votes': return [...list].sort((a, b) => votes(b) - votes(a));
-      case 'popularity': return [...list].sort((a, b) => (b.popularity || 0) - (a.popularity || 0));
       case 'year': return [...list].sort((a, b) => this.yearNum(b) - this.yearNum(a));
       case 'name': return [...list].sort((a, b) => String(a.name).localeCompare(String(b.name)));
       default: return list;

@@ -73,12 +73,6 @@ describe('GapViewService', () => {
     expect(movies.map(g => g.id)).toEqual([1, 2, 3, 4]);
   });
 
-  it('keeps popularity tied to TMDB regardless of the rating source', () => {
-    const movies = [gap({ id: 1, popularity: 10, imdbVotes: 1000 }), gap({ id: 2, popularity: 50, imdbVotes: 1 })];
-    expect(service.sortGaps(movies, 'popularity', 'imdb').map(g => g.id)).toEqual([2, 1]);
-    expect(service.sortGaps(movies, 'popularity', 'tmdb').map(g => g.id)).toEqual([2, 1]);
-  });
-
   it('reports failures to callers with retry controls while preserving the default behavior', () => {
     const failure = new Error('offline');
     imdbService.getRatings.and.returnValue(throwError(() => failure));

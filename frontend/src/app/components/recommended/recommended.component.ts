@@ -539,7 +539,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
           this.minRating = mf.minRating ?? this.minRating;
           this.minVoteCount = mf.minVoteCount ?? this.minVoteCount;
           if (mf.view) this.view = mf.view;
-          if (mf.sortBy) this.sortBy = mf.sortBy;
+          if (mf.sortBy) this.sortBy = mf.sortBy === 'popularity' ? 'votes' : mf.sortBy;
           this.genreFilter = this.mediaType === 'movie' ? (mf.genreFilter ?? null) : null;
           if (typeof mf.showFuture === 'boolean') this.showFuture = mf.showFuture;
         }

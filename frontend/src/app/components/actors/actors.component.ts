@@ -106,7 +106,7 @@ export class ActorsComponent implements OnInit, OnDestroy {
   actorDetails: PersonDetails | null = null;
 
   // Results sort + genre filter (reuse fields already on each gap).
-  sortBy: 'default' | 'rating' | 'votes' | 'popularity' | 'year' | 'name' = 'default';
+  sortBy: 'default' | 'rating' | 'votes' | 'year' | 'name' = 'default';
   genreFilter: number | null = null;
   genres: TmdbGenre[] = [];
   availableGenres: TmdbGenre[] = [];

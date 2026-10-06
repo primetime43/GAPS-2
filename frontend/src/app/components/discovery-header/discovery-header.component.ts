@@ -45,7 +45,6 @@ export class DiscoveryHeaderComponent<Sort extends string, Link extends string> 
     { value: 'default', label: 'Default' },
     { value: 'rating', label: 'Rating' },
     { value: 'votes', label: 'Vote count' },
-    { value: 'popularity', label: 'Popularity' },
     { value: 'year', label: 'Year (newest)' },
     { value: 'name', label: 'Title (A–Z)' },
   ];
@@ -58,7 +57,6 @@ export class DiscoveryHeaderComponent<Sort extends string, Link extends string> 
   @Input() ratingSource: RatingSource = 'tmdb';
   @Input() allowTmdbSource = true;
   @Input() ratingsAvailable = true;
-  @Input() popularityAvailable = true;
   @Input() ratingHelp = 'Set either minimum to 0 to ignore it. Titles without the selected rating or vote count are excluded when that minimum is set.';
   @Input() linkProvider: Link;
   @Input() linkOptions: ReadonlyArray<{ value: string; label: string }> = [
@@ -86,13 +84,11 @@ export class DiscoveryHeaderComponent<Sort extends string, Link extends string> 
   sortLabel(option: { value: string; label: string }): string {
     if (option.value === 'rating') return `Rating (${this.ratingSourceLabel})`;
     if (option.value === 'votes') return `Vote count (${this.ratingSourceLabel})`;
-    if (option.value === 'popularity') return 'TMDB popularity';
     return option.label;
   }
 
   sortAvailable(value: string): boolean {
-    return !((value === 'rating' || value === 'votes') && !this.ratingsAvailable)
-      && !(value === 'popularity' && !this.popularityAvailable);
+    return !((value === 'rating' || value === 'votes') && !this.ratingsAvailable);
   }
 
   changeMinRating(value: number | null): void {
