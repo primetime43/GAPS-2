@@ -532,6 +532,62 @@ describe('RecommendedComponent', () => {
     expect(component.filteredGroups[0].name).toBe('Alien Collection');
   });
 
+  it('orders collections by their newest visible movie after rating and vote filters', () => {
+    component.allGaps = [
+      gap({ id: 1, groupName: 'Madea', year: '2025', tmdbRating: 5, tmdbVotes: 200 }),
+      gap({ id: 2, groupName: 'Madea', year: '2024', tmdbRating: 7, tmdbVotes: 100 }),
+      gap({ id: 3, groupName: 'Madea', year: '2006', tmdbRating: 7, tmdbVotes: 200 }),
+      gap({ id: 4, groupName: 'Madea', year: '2009', tmdbRating: 7, tmdbVotes: 200 }),
+      gap({ id: 5, groupName: 'Untold', year: 2021, tmdbRating: 7, tmdbVotes: 200 }),
+      gap({ id: 6, groupName: 'Unknown', year: 'N/A' }),
+    ];
+    component.sortBy = 'year';
+    component.minRating = 6;
+    component.minVoteCount = 110;
+    component.applyFilter();
+
+    expect(component.filteredGroups.map(g => g.name)).toEqual(['Untold', 'Madea', 'Unknown']);
+    expect(component.filteredGroups[1].gaps.map(g => g.year)).toEqual(['2009', '2006']);
+    expect(component.ratingHiddenCount).toBe(2);
+    expect(component.allGaps.map(g => g.id)).toEqual([1, 2, 3, 4, 5, 6]);
+    component.renderLimit = 1;
+    expect(component.visibleGroups[0].name).toBe('Untold');
+
+    component.minRating = 0;
+    component.minVoteCount = 0;
+    component.applyFilter();
+    expect(component.filteredGroups[0].name).toBe('Madea');
+    expect(component.ratingHiddenCount).toBe(0);
+  });
+
+  it('orders collections by their newest search match', () => {
+    component.allGaps = [
+      gap({ id: 1, name: 'Hidden', groupName: 'A', year: 2025 }),
+      gap({ id: 2, name: 'Match old', groupName: 'A', year: 2009 }),
+      gap({ id: 3, name: 'Match new', groupName: 'B', year: 2021 }),
+    ];
+    component.sortBy = 'year';
+    component.searchFilter = 'match';
+    component.applyFilter();
+    expect(component.filteredGroups.map(g => g.name)).toEqual(['B', 'A']);
+
+    component.sortBy = 'default';
+    component.applyFilter();
+    expect(component.filteredGroups.map(g => g.name)).toEqual(['A', 'B']);
+  });
+
+  it('orders collections by their highest visible rating after vote filtering', () => {
+    component.allGaps = [
+      gap({ id: 1, groupName: 'A', year: 2000, tmdbRating: 9, tmdbVotes: 10 }),
+      gap({ id: 2, groupName: 'A', year: 2000, tmdbRating: 6, tmdbVotes: 200 }),
+      gap({ id: 3, groupName: 'B', year: 2000, tmdbRating: 8, tmdbVotes: 200 }),
+    ];
+    component.sortBy = 'rating';
+    component.minVoteCount = 110;
+    component.applyFilter();
+    expect(component.filteredGroups.map(g => g.name)).toEqual(['B', 'A']);
+  });
+
   it('exportResults should call exportService with filtered gaps', () => {
     component.filteredGroups = [{
       name: 'Coll',

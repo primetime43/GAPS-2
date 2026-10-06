@@ -1478,6 +1478,13 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     // Index full groups by name for per-group actions (windowed rendering may
     // hand a partial group to the template), and reset the render window.
     this.groupByName = new Map(this.filteredGroups.map(g => [g.name, g]));
+    if (this.sortBy !== 'default') {
+      // Each group's remaining titles are already sorted. Reorder the groups
+      // by their first visible title so hidden titles cannot set their position.
+      this.filteredGroups = this.gapView.sortGaps(
+        this.filteredGroups.map(group => group.gaps[0]), this.sortBy,
+      ).map(gap => this.groupByName.get(gap.groupName)!);
+    }
     this.renderLimit = this.RENDER_CHUNK;
   }
 
