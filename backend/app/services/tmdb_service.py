@@ -1539,8 +1539,8 @@ class TmdbService:
 
     # -- Actor / actress TV gaps --
     # The TV counterpart of get_actor_gaps: an actor's TV credits cross-checked
-    # against owned shows. TheTVDB ids (for Sonarr / the ignore list) are
-    # resolved by the caller from the returned tmdbId, lazily and cached.
+    # against owned shows. Resolve external IDs before filtering so owned
+    # titles are recognized even when only a TVDB or IMDb ID matches.
 
     def _build_actor_tv_gap_entries(
         self,
@@ -1602,7 +1602,7 @@ class TmdbService:
     ) -> tuple[list[dict] | None, str | None]:
         """Find owned/missing TV shows for an actor's TV credits.
 
-        Entries carry the TMDB show id; the caller resolves TheTVDB ids from it.
+        Entries carry TMDB, TVDB and IMDb IDs for ownership, links and Sonarr.
         """
         if not self._api_key:
             return None, "No TMDB API key configured"
@@ -1618,14 +1618,37 @@ class TmdbService:
             if name:
                 owned_title_year.add(f"{name}|{year}")
 
+        tv_cast = credits.get("tv_cast", [])
+        tmdb_ids = list(dict.fromkeys(
+            credit['id'] for credit in tv_cast
+            if credit.get('id') and not credit.get('adult')
+            and (credit.get('name') or credit.get('original_name'))
+        ))
+        external_ids = dict(zip(tmdb_ids, self.get_tv_external_ids_batch(tmdb_ids)))
+        owned_external_ids = {
+            key: {str(show[key]) for show in owned_shows or [] if show.get(key)}
+            for key in ('tvdbId', 'imdbId')
+        }
+        # Match IDs before applying show_existing / include_minor. Otherwise an
+        # owned minor credit could be discarded before we recognize it as owned.
+        matched_ids = set(owned_tmdb_ids)
+        for tmdb_id, ids in external_ids.items():
+            if any(ids.get(key) and str(ids[key]) in values
+                   for key, values in owned_external_ids.items()):
+                matched_ids.add(tmdb_id)
+
         entries = self._build_actor_tv_gap_entries(
-            credits.get("tv_cast", []),
+            tv_cast,
             credits.get("actor_name", "Unknown"),
-            owned_tmdb_ids,
+            matched_ids,
             owned_title_year,
             show_existing,
             include_minor,
         )
+        for entry in entries:
+            ids = external_ids.get(entry['tmdbId'], {})
+            entry['tvdbId'] = ids.get('tvdbId')
+            entry['imdbId'] = ids.get('imdbId')
         entries.sort(key=lambda e: (e["year"] == "N/A", e["year"]))
         return entries, None
 
