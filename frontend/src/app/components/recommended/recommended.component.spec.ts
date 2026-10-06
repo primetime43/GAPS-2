@@ -1,3 +1,4 @@
+import { DiscoveryHeaderComponent } from '../discovery-header/discovery-header.component';
 import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { RouterTestingModule } from '@angular/router/testing';
@@ -97,7 +98,7 @@ describe('RecommendedComponent', () => {
     tmdbService.getGenres.and.returnValue(of([]));
 
     await TestBed.configureTestingModule({
-      imports: [HttpClientTestingModule, FormsModule, RouterTestingModule, RadarrDestinationComponent, SonarrDestinationComponent],
+      imports: [DiscoveryHeaderComponent, HttpClientTestingModule, FormsModule, RouterTestingModule, RadarrDestinationComponent, SonarrDestinationComponent],
       declarations: [RecommendedComponent, MockConfirmModalComponent, CompactNumberPipe],
       providers: [
         { provide: ActiveServerService, useValue: activeServerService },
@@ -119,6 +120,31 @@ describe('RecommendedComponent', () => {
 
   it('should create', () => {
     expect(component).toBeTruthy();
+  });
+
+  it('applies and remembers changes made through the shared results toolbar', async () => {
+    fixture.detectChanges();
+    component.hasServer = true;
+    component.scanMode = true;
+    component.allGaps = [
+      gap({ id: 1, name: 'Older', year: 2000, groupName: 'A' }),
+      gap({ id: 2, name: 'Newer', year: 2020, groupName: 'B' }),
+    ];
+    component.applyFilter();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const toolbar = fixture.nativeElement.querySelector('app-discovery-header:not([section="intro"])');
+    const sort = toolbar.querySelector('.result-sort');
+    sort.value = 'year';
+    sort.dispatchEvent(new Event('change'));
+    expect(component.sortBy).toBe('year');
+    expect(component.filteredGroups[0].name).toBe('B');
+    expect(preferencesService.save).toHaveBeenCalledWith({ missingFilters: jasmine.objectContaining({ sortBy: 'year' }) });
+    const search = toolbar.querySelector('.result-controls input');
+    search.value = 'Older';
+    search.dispatchEvent(new Event('input'));
+    expect(component.filteredGroups.map(g => g.name)).toEqual(['A']);
+    expect(toolbar.querySelector('#recShowFuture')).toBeTruthy();
   });
 
   it('offers a first scan, then a quick update after a completed scan with no gaps', fakeAsync(() => {

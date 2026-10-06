@@ -1,3 +1,4 @@
+import { DiscoveryHeaderComponent } from '../discovery-header/discovery-header.component';
 import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
 import { FormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
@@ -75,7 +76,7 @@ describe('SimilarComponent', () => {
     recommendationService.getSimilarMovies.and.returnValue(of([]));
 
     await TestBed.configureTestingModule({
-      imports: [FormsModule, RouterTestingModule, RadarrDestinationComponent],
+      imports: [DiscoveryHeaderComponent, FormsModule, RouterTestingModule, RadarrDestinationComponent],
       declarations: [SimilarComponent, CompactNumberPipe],
       providers: [
         { provide: ActiveServerService, useValue: activeServerService },
@@ -98,6 +99,28 @@ describe('SimilarComponent', () => {
     fixture.detectChanges();
     expect(component.errorMessage).toBe('Server offline');
     expect(component.loadingMovies).toBeFalse();
+  });
+
+  it('applies shared rating and sort controls without losing TMDB relevance', async () => {
+    recommendationService.getSimilarMovies.and.returnValue(of([
+      { tmdbId: 2, name: 'Older', year: 2000, voteAverage: 5, voteCount: 200 },
+      { tmdbId: 3, name: 'Newer', year: 2020, voteAverage: 8, voteCount: 200 },
+    ] as any));
+    fixture.detectChanges();
+    component.selectMovie(seed);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const toolbar = fixture.nativeElement.querySelector('app-discovery-header:not([section="intro"])');
+    const sort = toolbar.querySelector('.result-sort');
+    expect(sort.value).toBe('relevance');
+    sort.value = 'year';
+    sort.dispatchEvent(new Event('change'));
+    expect(component.filteredSimilar.map(g => g.id)).toEqual([3, 2]);
+    const minimum = toolbar.querySelector('#similarMinRating');
+    minimum.value = '6';
+    minimum.dispatchEvent(new Event('input'));
+    expect(component.minRating).toBe(6);
+    expect(component.filteredSimilar.map(g => g.id)).toEqual([3]);
   });
 
   it('ignores library results from a previous selection', () => {

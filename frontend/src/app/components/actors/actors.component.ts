@@ -432,6 +432,15 @@ export class ActorsComponent implements OnInit, OnDestroy {
   /**
    * Recompute links and remember independent movie and TV provider choices.
    */
+  readonly movieLinkOptions = [{ value: 'tmdb', label: 'TMDB' }, { value: 'imdb', label: 'IMDb' }];
+  readonly tvLinkOptions = [{ value: 'tvdb', label: 'TheTVDB' }, { value: 'imdb', label: 'IMDb' }];
+
+  setResultLinkProvider(provider: 'tmdb' | 'imdb' | 'tvdb'): void {
+    if (this.mediaType === 'tv' && provider !== 'tmdb') this.tvLinkProvider = provider;
+    if (this.mediaType === 'movie' && provider !== 'tvdb') this.externalLinkProvider = provider;
+    this.onLinkProviderChange();
+  }
+
   onLinkProviderChange(): void {
     for (const gap of this.allGaps) {
       gap.externalUrl = this.mediaType === 'tv'

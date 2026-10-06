@@ -26,65 +26,19 @@
 
   <!-- Main content -->
   <div *ngIf="!loading && hasServer">
-    <!-- Keep the media switch available while viewing or loading a filmography. -->
-    <div class="btn-group btn-group-sm mb-3" role="group" aria-label="Media type">
-      <button type="button" class="btn"
-              [attr.aria-pressed]="mediaType === 'movie'"
-              [class.btn-primary]="mediaType === 'movie'"
-              [class.btn-outline-secondary]="mediaType !== 'movie'"
-              (click)="setMediaType('movie')">Movies</button>
-      <button type="button" class="btn"
-              [attr.aria-pressed]="mediaType === 'tv'"
-              [class.btn-primary]="mediaType === 'tv'"
-              [class.btn-outline-secondary]="mediaType !== 'tv'"
-              (click)="setMediaType('tv')">TV Shows</button>
-    </div>
-
-    <h3 *ngIf="!selectedActor" class="regular-text">Find {{ mediaType === 'tv' ? 'TV Shows' : 'Movies' }} by Actor</h3>
-    <p *ngIf="!selectedActor" class="text-muted">
-      Search for an actor or actress to see which of their
-      {{ mediaType === 'tv' ? 'TV shows' : 'movies' }} you own and which you're missing.
-    </p>
-
-    <!-- No matching libraries -->
-    <div *ngIf="libraries.length === 0" class="alert alert-info">
-      No {{ mediaType === 'tv' ? 'TV' : 'movie' }} libraries found on <strong>{{ activeServerName }}</strong>.
-    </div>
+    <app-discovery-header section="intro" idPrefix="actor" [showMediaToggle]="true"
+      [mediaType]="mediaType" (mediaTypeChange)="setMediaType($event)"
+      [title]="'Find ' + (mediaType === 'tv' ? 'TV Shows' : 'Movies') + ' by Actor'"
+      [description]="'Search for an actor or actress to see which of their ' + (mediaType === 'tv' ? 'TV shows' : 'movies') + ' you own and which you’re missing.'"
+      [libraries]="libraries" [selectedLibraries]="selectedLibraries" [serverName]="activeServerName"
+      [requireLibrary]="true" [librariesDisabled]="loadingGaps" (libraryToggle)="toggleLibrarySelection($event)">
+    </app-discovery-header>
 
     <div *ngIf="libraries.length > 0">
-      <!-- Search box (hidden once an actor is picked — the results page has its own header) -->
-      <div class="row mb-3" *ngIf="!selectedActor">
-        <div class="col-md-6">
-          <label class="text-muted mb-1">Search for an actor or actress</label>
-          <input
-            class="form-control dark-input"
-            type="text"
-            placeholder="e.g. Will Smith"
-            [(ngModel)]="query"
-            (ngModelChange)="onQueryChange()"
-            autocomplete="off"
-          >
-        </div>
-
-        <!-- Library cross-check selector -->
-        <div class="col-md-6">
-          <label class="text-muted mb-1">Count as owned if in:</label>
-          <div class="d-flex flex-wrap gap-2">
-            <div *ngFor="let lib of libraries" class="form-check form-check-inline">
-              <input
-                class="form-check-input"
-                type="checkbox"
-                [id]="'actor-lib-' + lib.title"
-                [checked]="isLibrarySelected(lib.title)"
-                [disabled]="selectedLibraries.length === 1 && isLibrarySelected(lib.title)"
-                (change)="toggleLibrarySelection(lib.title)"
-              >
-              <label class="form-check-label text-muted" [for]="'actor-lib-' + lib.title" style="font-size: 13px;">
-                {{ lib.title }}
-              </label>
-            </div>
-          </div>
-        </div>
+      <div class="mb-3" *ngIf="!selectedActor">
+        <label for="actorSearch" class="text-muted mb-1">Search for an actor or actress</label>
+        <input id="actorSearch" class="form-control dark-input" type="text" placeholder="e.g. Will Smith"
+               [(ngModel)]="query" (ngModelChange)="onQueryChange()" autocomplete="off">
       </div>
 
       <!-- Searching spinner -->
@@ -166,119 +120,59 @@
       <div *ngIf="!loadingGaps && selectedActor">
         <app-radarr-destination *ngIf="mediaType === 'movie'" [(rootFolderPath)]="radarrRootFolderPath"></app-radarr-destination>
         <app-sonarr-destination *ngIf="mediaType === 'tv'" [(rootFolderPath)]="sonarrRootFolderPath"></app-sonarr-destination>
-        <div class="d-flex align-items-center mb-3 flex-wrap gap-2">
-          <button class="btn btn-sm btn-outline-light me-2" (click)="clearActor()">&larr; Back</button>
-          <h5 class="regular-text mb-0">{{ selectedActor.name }}</h5>
-          <div class="d-flex ms-auto gap-2 flex-wrap align-items-center">
-            <!-- Primary: owned / missing view -->
-            <div class="btn-group btn-group-sm view-toggle" role="group" aria-label="Owned or missing">
-              <button type="button" class="btn"
-                      [class.btn-primary]="view === 'all'"
-                      [class.btn-outline-secondary]="view !== 'all'"
-                      (click)="setView('all')">All</button>
-              <button type="button" class="btn"
-                      [class.btn-primary]="view === 'owned'"
-                      [class.btn-outline-secondary]="view !== 'owned'"
-                      (click)="setView('owned')">Owned ({{ ownedCount }})</button>
-              <button type="button" class="btn"
-                      [class.btn-primary]="view === 'missing'"
-                      [class.btn-outline-secondary]="view !== 'missing'"
-                      (click)="setView('missing')">Missing ({{ missingCount }})</button>
+        <app-discovery-header idPrefix="actor" [title]="selectedActor.name" (back)="clearActor()"
+          [view]="view" (viewChange)="setView($event)" [allCount]="allGaps.length" [ownedCount]="ownedCount" [missingCount]="missingCount"
+          [(showImdbRatings)]="showImdbRatings" (showImdbRatingsChange)="onRatingPrefsChange()"
+          [(showTmdbRatings)]="showTmdbRatings" (showTmdbRatingsChange)="onRatingPrefsChange()"
+          [(search)]="resultFilter" (searchChange)="applyFilter()"
+          [(sortBy)]="sortBy" (sortByChange)="applyFilter()" [allowTmdbRatings]="mediaType === 'movie'"
+          [showRatingLimits]="false" ratingHelp="Sorting uses IMDb when enabled and available, otherwise TMDB."
+          [linkProvider]="mediaType === 'tv' ? tvLinkProvider : externalLinkProvider" (linkProviderChange)="setResultLinkProvider($event)"
+          [linkOptions]="mediaType === 'tv' ? tvLinkOptions : movieLinkOptions"
+          [imdbState]="mediaType === 'movie' ? imdbRatings : null" (retryImdb)="loadImdbRatings(true)">
+          <div toolbar-actions class="dropdown">
+            <button class="btn btn-sm btn-outline-info dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">Export</button>
+            <ul class="dropdown-menu dropdown-menu-dark dropdown-menu-end">
+              <li><button type="button" class="dropdown-item" (click)="exportResults('csv')">Export as CSV</button></li>
+              <li><button type="button" class="dropdown-item" (click)="exportResults('xlsx')">Export as Excel</button></li>
+            </ul>
+          </div>
+          <div toolbar-filters>
+            <hr class="dropdown-divider">
+            <div>
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="actorShowFuture"
+          [(ngModel)]="showFuture" (ngModelChange)="onFilterChange()">
+                <label class="form-check-label" for="actorShowFuture"
+                       title="Include titles that haven't been released yet">Future releases</label>
+              </div>
             </div>
-
-            <!-- Secondary: refinements -->
-            <div class="dropdown">
-              <button class="btn btn-sm btn-outline-light dropdown-toggle" type="button"
-                      data-bs-toggle="dropdown" data-bs-auto-close="outside">
-                Filters
-              </button>
-              <ul class="dropdown-menu dropdown-menu-dark dropdown-menu-end p-2 filter-menu">
-                <li>
-                  <div class="form-check">
-                    <input class="form-check-input" type="checkbox" id="actorShowFuture"
-                           [(ngModel)]="showFuture" (ngModelChange)="onFilterChange()">
-                    <label class="form-check-label" for="actorShowFuture"
-                           title="Include titles that haven't been released yet">Future releases</label>
-                  </div>
-                </li>
-                <li>
-                  <div class="form-check">
-                    <input class="form-check-input" type="checkbox" id="actorShowMinor"
-                           [(ngModel)]="showMinor" (ngModelChange)="onShowMinorChange()">
-                    <label class="form-check-label" for="actorShowMinor"
-                           title="Include featurettes, making-of docs, 'as themselves' appearances, and undated/in-development titles">Extras</label>
-                  </div>
-                </li>
-                <li *ngIf="ignoredIds.size > 0">
-                  <div class="form-check">
-                    <input class="form-check-input" type="checkbox" id="actorShowIgnored"
-                           [(ngModel)]="showIgnored" (ngModelChange)="onFilterChange()">
-                    <label class="form-check-label" for="actorShowIgnored">Ignored ({{ ignoredIds.size }})</label>
-                  </div>
-                </li>
-                <li>
-                  <div class="form-check">
-                    <input class="form-check-input" type="checkbox" id="actorShowImdb"
-                           [(ngModel)]="showImdbRatings" (ngModelChange)="onRatingPrefsChange()">
-                    <label class="form-check-label" for="actorShowImdb">IMDb ratings</label>
-                  </div>
-                </li>
-                <li *ngIf="mediaType === 'movie'">
-                  <div class="form-check">
-                    <input class="form-check-input" type="checkbox" id="actorShowTmdb"
-                           [(ngModel)]="showTmdbRatings" (ngModelChange)="onRatingPrefsChange()">
-                    <label class="form-check-label" for="actorShowTmdb">TMDB ratings</label>
-                  </div>
-                </li>
-                <li><hr class="dropdown-divider"></li>
-                <li>
-                  <label class="form-label small mb-1 d-block">Sort by</label>
-                  <select class="form-select form-select-sm dark-select"
-                          [(ngModel)]="sortBy" (ngModelChange)="applyFilter()">
-                    <option value="default">Default</option>
-                    <option value="rating">Rating</option>
-                    <option value="popularity">Popularity</option>
-                    <option value="year">Year (newest)</option>
-                    <option value="name">Title (A–Z)</option>
-                  </select>
-                </li>
-                <li *ngIf="availableGenres.length">
-                  <label class="form-label small mb-1 mt-2 d-block">Genre</label>
-                  <select class="form-select form-select-sm dark-select"
-                          [(ngModel)]="genreFilter" (ngModelChange)="applyFilter()">
-                    <option [ngValue]="null">All genres</option>
-                    <option *ngFor="let gen of availableGenres" [ngValue]="gen.id">{{ gen.name }}</option>
-                  </select>
-                </li>
-                <li><hr class="dropdown-divider"></li>
-                <li>
-                  <label class="form-label small mb-1 d-block">Open links in</label>
-                  <select *ngIf="mediaType === 'movie'" class="form-select form-select-sm dark-select"
-                          [(ngModel)]="externalLinkProvider" (ngModelChange)="onLinkProviderChange()">
-                    <option value="tmdb">TMDB</option>
-                    <option value="imdb">IMDb</option>
-                  </select>
-                  <select *ngIf="mediaType === 'tv'" class="form-select form-select-sm dark-select"
-                          [(ngModel)]="tvLinkProvider" (ngModelChange)="onLinkProviderChange()">
-                    <option value="tvdb">TheTVDB</option>
-                    <option value="imdb">IMDb</option>
-                  </select>
-                </li>
-              </ul>
+            <div>
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="actorShowMinor"
+          [(ngModel)]="showMinor" (ngModelChange)="onShowMinorChange()">
+                <label class="form-check-label" for="actorShowMinor"
+                       title="Include featurettes, making-of docs, 'as themselves' appearances, and undated/in-development titles">Extras</label>
+              </div>
             </div>
-
-            <!-- Export -->
-            <div class="dropdown">
-              <button class="btn btn-sm btn-outline-info dropdown-toggle" type="button" data-bs-toggle="dropdown">
-                Export
-              </button>
-              <ul class="dropdown-menu dropdown-menu-dark dropdown-menu-end">
-                <li><a class="dropdown-item" (click)="exportResults('csv')">Export as CSV</a></li>
-                <li><a class="dropdown-item" (click)="exportResults('xlsx')">Export as Excel</a></li>
-              </ul>
+            <div *ngIf="ignoredIds.size > 0">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="actorShowIgnored"
+          [(ngModel)]="showIgnored" (ngModelChange)="onFilterChange()">
+                <label class="form-check-label" for="actorShowIgnored">Ignored ({{ ignoredIds.size }})</label>
+              </div>
+            </div>
+            <div *ngIf="availableGenres.length">
+              <label class="form-label small mb-1 mt-2 d-block">Genre</label>
+              <select class="form-select form-select-sm dark-select"
+          [(ngModel)]="genreFilter" (ngModelChange)="applyFilter()">
+                <option [ngValue]="null">All genres</option>
+                <option *ngFor="let gen of availableGenres" [ngValue]="gen.id">{{ gen.name }}</option>
+              </select>
             </div>
           </div>
-        </div>
+
+        </app-discovery-header>
 
         <!-- Actor profile header -->
         <div *ngIf="actorDetails" class="actor-profile mb-3">
@@ -296,33 +190,6 @@
             </div>
             <p *ngIf="actorDetails.biography" class="actor-profile-bio">{{ actorDetails.biography }}</p>
           </div>
-        </div>
-
-        <!-- Result filter -->
-        <input
-          class="form-control dark-input mb-3"
-          type="text"
-          placeholder="Filter results by title..."
-          [(ngModel)]="resultFilter"
-          (ngModelChange)="applyFilter()"
-        >
-
-        <div *ngIf="mediaType === 'movie' && showImdbRatings && allGaps.length" class="imdb-status text-muted small d-flex align-items-center flex-wrap gap-2 mb-3" role="status">
-          <ng-container *ngIf="imdbRatings.loading">
-            <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
-            Loading IMDb ratings… You can keep browsing.
-          </ng-container>
-          <ng-container *ngIf="!imdbRatings.loading">
-            <span *ngIf="imdbRatings.error" class="text-warning">{{ imdbRatings.error }}</span>
-            <ng-container *ngIf="!imdbRatings.error && imdbRatings.loaded">
-              <span *ngIf="imdbRatings.ratingCount">IMDb ratings available for {{ imdbRatings.ratingCount }} of {{ allGaps.length }} movies.</span>
-              <span *ngIf="!imdbRatings.ratingCount">No IMDb ratings were found.</span>
-            </ng-container>
-            <ng-container *ngIf="imdbRatings.error || (imdbRatings.loaded && imdbRatings.ratingCount < allGaps.length)">
-              <a [routerLink]="['/settings/imdb']">IMDb settings</a>
-              <button type="button" class="btn btn-sm btn-outline-secondary" (click)="loadImdbRatings(true)">Retry IMDb ratings</button>
-            </ng-container>
-          </ng-container>
         </div>
 
         <!-- Groups (one per actor) -->

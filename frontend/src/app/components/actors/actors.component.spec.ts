@@ -1,3 +1,4 @@
+import { DiscoveryHeaderComponent } from '../discovery-header/discovery-header.component';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { RouterTestingModule } from '@angular/router/testing';
@@ -44,7 +45,7 @@ describe('ActorsComponent', () => {
     imdb = jasmine.createSpyObj('ImdbService', ['getRatings']);
     imdb.getRatings.and.returnValue(of({ ratings: {} }));
     await TestBed.configureTestingModule({
-      imports: [HttpClientTestingModule, RouterTestingModule, FormsModule, RadarrDestinationComponent, SonarrDestinationComponent],
+      imports: [DiscoveryHeaderComponent, HttpClientTestingModule, RouterTestingModule, FormsModule, RadarrDestinationComponent, SonarrDestinationComponent],
       declarations: [ActorsComponent, ConfirmModalComponent, CompactNumberPipe],
       providers: [
         { provide: ActorService, useValue: actors },
@@ -68,6 +69,23 @@ describe('ActorsComponent', () => {
     fixture.detectChanges();
   });
 
+  it('uses the shared search and link controls while retaining actor filters', async () => {
+    component.selectActor(actor);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const toolbar = fixture.nativeElement.querySelector('app-discovery-header:not([section="intro"])');
+    expect(toolbar.querySelector('#actorShowMinor')).toBeTruthy();
+    const search = toolbar.querySelector('.result-controls input');
+    search.value = 'No match';
+    search.dispatchEvent(new Event('input'));
+    expect(component.filteredGroups).toEqual([]);
+    const link = toolbar.querySelector('#actorLinkProvider');
+    link.value = 'imdb';
+    link.dispatchEvent(new Event('change'));
+    expect(component.externalLinkProvider).toBe('imdb');
+    expect(preferences.save).toHaveBeenCalledWith({ externalLinkProvider: 'imdb' });
+  });
+
   it('shows even a single TV library and preserves selections between tabs', () => {
     component.toggleLibrarySelection('More movies');
     component.setMediaType('tv');
@@ -80,6 +98,17 @@ describe('ActorsComponent', () => {
     expect(component.selectedLibraries).toEqual(['TV']);
     component.setMediaType('movie');
     expect(component.selectedLibraries).toEqual(['Movies']);
+  });
+
+  it('keeps the shared library picker available in results and rechecks ownership', () => {
+    component.selectActor(actor);
+    fixture.detectChanges();
+    const checkbox: HTMLInputElement = fixture.nativeElement.querySelector('[id="actor-lib-More movies"]');
+    const initiallySelected = component.selectedLibraries.includes('More movies');
+    checkbox.click();
+    expect(component.selectedLibraries.includes('More movies')).toBe(!initiallySelected);
+    expect(actors.getActorGaps.calls.mostRecent().args[1]).toEqual(component.selectedLibraries);
+    expect(fixture.nativeElement.querySelector('app-discovery-header[section="intro"] h3')).toBeTruthy();
   });
 
   it('switches a selected actor from TV to movies and back without searching again', () => {

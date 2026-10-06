@@ -48,6 +48,12 @@ export class SimilarComponent implements OnInit, OnDestroy {
   resultFilter = '';
   view: ResultView = 'all';
   sortBy: ResultSort = 'relevance';
+  readonly sortOptions = [
+    { value: 'relevance', label: 'TMDB relevance' },
+    { value: 'rating', label: 'Rating' },
+    { value: 'year', label: 'Year (newest)' },
+    { value: 'name', label: 'Title (A–Z)' },
+  ];
   ownedCount = 0;
   missingCount = 0;
   errorMessage = '';
