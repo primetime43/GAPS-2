@@ -41,7 +41,7 @@ describe('SimilarComponent', () => {
     recommendationService = jasmine.createSpyObj<RecommendationService>('RecommendationService', ['getSimilarMovies']);
     gapView = jasmine.createSpyObj<GapViewService>(
       'GapViewService',
-      ['ratingOf', 'votesOf', 'applyImdbRatings'],
+      ['ratingOf', 'votesOf', 'sortGaps', 'applyImdbRatings'],
     );
     const radarrService = jasmine.createSpyObj<RadarrService>(
       'RadarrService',
@@ -68,8 +68,10 @@ describe('SimilarComponent', () => {
     activeServerService.getActive.and.returnValue(of(active));
     preferencesService.load.and.returnValue(of({ ...DEFAULT_PREFERENCES, defaultLibrary: 'Movies' }));
     preferencesService.save.and.returnValue(of({ ...DEFAULT_PREFERENCES }));
-    gapView.ratingOf.and.callFake(gap => gap.imdbRating ?? gap.tmdbRating ?? 0);
-    gapView.votesOf.and.callFake(gap => gap.imdbRating != null ? (gap.imdbVotes ?? 0) : (gap.tmdbVotes ?? 0));
+    const sorting = new GapViewService(null);
+    gapView.ratingOf.and.callFake((gap, source) => sorting.ratingOf(gap, source));
+    gapView.votesOf.and.callFake((gap, source) => sorting.votesOf(gap, source));
+    gapView.sortGaps.and.callFake((gaps, sort, source) => sorting.sortGaps(gaps, sort, source));
     gapView.applyImdbRatings.and.returnValue(of(undefined));
     libraryService.getMovies.and.returnValue(of({ movies: [seed] }));
     radarrService.getConfig.and.returnValue(of({ enabled: false } as any));
@@ -371,7 +373,7 @@ describe('SimilarComponent', () => {
     expect(component.filteredSimilar.map(movie => movie.name)).toEqual(['Established']);
   }));
 
-  it('loads IMDb ratings and uses them for rating filters and sorting', () => {
+  it('uses the chosen rating source independently of badge visibility', () => {
     const lowerTmdbButBetterImdb: Gap = {
       id: 1, name: 'IMDb Winner', year: 2024, posterUrl: null, overview: '',
       groupName: 'Similar Movies', owned: false, externalUrl: '',
@@ -383,7 +385,8 @@ describe('SimilarComponent', () => {
       radarrEligible: true, sonarrEligible: false, tmdbRating: 8, tmdbVotes: 500,
     };
     component.allSimilar = [higherTmdb, lowerTmdbButBetterImdb];
-    component.showImdbRatings = true;
+    component.ratingSource = 'imdb';
+    component.showImdbRatings = false;
     component.sortBy = 'rating';
     gapView.applyImdbRatings.and.callFake(gaps => {
       gaps[0].imdbRating = 4.4;
@@ -398,8 +401,11 @@ describe('SimilarComponent', () => {
     expect(component.imdbRatings.loaded).toBeTrue();
     expect(component.filteredSimilar.map(movie => movie.name)).toEqual(['IMDb Winner', 'TMDB Winner']);
 
-    component.showImdbRatings = false;
+    component.showImdbRatings = true;
     component.onRatingPrefsChange();
+    expect(component.filteredSimilar.map(movie => movie.name)).toEqual(['IMDb Winner', 'TMDB Winner']);
+    component.ratingSource = 'tmdb';
+    component.onRatingSourceChange();
     expect(component.filteredSimilar.map(movie => movie.name)).toEqual(['TMDB Winner', 'IMDb Winner']);
     component.minRating = 7;
     component.minVoteCount = 400;

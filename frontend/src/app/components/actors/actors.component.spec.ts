@@ -182,7 +182,7 @@ describe('ActorsComponent', () => {
     expect(preferences.save).toHaveBeenCalledWith({ showImdbRatings: true, showTmdbRatings: true });
   });
 
-  it('loads movie ratings automatically and sorts by the enabled provider', () => {
+  it('loads movie ratings automatically and sorts by the selected source', () => {
     actors.getActorGaps.and.returnValue(of({ actor: null, gaps: [
       credit, { ...credit, tmdbId: 102, voteAverage: 6 },
     ] } as any));
@@ -190,12 +190,15 @@ describe('ActorsComponent', () => {
       '101': { imdbId: 'tt123', aggregateRating: 5, voteCount: 100 },
       '102': { imdbId: 'tt456', aggregateRating: 9, voteCount: 200 },
     } }));
-    component.showImdbRatings = true;
+    component.ratingSource = 'imdb';
+    component.showImdbRatings = false;
     component.sortBy = 'rating';
     component.selectActor(actor);
     expect(component.filteredGroups[0].gaps.map(g => g.id)).toEqual([102, 101]);
-    component.showImdbRatings = false;
+    component.showImdbRatings = true;
     component.onRatingPrefsChange();
+    expect(component.filteredGroups[0].gaps.map(g => g.id)).toEqual([102, 101]);
+    component.onRatingSourceChange('tmdb');
     expect(component.filteredGroups[0].gaps.map(g => g.id)).toEqual([101, 102]);
   });
 
@@ -210,6 +213,17 @@ describe('ActorsComponent', () => {
     fixture.nativeElement.querySelector('.imdb-status button').click();
     fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('No IMDb ratings were found.');
+  });
+
+  it('requests IMDb data for TV rating sorting even when badges are hidden', () => {
+    component.setMediaType('tv');
+    component.selectActor(actor);
+    component.showImdbRatings = false;
+    component.sortBy = 'votes';
+    component.onSortChange();
+    expect(actors.getActorGaps.calls.mostRecent().args[6]).toBeTrue();
+    expect(component.effectiveRatingSource).toBe('imdb');
+    expect(imdb.getRatings).not.toHaveBeenCalled();
   });
 
   it('cancels movie rating requests when changing media or clearing the actor', () => {

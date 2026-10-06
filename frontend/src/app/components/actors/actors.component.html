@@ -125,8 +125,9 @@
           [(showImdbRatings)]="showImdbRatings" (showImdbRatingsChange)="onRatingPrefsChange()"
           [(showTmdbRatings)]="showTmdbRatings" (showTmdbRatingsChange)="onRatingPrefsChange()"
           [(search)]="resultFilter" (searchChange)="applyFilter()"
-          [(sortBy)]="sortBy" (sortByChange)="applyFilter()" [allowTmdbRatings]="mediaType === 'movie'"
-          [showRatingLimits]="false" ratingHelp="Sorting uses IMDb when enabled and available, otherwise TMDB."
+          [(sortBy)]="sortBy" (sortByChange)="onSortChange()" [allowTmdbRatings]="mediaType === 'movie'"
+          [showRatingLimits]="false" ratingHelp=""
+          [ratingSource]="effectiveRatingSource" (ratingSourceChange)="onRatingSourceChange($event)" [allowTmdbSource]="mediaType === 'movie'"
           [linkProvider]="mediaType === 'tv' ? tvLinkProvider : externalLinkProvider" (linkProviderChange)="setResultLinkProvider($event)"
           [linkOptions]="mediaType === 'tv' ? tvLinkOptions : movieLinkOptions"
           [imdbState]="mediaType === 'movie' ? imdbRatings : null" (retryImdb)="loadImdbRatings(true)">

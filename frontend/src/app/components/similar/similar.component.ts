@@ -6,7 +6,7 @@ import { LibraryService } from '../../services/library.service';
 import { PreferencesService } from '../../services/preferences.service';
 import { RecommendationService } from '../../services/recommendation.service';
 import { RadarrService } from '../../services/radarr.service';
-import { GapViewService } from '../../services/gap-view.service';
+import { GapViewService, RatingSource } from '../../services/gap-view.service';
 import { ImdbRatingsLoader } from '../../services/imdb-ratings-loader';
 import { MediaLibrary } from '../../models/media-server.model';
 import { Movie } from '../../models/movie.model';
@@ -14,7 +14,7 @@ import { Gap } from '../../models/recommendation.model';
 import { environment } from '../../../environments/environment';
 
 type ResultView = 'all' | 'owned' | 'missing';
-type ResultSort = 'relevance' | 'rating' | 'year' | 'name';
+type ResultSort = 'relevance' | 'rating' | 'votes' | 'year' | 'name';
 type SendState = 'sending' | 'sent' | 'error';
 
 @Component({
@@ -51,6 +51,7 @@ export class SimilarComponent implements OnInit, OnDestroy {
   readonly sortOptions = [
     { value: 'relevance', label: 'TMDB relevance' },
     { value: 'rating', label: 'Rating' },
+    { value: 'votes', label: 'Vote count' },
     { value: 'year', label: 'Year (newest)' },
     { value: 'name', label: 'Title (A–Z)' },
   ];
@@ -59,6 +60,7 @@ export class SimilarComponent implements OnInit, OnDestroy {
   errorMessage = '';
 
   // Load IMDb in the background only when the user enables its ratings.
+  ratingSource: RatingSource = 'tmdb';
   showImdbRatings = false;
   showTmdbRatings = true;
   readonly imdbRatings = new ImdbRatingsLoader(this.gapView);
@@ -100,6 +102,7 @@ export class SimilarComponent implements OnInit, OnDestroy {
       this.itemsPerPage = prefs?.moviesPerPage || 50;
       this.showImdbRatings = !!prefs?.showImdbRatings;
       this.showTmdbRatings = prefs?.showTmdbRatings !== false;
+      this.ratingSource = prefs?.ratingSource === 'imdb' ? 'imdb' : 'tmdb';
       this.externalLinkProvider = prefs?.externalLinkProvider || 'tmdb';
       if (prefs?.qualityFilterEnabled) {
         this.minRating = prefs.minRating || 0;
@@ -319,8 +322,7 @@ export class SimilarComponent implements OnInit, OnDestroy {
     const query = this.resultFilter.trim().toLowerCase();
     if (query) rows = rows.filter(movie => movie.name.toLowerCase().includes(query));
 
-    // IMDb is preferred while enabled; otherwise these controls use TMDB. The
-    // rating and vote count always come from the same provider.
+    // Ratings and votes use the explicitly selected source, independently of badges.
     if (this.minRating > 0) {
       rows = rows.filter(movie => this.ratingOf(movie) >= this.minRating);
     }
@@ -328,22 +330,16 @@ export class SimilarComponent implements OnInit, OnDestroy {
       rows = rows.filter(movie => this.votesOf(movie) >= this.minVoteCount);
     }
 
-    if (this.sortBy === 'rating') {
-      rows.sort((a, b) => this.ratingOf(b) - this.ratingOf(a));
-    } else if (this.sortBy === 'year') {
-      rows.sort((a, b) => String(b.year).localeCompare(String(a.year)));
-    } else if (this.sortBy === 'name') {
-      rows.sort((a, b) => a.name.localeCompare(b.name));
-    }
-    this.filteredSimilar = rows;
+    this.filteredSimilar = this.gapView.sortGaps(rows,
+      this.sortBy === 'relevance' ? 'default' : this.sortBy, this.ratingSource);
   }
 
   private ratingOf(movie: Gap): number {
-    return this.showImdbRatings ? this.gapView.ratingOf(movie) : (movie.tmdbRating ?? 0);
+    return this.gapView.ratingOf(movie, this.ratingSource);
   }
 
   private votesOf(movie: Gap): number {
-    return this.showImdbRatings ? this.gapView.votesOf(movie) : (movie.tmdbVotes ?? 0);
+    return this.gapView.votesOf(movie, this.ratingSource);
   }
 
   movieUrl(id: number, provider: 'tmdb' | 'imdb', imdbId?: string): string {
@@ -366,11 +362,17 @@ export class SimilarComponent implements OnInit, OnDestroy {
   }
 
   loadImdbRatings(retry = false): void {
-    if (!this.showImdbRatings) return;
+    if (!this.showImdbRatings && this.ratingSource !== 'imdb') return;
     this.imdbRatings.load(this.allSimilar, () => {
       this.updateMovieLinks();
       this.applyFilter();
     }, retry);
+  }
+
+  onRatingSourceChange(): void {
+    this.applyFilter();
+    this.loadImdbRatings();
+    this.preferencesService.save({ ratingSource: this.ratingSource }).subscribe({ error: () => {} });
   }
 
   onRatingPrefsChange(): void {

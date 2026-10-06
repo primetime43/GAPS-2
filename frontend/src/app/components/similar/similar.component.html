@@ -78,6 +78,8 @@
         [(showTmdbRatings)]="showTmdbRatings" (showTmdbRatingsChange)="onRatingPrefsChange()"
         [(search)]="resultFilter" (searchChange)="applyFilter()" searchPlaceholder="Filter similar movies..."
         [(sortBy)]="sortBy" (sortByChange)="applyFilter()" [sortOptions]="sortOptions"
+        [(ratingSource)]="ratingSource" (ratingSourceChange)="onRatingSourceChange()"
+        [popularityAvailable]="false"
         [(minRating)]="minRating" (minRatingChange)="applyFilter()"
         [(minVoteCount)]="minVoteCount" (minVoteCountChange)="applyFilter()"
         [(linkProvider)]="externalLinkProvider" (linkProviderChange)="onLinkProviderChange()"

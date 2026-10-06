@@ -86,4 +86,23 @@ describe('DiscoveryHeaderComponent', () => {
     voteInput.dispatchEvent(new Event('input'));
     expect(votes).toHaveBeenCalledWith(110);
   });
+
+  it('labels sources explicitly and separates the source selector from badge toggles', async () => {
+    fixture.componentRef.setInput('ratingSource', 'imdb');
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const text = fixture.nativeElement.textContent;
+    expect(text).toContain('Rating (IMDb)');
+    expect(text).toContain('Vote count (IMDb)');
+    expect(text).toContain('Popularity (TMDB)');
+    expect(text).toContain('Minimum IMDb rating');
+    expect(text).toContain('Minimum IMDb votes');
+    expect(text).toContain('display only');
+    const source = spyOn(fixture.componentInstance.ratingSourceChange, 'emit');
+    const select = fixture.nativeElement.querySelector('#testRatingSource');
+    select.value = 'tmdb';
+    select.dispatchEvent(new Event('change'));
+    expect(source).toHaveBeenCalledWith('tmdb');
+    expect(fixture.componentInstance.showImdbRatings).toBeFalse();
+  });
 });

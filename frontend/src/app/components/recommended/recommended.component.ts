@@ -13,7 +13,8 @@ import { PreferencesService, MissingFilters } from '../../services/preferences.s
 import { ExportService, ExportFormat } from '../../services/export.service';
 import { RadarrService } from '../../services/radarr.service';
 import { SonarrService } from '../../services/sonarr.service';
-import { GapViewService } from '../../services/gap-view.service';
+import { GapViewService, GapSortKey, RatingSource } from '../../services/gap-view.service';
+import { ImdbRatingsLoader } from '../../services/imdb-ratings-loader';
 import { ScanHistoryService } from '../../services/scan-history.service';
 import { TmdbService, TmdbGenre } from '../../services/tmdb/tmdb.service';
 import { environment } from '../../../environments/environment';
@@ -102,13 +103,13 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   // live-toggleable from the Filters menu).
   showImdbRatings = false;
   showTmdbRatings = true;
-  // IMDb ratings are pulled on demand (button), not auto-fetched — each title
-  // needs its own TMDB->IMDb lookup, slow across a full result set.
-  loadingImdbRatings = false;
-  imdbRatingsLoaded = false;
+  readonly imdbRatings = new ImdbRatingsLoader(this.gapView);
+  private imdbGaps: Gap[] | null = null;
+  get loadingImdbRatings(): boolean { return this.imdbRatings.loading; }
+  get imdbRatingsLoaded(): boolean { return this.imdbRatings.loaded; }
+  ratingSource: RatingSource = 'tmdb';
 
-  // Results sort + genre filter (reuse fields already on each gap).
-  sortBy: 'default' | 'rating' | 'popularity' | 'year' | 'name' = 'default';
+  sortBy: GapSortKey = 'default';
   genreFilter: number | null = null;
   // True once preferences have been loaded and applied; gates saveMissingFilters
   // so early/initial state changes don't clobber the persisted filters.
@@ -319,12 +320,12 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   private mediaChanged$ = new Subject<void>();
 
   private cancelResultRequests(): void {
+    this.imdbRatings.reset();
+    this.imdbGaps = null;
     this.cancelPosterPrefetch();
     this.resultsChanged$.next();
     this.stopPolling();
     this.loadingGaps = false;
-    this.loadingImdbRatings = false;
-    this.imdbRatingsLoaded = false;
   }
 
   // Reopening a saved scan (from the Scan History page): the id to load once the
@@ -432,7 +433,6 @@ export class RecommendedComponent implements OnInit, OnDestroy {
         if (progress.status === 'done') {
           this.allGaps = this.normalizeGaps(progress.gaps || []);
           this.totalOwned = progress.total_owned;
-          this.imdbRatingsLoaded = false;
           this.applyFilter();
           this.cacheCompletedScan(progress.libraries || [], this.allGaps, progress.total_owned, progress.completed_at, this.mediaType === 'tv' || !!(progress as ScanProgress).rating_filter_complete);
         } else {
@@ -450,6 +450,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.imdbRatings.reset();
     this.cancelPosterPrefetch();
     this.stopPolling();
     this.renderObserver?.disconnect();
@@ -531,6 +532,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
         this.externalLinkProvider = prefs.externalLinkProvider || 'tmdb';
         this.showImdbRatings = !!prefs.showImdbRatings;
         this.showTmdbRatings = prefs.showTmdbRatings !== false;
+        this.ratingSource = prefs.ratingSource === 'imdb' ? 'imdb' : 'tmdb';
         // Remembered Missing-view filters override the seeded defaults above.
         const mf = prefs.missingFilters;
         if (mf) {
@@ -641,7 +643,6 @@ export class RecommendedComponent implements OnInit, OnDestroy {
         this.totalOwned = progress!.total_owned;
         this.scanMode = true;
         this.applyFilter();
-        this.imdbRatingsLoaded = false;  // new result set → offer on-demand load again
         this.cacheCompletedScan(scanLibs, this.allGaps, progress!.total_owned, progress!.completed_at, !!progress!.rating_filter_complete);
       }
       this.loading = false;
@@ -697,7 +698,6 @@ export class RecommendedComponent implements OnInit, OnDestroy {
         if (this.mediaType === 'tv') this.genreFilter = null;
         this.allGaps = this.normalizeGaps(resp.gaps || []);
         this.totalOwned = resp.totalOwned || 0;
-        this.imdbRatingsLoaded = false;
         this.applyFilter();
         this.loadingGaps = false;
       },
@@ -786,7 +786,6 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     this.totalOwned = cached.totalOwned;
     this.scanMode = true;
     this.applyFilter();
-    this.imdbRatingsLoaded = false;  // new result set → offer on-demand load again
   }
 
   private cacheCompletedScan(libraries: string[], gaps: Gap[], totalOwned: number, completedAt: string | null = null, ratingFilterComplete = true): void {
@@ -908,7 +907,6 @@ export class RecommendedComponent implements OnInit, OnDestroy {
             this.allGaps = this.normalizeGaps(progress.gaps);
             this.totalOwned = progress.total_owned;
             this.applyFilter();
-            this.imdbRatingsLoaded = false;  // new result set → offer on-demand load again
             this.loadingGaps = false;
             this.scanProgress = null;
             const scanLibs = progress.libraries?.length ? progress.libraries : [...scanLibraries];
@@ -1055,7 +1053,6 @@ export class RecommendedComponent implements OnInit, OnDestroy {
         this.allGaps = this.normalizeGaps(gaps);
         if (this.allGaps.length > 0 && this.allGaps.every(g => g.owned)) this.view = 'all';
         this.applyFilter();
-        this.imdbRatingsLoaded = false;  // new result set → offer on-demand load again
         this.loadingGaps = false;
       },
       error: () => {
@@ -1123,19 +1120,23 @@ export class RecommendedComponent implements OnInit, OnDestroy {
       .subscribe({ next: () => {}, error: () => {} });
   }
 
-  /**
-   * On-demand fetch of IMDb ratings for the current movie gaps (triggered by the
-   * "Load IMDb ratings" button). Not called automatically — resolving each title's
-   * IMDb id is a per-movie TMDB lookup, slow across a large result set.
-   */
-  loadImdbRatings(): void {
-    if (this.mediaType !== 'movie' || !this.showImdbRatings) return;
-    this.loadingImdbRatings = true;
-    this.gapView.applyImdbRatings(this.allGaps).pipe(takeUntil(this.resultsChanged$), takeUntil(this.destroy$)).subscribe(() => {
-      this.loadingImdbRatings = false;
-      this.imdbRatingsLoaded = true;
-      this.applyFilter();  // reflect new ratings when sorting by rating
-    });
+  /** Load the chosen sorting/filter source even when its card badges are hidden. */
+  loadImdbRatings(retry = false): void {
+    if (this.mediaType !== 'movie' || (!this.showImdbRatings && this.ratingSource !== 'imdb')) return;
+    this.syncImdbResults();
+    this.imdbRatings.load(this.allGaps, () => this.applyFilter(), retry);
+  }
+
+  private syncImdbResults(): void {
+    if (this.imdbGaps !== this.allGaps) {
+      this.imdbRatings.reset();
+      this.imdbGaps = this.allGaps;
+    }
+  }
+
+  onRatingSourceChange(): void {
+    this.preferencesService.save({ ratingSource: this.ratingSource }).subscribe({ error: () => {} });
+    this.applyFilter();
   }
 
   // -- Filters --
@@ -1173,7 +1174,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
       showImdbRatings: this.showImdbRatings,
       showTmdbRatings: this.showTmdbRatings,
     }).subscribe({ next: () => {}, error: () => {} });
-    // No auto-fetch — the "Load IMDb ratings" button pulls them on demand.
+    this.applyFilter();
   }
 
   setView(view: 'all' | 'owned' | 'missing'): void {
@@ -1211,9 +1212,11 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   private passesRatingFilter(gap: Gap): boolean {
     if (!this.ratingFilterActive || gap.owned || this.isFutureRelease(gap)) return true;
     // Unknown ratings in older saved scans stay visible instead of being
-    // mistaken for zero. Actual TMDB zeroes still obey the thresholds.
-    return (gap.tmdbRating == null || gap.tmdbRating >= this.minRating)
-      && (gap.tmdbVotes == null || gap.tmdbVotes >= this.minVoteCount);
+    // mistaken for zero. Actual zeroes still obey the thresholds.
+    const rating = this.ratingSource === 'imdb' ? gap.imdbRating : gap.tmdbRating;
+    const votes = this.ratingSource === 'imdb' ? gap.imdbVotes : gap.tmdbVotes;
+    return (rating == null || rating >= this.minRating)
+      && (votes == null || votes >= this.minVoteCount);
   }
 
   // NOTE: mirrored on the backend by `_is_future_release` in
@@ -1413,6 +1416,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   }
 
   applyFilter(): void {
+    this.syncImdbResults();
     let filtered = this.allGaps;
     if (this.view === 'owned') {
       filtered = filtered.filter(g => g.owned);
@@ -1446,7 +1450,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     if (this.genreFilter != null) {
       filtered = filtered.filter(matchesGenre);
     }
-    filtered = this.gapView.sortGaps(filtered, this.sortBy);
+    filtered = this.gapView.sortGaps(filtered, this.sortBy, this.ratingSource);
 
     const groups = new Map<string, Gap[]>();
     for (const gap of filtered) {
@@ -1482,10 +1486,11 @@ export class RecommendedComponent implements OnInit, OnDestroy {
       // Each group's remaining titles are already sorted. Reorder the groups
       // by their first visible title so hidden titles cannot set their position.
       this.filteredGroups = this.gapView.sortGaps(
-        this.filteredGroups.map(group => group.gaps[0]), this.sortBy,
+        this.filteredGroups.map(group => group.gaps[0]), this.sortBy, this.ratingSource,
       ).map(gap => this.groupByName.get(gap.groupName)!);
     }
     this.renderLimit = this.RENDER_CHUNK;
+    if (this.ratingSource === 'imdb' && !this.imdbRatings.error) this.loadImdbRatings();
   }
 
   // -- Radarr (movies) / Sonarr (TV) --

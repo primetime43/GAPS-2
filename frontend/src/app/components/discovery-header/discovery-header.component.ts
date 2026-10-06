@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
 import { ImdbRatingsLoader } from '../../services/imdb-ratings-loader';
 import { MediaLibrary } from '../../models/media-server.model';
+import { RatingSource } from '../../services/gap-view.service';
 
 /** Shared introduction/library picker and results toolbar for discovery views.
  * Views retain their data loading, filtering, and saved preferences. */
@@ -43,6 +44,7 @@ export class DiscoveryHeaderComponent<Sort extends string, Link extends string> 
   @Input() sortOptions: ReadonlyArray<{ value: string; label: string }> = [
     { value: 'default', label: 'Default' },
     { value: 'rating', label: 'Rating' },
+    { value: 'votes', label: 'Vote count' },
     { value: 'popularity', label: 'Popularity' },
     { value: 'year', label: 'Year (newest)' },
     { value: 'name', label: 'Title (A–Z)' },
@@ -53,7 +55,11 @@ export class DiscoveryHeaderComponent<Sort extends string, Link extends string> 
   @Input() showRatingLimits = true;
   @Input() minRating = 0;
   @Input() minVoteCount = 0;
-  @Input() ratingHelp = 'Sorting and filters use IMDb when enabled and available, otherwise TMDB. Set either minimum to 0 to ignore it.';
+  @Input() ratingSource: RatingSource = 'tmdb';
+  @Input() allowTmdbSource = true;
+  @Input() ratingsAvailable = true;
+  @Input() popularityAvailable = true;
+  @Input() ratingHelp = 'Set either minimum to 0 to ignore it. Titles without the selected rating or vote count are excluded when that minimum is set.';
   @Input() linkProvider: Link;
   @Input() linkOptions: ReadonlyArray<{ value: string; label: string }> = [
     { value: 'tmdb', label: 'TMDB' }, { value: 'imdb', label: 'IMDb' },
@@ -71,8 +77,23 @@ export class DiscoveryHeaderComponent<Sort extends string, Link extends string> 
   @Output() showTmdbRatingsChange = new EventEmitter<boolean>();
   @Output() minRatingChange = new EventEmitter<number>();
   @Output() minVoteCountChange = new EventEmitter<number>();
+  @Output() ratingSourceChange = new EventEmitter<RatingSource>();
   @Output() linkProviderChange = new EventEmitter<Link>();
   @Output() retryImdb = new EventEmitter<void>();
+
+  get ratingSourceLabel(): string { return this.ratingSource === 'imdb' ? 'IMDb' : 'TMDB'; }
+
+  sortLabel(option: { value: string; label: string }): string {
+    if (option.value === 'rating') return `Rating (${this.ratingSourceLabel})`;
+    if (option.value === 'votes') return `Vote count (${this.ratingSourceLabel})`;
+    if (option.value === 'popularity') return 'Popularity (TMDB)';
+    return option.label;
+  }
+
+  sortAvailable(value: string): boolean {
+    return !((value === 'rating' || value === 'votes') && !this.ratingsAvailable)
+      && !(value === 'popularity' && !this.popularityAvailable);
+  }
 
   changeMinRating(value: number | null): void {
     this.minRatingChange.emit(Math.min(10, Math.max(0, Number(value) || 0)));

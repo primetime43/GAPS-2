@@ -57,6 +57,28 @@ describe('GapViewService', () => {
     expect(movies[0].imdbVotes).toBe(500);
   });
 
+  it('sorts ratings and votes using only the selected provider, with unknowns last', () => {
+    const movies = [
+      gap({ id: 1, tmdbRating: 9, tmdbVotes: 900, imdbRating: 4, imdbVotes: 10 }),
+      gap({ id: 2, tmdbRating: 5, tmdbVotes: 50, imdbRating: 8, imdbVotes: 500 }),
+      gap({ id: 3, tmdbRating: 10, tmdbVotes: 1000 }),
+      gap({ id: 4, imdbRating: 0, imdbVotes: 0 }),
+    ];
+    expect(service.sortGaps(movies, 'rating', 'imdb').map(g => g.id)).toEqual([2, 1, 4, 3]);
+    expect(service.sortGaps(movies, 'rating', 'tmdb').map(g => g.id)).toEqual([3, 1, 2, 4]);
+    expect(service.sortGaps(movies, 'votes', 'imdb').map(g => g.id)).toEqual([2, 1, 4, 3]);
+    expect(service.sortGaps(movies, 'votes', 'tmdb').map(g => g.id)).toEqual([3, 1, 2, 4]);
+    expect(service.ratingOf(movies[2], 'imdb')).toBe(0);
+    expect(service.votesOf(movies[2], 'imdb')).toBe(0);
+    expect(movies.map(g => g.id)).toEqual([1, 2, 3, 4]);
+  });
+
+  it('keeps popularity tied to TMDB regardless of the rating source', () => {
+    const movies = [gap({ id: 1, popularity: 10, imdbVotes: 1000 }), gap({ id: 2, popularity: 50, imdbVotes: 1 })];
+    expect(service.sortGaps(movies, 'popularity', 'imdb').map(g => g.id)).toEqual([2, 1]);
+    expect(service.sortGaps(movies, 'popularity', 'tmdb').map(g => g.id)).toEqual([2, 1]);
+  });
+
   it('reports failures to callers with retry controls while preserving the default behavior', () => {
     const failure = new Error('offline');
     imdbService.getRatings.and.returnValue(throwError(() => failure));

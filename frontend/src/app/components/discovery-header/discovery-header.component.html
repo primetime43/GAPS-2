@@ -60,7 +60,7 @@
            [attr.aria-label]="searchPlaceholder" [ngModel]="search" (ngModelChange)="searchChange.emit($event)">
     <select class="form-select dark-select result-sort" aria-label="Sort results"
             [ngModel]="sortBy" (ngModelChange)="sortByChange.emit($event)">
-      <option *ngFor="let option of sortOptions" [value]="option.value">{{ option.label }}</option>
+      <option *ngFor="let option of sortOptions" [value]="option.value" [disabled]="!sortAvailable(option.value)">{{ sortLabel(option) }}</option>
     </select>
     <div class="dropdown">
       <button class="btn btn-outline-secondary dropdown-toggle rating-filter-button" type="button"
@@ -68,21 +68,32 @@
         Ratings &amp; filters
       </button>
       <div class="dropdown-menu dropdown-menu-dark dropdown-menu-end p-3 rating-filter-menu">
-        <div class="form-check mb-2">
+        <ng-container *ngIf="ratingsAvailable">
+          <label class="form-label small mb-1" [for]="idPrefix + 'RatingSource'">Rating &amp; vote source</label>
+          <select class="form-select form-select-sm dark-select mb-2" [id]="idPrefix + 'RatingSource'"
+                  [ngModel]="ratingSource" (ngModelChange)="ratingSourceChange.emit($event)">
+            <option *ngIf="allowTmdbSource" value="tmdb">TMDB only</option>
+            <option value="imdb">IMDb only</option>
+          </select>
+          <p class="text-muted small mb-3">Rating and vote-count sorting{{ showRatingLimits ? ', and both minimums,' : '' }} use {{ ratingSourceLabel }} only. Missing values sort last.</p>
+        </ng-container>
+        <p *ngIf="popularityAvailable" class="text-muted small mb-3">Popularity uses TMDB’s popularity score. It is separate from ratings and vote counts.</p>
+        <div *ngIf="ratingsAvailable" class="text-muted small mb-2">Show ratings on cards (display only)</div>
+        <div *ngIf="ratingsAvailable" class="form-check mb-2">
           <input class="form-check-input" type="checkbox" [id]="idPrefix + 'ShowImdb'"
                  [ngModel]="showImdbRatings" (ngModelChange)="showImdbRatingsChange.emit($event)">
           <label class="form-check-label" [for]="idPrefix + 'ShowImdb'">IMDb ratings</label>
         </div>
-        <div *ngIf="allowTmdbRatings" class="form-check mb-3">
+        <div *ngIf="ratingsAvailable && allowTmdbRatings" class="form-check mb-3">
           <input class="form-check-input" type="checkbox" [id]="idPrefix + 'ShowTmdb'"
                  [ngModel]="showTmdbRatings" (ngModelChange)="showTmdbRatingsChange.emit($event)">
           <label class="form-check-label" [for]="idPrefix + 'ShowTmdb'">TMDB ratings</label>
         </div>
         <ng-container *ngIf="showRatingLimits">
-          <label class="form-label small mb-1" [for]="idPrefix + 'MinRating'">Minimum rating</label>
+          <label class="form-label small mb-1" [for]="idPrefix + 'MinRating'">Minimum {{ ratingSourceLabel }} rating (0–10)</label>
           <input [id]="idPrefix + 'MinRating'" class="form-control form-control-sm dark-input mb-2" type="number"
                  min="0" max="10" step="0.1" [ngModel]="minRating" (ngModelChange)="changeMinRating($event)">
-          <label class="form-label small mb-1" [for]="idPrefix + 'MinVotes'">Minimum votes</label>
+          <label class="form-label small mb-1" [for]="idPrefix + 'MinVotes'">Minimum {{ ratingSourceLabel }} votes</label>
           <input [id]="idPrefix + 'MinVotes'" class="form-control form-control-sm dark-input" type="number"
                  min="0" step="1" [ngModel]="minVoteCount" (ngModelChange)="changeMinVotes($event)">
         </ng-container>
@@ -99,7 +110,7 @@
     </div>
   </div>
 
-  <div *ngIf="!loading && showImdbRatings && allCount && imdbState" class="imdb-status text-muted small d-flex align-items-center flex-wrap gap-2 mb-3" role="status">
+  <div *ngIf="!loading && (showImdbRatings || ratingSource === 'imdb') && allCount && imdbState" class="imdb-status text-muted small d-flex align-items-center flex-wrap gap-2 mb-3" role="status">
     <ng-container *ngIf="imdbState.loading">
       <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
       Loading IMDb ratings… You can keep browsing.

@@ -5,7 +5,8 @@ import { Gap } from '../models/recommendation.model';
 import { TmdbGenre } from './tmdb/tmdb.service';
 import { ImdbService } from './imdb.service';
 
-export type GapSortKey = 'default' | 'rating' | 'popularity' | 'year' | 'name';
+export type RatingSource = 'tmdb' | 'imdb';
+export type GapSortKey = 'default' | 'rating' | 'votes' | 'popularity' | 'year' | 'name';
 
 /**
  * Shared logic for the gap result grids used by both the Missing/Recommended
@@ -17,13 +18,17 @@ export type GapSortKey = 'default' | 'rating' | 'popularity' | 'year' | 'name';
 export class GapViewService {
   constructor(private imdbService: ImdbService) {}
 
-  /** Displayed rating used for sorting: IMDb when present, else TMDB. */
-  ratingOf(g: Gap): number {
+  /** An explicit source never falls back to another provider. */
+  ratingOf(g: Gap, source?: RatingSource): number {
+    if (source === 'imdb') return g.imdbRating ?? 0;
+    if (source === 'tmdb') return g.tmdbRating ?? 0;
     return g.imdbRating ?? g.tmdbRating ?? 0;
   }
 
   /** Vote count paired with the rating returned by ratingOf. */
-  votesOf(g: Gap): number {
+  votesOf(g: Gap, source?: RatingSource): number {
+    if (source === 'imdb') return g.imdbVotes ?? 0;
+    if (source === 'tmdb') return g.tmdbVotes ?? 0;
     return g.imdbRating != null ? (g.imdbVotes ?? 0) : (g.tmdbVotes ?? 0);
   }
 
@@ -33,9 +38,15 @@ export class GapViewService {
   }
 
   /** Sort a copy of the list by the selected key, leaving the source untouched. */
-  sortGaps(list: Gap[], sortBy: GapSortKey): Gap[] {
+  sortGaps(list: Gap[], sortBy: GapSortKey, source?: RatingSource): Gap[] {
+    // Unknown values follow even an actual zero rating/vote count.
+    const rating = (g: Gap) => source === 'imdb' ? (g.imdbRating ?? -1)
+      : source === 'tmdb' ? (g.tmdbRating ?? -1) : this.ratingOf(g);
+    const votes = (g: Gap) => source === 'imdb' ? (g.imdbVotes ?? -1)
+      : source === 'tmdb' ? (g.tmdbVotes ?? -1) : this.votesOf(g);
     switch (sortBy) {
-      case 'rating': return [...list].sort((a, b) => this.ratingOf(b) - this.ratingOf(a));
+      case 'rating': return [...list].sort((a, b) => rating(b) - rating(a));
+      case 'votes': return [...list].sort((a, b) => votes(b) - votes(a));
       case 'popularity': return [...list].sort((a, b) => (b.popularity || 0) - (a.popularity || 0));
       case 'year': return [...list].sort((a, b) => this.yearNum(b) - this.yearNum(a));
       case 'name': return [...list].sort((a, b) => String(a.name).localeCompare(String(b.name)));

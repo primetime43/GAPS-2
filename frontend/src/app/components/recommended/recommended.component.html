@@ -225,12 +225,14 @@
         [(search)]="searchFilter" (searchChange)="applyFilter()"
         [searchPlaceholder]="mediaType === 'tv' ? 'Filter results by show or franchise name...' : 'Filter results by movie or collection name...'"
         [(sortBy)]="sortBy" (sortByChange)="onResultFilterChange()"
-        [showRatingLimits]="mediaType === 'movie'"
+        [showRatingLimits]="mediaType === 'movie'" [ratingsAvailable]="mediaType === 'movie'" [popularityAvailable]="mediaType === 'movie'"
+        [(ratingSource)]="ratingSource" (ratingSourceChange)="onRatingSourceChange()"
+        [imdbState]="mediaType === 'movie' ? imdbRatings : null" (retryImdb)="loadImdbRatings(true)"
         [(minRating)]="minRating" (minRatingChange)="onRatingFilterChange()"
         [(minVoteCount)]="minVoteCount" (minVoteCountChange)="onRatingFilterChange()"
-        [ratingHelp]="mediaType === 'movie' ? 'Minimums use TMDB ratings and votes. Set either to 0 to ignore it. Owned and unreleased titles stay visible.' : ''"
+        [ratingHelp]="mediaType === 'movie' ? 'Set either minimum to 0 to ignore it. Owned and unreleased titles stay visible. Unknown values do not fail a minimum.' : ''"
         [showLinkProvider]="mediaType === 'movie'" [(linkProvider)]="externalLinkProvider" (linkProviderChange)="onLinkProviderChange()">
-          <button toolbar-actions *ngIf="mediaType === 'movie' && showImdbRatings && allGaps.length && !imdbRatingsLoaded"
+          <button toolbar-actions *ngIf="mediaType === 'movie' && showImdbRatings && ratingSource !== 'imdb' && allGaps.length && !imdbRatingsLoaded"
                   class="btn btn-sm btn-outline-warning"
                   title="Fetch IMDb ratings for these titles. Not loaded automatically — each one is looked up from IMDb, so this can take a few seconds."
                   (click)="loadImdbRatings()" [disabled]="loadingImdbRatings">
@@ -305,7 +307,7 @@
 
       <!-- Search filter -->
       <div *ngIf="ratingFilterActive" class="rating-filter-summary mb-3" role="status">
-        <span>Minimum rating: {{ minRating }}/10 · Minimum votes: {{ minVoteCount | number }}</span>
+        <span>{{ ratingSource === 'imdb' ? 'IMDb' : 'TMDB' }} minimum rating: {{ minRating }}/10 · Minimum votes: {{ minVoteCount | number }}</span>
         <span>{{ ratingHiddenCount | number }} {{ ratingHiddenCount === 1 ? 'title hidden' : 'titles hidden' }} by these limits</span>
         <button type="button" class="btn btn-sm btn-outline-light" (click)="clearRatingFilter()">Show all</button>
       </div>

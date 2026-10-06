@@ -122,6 +122,66 @@ describe('RecommendedComponent', () => {
     expect(component).toBeTruthy();
   });
 
+  it('loads the chosen IMDb source, pairs its votes and rating, and preserves unknown/owned titles', () => {
+    fixture.detectChanges();
+    component.allGaps = [
+      gap({ id: 1, year: 2000, groupName: 'A', tmdbRating: 9, tmdbVotes: 1000 }),
+      gap({ id: 2, year: 2000, groupName: 'B', tmdbRating: 4, tmdbVotes: 1 }),
+      gap({ id: 3, year: 2000, groupName: 'Unknown' }),
+      gap({ id: 4, year: 2000, groupName: 'Owned', owned: true }),
+    ];
+    imdbService.getRatings.and.returnValue(of({ ratings: {
+      '1': { imdbId: 'tt1', aggregateRating: 9, voteCount: 10 },
+      '2': { imdbId: 'tt2', aggregateRating: 8, voteCount: 500 },
+      '4': { imdbId: 'tt4', aggregateRating: 2, voteCount: 1 },
+    } }));
+    component.ratingSource = 'imdb';
+    component.showImdbRatings = false;
+    component.minRating = 6;
+    component.minVoteCount = 100;
+    component.sortBy = 'rating';
+    component.onRatingSourceChange();
+    expect(imdbService.getRatings).toHaveBeenCalledTimes(1);
+    expect(component.filteredGroups.flatMap(g => g.gaps.map(g => g.id))).toEqual([2, 4, 3]);
+    expect(component.ratingHiddenCount).toBe(1);
+    expect(preferencesService.save).toHaveBeenCalledWith({ ratingSource: 'imdb' });
+    component.showImdbRatings = true;
+    component.onRatingPrefsChange();
+    expect(component.filteredGroups[0].gaps[0].id).toBe(2);
+    expect(imdbService.getRatings).toHaveBeenCalledTimes(1);
+    component.ratingSource = 'tmdb';
+    component.onRatingSourceChange();
+    expect(component.filteredGroups[0].gaps[0].id).toBe(1);
+  });
+
+  it('shows IMDb source failures and retries without changing the selected source', () => {
+    component.ratingSource = 'imdb';
+    component.allGaps = [gap({ id: 1, year: 2000 })];
+    imdbService.getRatings.and.returnValue(throwError(() => new Error('offline')));
+    component.applyFilter();
+    expect(component.imdbRatings.error).toContain('Could not load');
+    component.applyFilter();
+    expect(imdbService.getRatings).toHaveBeenCalledTimes(1);
+    imdbService.getRatings.and.returnValue(of({ ratings: {} }));
+    component.loadImdbRatings(true);
+    expect(component.imdbRatings.loaded).toBeTrue();
+    expect(component.ratingSource).toBe('imdb');
+  });
+
+  it('cancels a pending IMDb source load when the results are cleared', () => {
+    const pending = new Subject<any>();
+    imdbService.getRatings.and.returnValue(pending);
+    component.ratingSource = 'imdb';
+    component.allGaps = [gap({ id: 1, year: 2000 })];
+    component.applyFilter();
+    expect(component.imdbRatings.loading).toBeTrue();
+    component.clearResults();
+    pending.next({ ratings: { '1': { aggregateRating: 9, voteCount: 200 } } });
+    expect(component.imdbRatings.loading).toBeFalse();
+    expect(component.imdbRatings.loaded).toBeFalse();
+    expect(component.filteredGroups).toEqual([]);
+  });
+
   it('applies and remembers changes made through the shared results toolbar', async () => {
     fixture.detectChanges();
     component.hasServer = true;
