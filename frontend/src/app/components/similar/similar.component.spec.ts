@@ -501,7 +501,7 @@ describe('SimilarComponent', () => {
     expect(recommendationService.getSimilarMovies).not.toHaveBeenCalled();
     expect(component.allSimilar[0]).toEqual(jasmine.objectContaining({
       tmdbId: 10, tvdbId: 20, imdbId: 'tt100', sonarrEligible: true, radarrEligible: false,
-      tmdbRating: 8, tmdbVotes: 50, externalUrl: 'https://www.themoviedb.org/tv/10',
+      tmdbRating: 8, tmdbVotes: 50, externalUrl: 'https://www.imdb.com/title/tt100/',
     }));
     expect(component.allSimilar[1].sonarrEligible).toBeFalse();
     expect(gapView.applyImdbRatings).toHaveBeenCalledWith(component.allSimilar, { suppressErrors: false, mediaType: 'tv' });
@@ -513,6 +513,39 @@ describe('SimilarComponent', () => {
     component.onLinkProviderChange();
     expect(component.allSimilar[0].externalUrl).toBe('https://www.imdb.com/title/tt100/');
     expect(component.allSimilar[1].externalUrl).toContain('/tmdb/tv/11/imdb');
+  });
+
+  it('hides TMDB controls in TV mode and uses IMDb without overwriting movie preferences', async () => {
+    recommendationService.getSimilarShows.and.returnValue(of([
+      { tmdbId: 10, imdbId: 'tt100', name: 'Show A', year: '2020', voteAverage: 9, voteCount: 100 },
+      { tmdbId: 11, imdbId: 'tt101', name: 'Show B', year: '2020', voteAverage: 4, voteCount: 200 },
+    ] as any));
+    gapView.applyImdbRatings.and.callFake(gaps => {
+      gaps[0].imdbRating = 3;
+      gaps[1].imdbRating = 8;
+      return of(undefined);
+    });
+    fixture.detectChanges();
+    component.ratingSource = 'tmdb';
+    component.externalLinkProvider = 'tmdb';
+    component.setMediaType('tv');
+    component.selectMovie(tvSeed);
+    component.sortBy = 'rating';
+    component.minRating = 6;
+    component.applyFilter();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(component.filteredSimilar.map(g => g.tmdbId)).toEqual([11]);
+    expect(fixture.nativeElement.textContent).not.toContain('TMDB');
+    expect(fixture.nativeElement.querySelector('.rating-chip.tmdb')).toBeNull();
+    expect(fixture.nativeElement.querySelector('#similarShowTmdb')).toBeNull();
+    expect(fixture.nativeElement.querySelector('#similarRatingSource').value).toBe('imdb');
+    expect(fixture.nativeElement.querySelector('#similarLinkProvider').value).toBe('imdb');
+    expect(component.ratingSource).toBe('tmdb');
+    expect(component.externalLinkProvider).toBe('tmdb');
+    component.setMediaType('movie');
+    expect(component.effectiveRatingSource).toBe('tmdb');
+    expect(component.effectiveLinkProvider).toBe('tmdb');
   });
 
   it('sends TVDB IDs to Sonarr with the selected libraries and destination, and blocks duplicates', () => {

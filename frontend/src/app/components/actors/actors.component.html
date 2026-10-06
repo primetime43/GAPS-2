@@ -187,7 +187,7 @@
               <span *ngIf="actorDetails.deathday">Died {{ actorDetails.deathday }}</span>
               <a *ngIf="actorDetails.imdbId" class="activeLink"
                  [href]="'https://www.imdb.com/name/' + actorDetails.imdbId" target="_blank" rel="noopener noreferrer">IMDb</a>
-              <a *ngIf="actorDetails.id" class="activeLink"
+              <a *ngIf="mediaType === 'movie' && actorDetails.id" class="activeLink"
                  [href]="'https://www.themoviedb.org/person/' + actorDetails.id" target="_blank" rel="noopener noreferrer">TMDB</a>
             </div>
             <p *ngIf="actorDetails.biography" class="actor-profile-bio">{{ actorDetails.biography }}</p>

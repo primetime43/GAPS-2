@@ -138,6 +138,16 @@ export class SimilarComponent implements OnInit, OnDestroy {
     this.destroy$.complete();
   }
 
+  get effectiveRatingSource(): RatingSource { return this.mediaType === 'tv' ? 'imdb' : this.ratingSource; }
+  get effectiveLinkProvider(): 'tmdb' | 'imdb' { return this.mediaType === 'tv' ? 'imdb' : this.externalLinkProvider; }
+  get resultSortOptions() {
+    return this.mediaType === 'tv'
+      ? this.sortOptions.map(option => option.value === 'relevance' ? { ...option, label: 'Relevance' } : option)
+      : this.sortOptions;
+  }
+  readonly tvLinkOptions = [{ value: 'imdb', label: 'IMDb' }];
+  readonly movieLinkOptions = [{ value: 'tmdb', label: 'TMDB' }, { value: 'imdb', label: 'IMDb' }];
+
   get mediaLabel(): string { return this.mediaType === 'tv' ? 'TV shows' : 'movies'; }
   get seedLabel(): string { return this.mediaType === 'tv' ? 'TV show' : 'movie'; }
 
@@ -309,7 +319,7 @@ export class SimilarComponent implements OnInit, OnDestroy {
           overview: row.overview || '',
           groupName: this.mediaType === 'tv' ? 'Similar TV Shows' : 'Similar Movies',
           owned: !!row.owned,
-          externalUrl: this.movieUrl(row.tmdbId, this.externalLinkProvider, row.imdbId),
+          externalUrl: this.movieUrl(row.tmdbId, this.effectiveLinkProvider, row.imdbId),
           radarrEligible: this.mediaType === 'movie' && !!row.tmdbId,
           sonarrEligible: this.mediaType === 'tv' && !!row.tvdbId,
           tmdbRating: row.voteAverage && row.voteAverage > 0 ? row.voteAverage : undefined,
@@ -369,15 +379,15 @@ export class SimilarComponent implements OnInit, OnDestroy {
     }
 
     this.filteredSimilar = this.gapView.sortGaps(rows,
-      this.sortBy === 'relevance' ? 'default' : this.sortBy, this.ratingSource, this.sortDirection);
+      this.sortBy === 'relevance' ? 'default' : this.sortBy, this.effectiveRatingSource, this.sortDirection);
   }
 
   private ratingOf(movie: Gap): number {
-    return this.gapView.ratingOf(movie, this.ratingSource);
+    return this.gapView.ratingOf(movie, this.effectiveRatingSource);
   }
 
   private votesOf(movie: Gap): number {
-    return this.gapView.votesOf(movie, this.ratingSource);
+    return this.gapView.votesOf(movie, this.effectiveRatingSource);
   }
 
   movieUrl(id: number, provider: 'tmdb' | 'imdb', imdbId?: string): string {
@@ -389,7 +399,7 @@ export class SimilarComponent implements OnInit, OnDestroy {
 
   private updateMovieLinks(): void {
     for (const movie of this.allSimilar) {
-      movie.externalUrl = this.movieUrl(movie.id, this.externalLinkProvider, movie.imdbId);
+      movie.externalUrl = this.movieUrl(movie.id, this.effectiveLinkProvider, movie.imdbId);
     }
   }
 
@@ -400,7 +410,7 @@ export class SimilarComponent implements OnInit, OnDestroy {
   }
 
   loadImdbRatings(retry = false): void {
-    if (!this.showImdbRatings && this.ratingSource !== 'imdb') return;
+    if (!this.showImdbRatings && this.effectiveRatingSource !== 'imdb') return;
     this.imdbRatings.load(this.allSimilar, () => {
       this.updateMovieLinks();
       this.applyFilter();

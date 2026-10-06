@@ -96,6 +96,7 @@ export class DiscoveryHeaderComponent<Sort extends string, Link extends string> 
   }
 
   sortLabel(option: { value: string; label: string }): string {
+    if (!this.ratingsAvailable) return option.label;
     if (option.value === 'rating') return `Rating (${this.ratingSourceLabel})`;
     if (option.value === 'votes') return `Vote count (${this.ratingSourceLabel})`;
     return option.label;

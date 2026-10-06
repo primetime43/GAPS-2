@@ -119,7 +119,7 @@ Saved scans restored from disk do not retain server identity, so their automatic
 
 ### Similar movies and TV shows
 
-In **Similar**, choose **Movies** or **TV Shows**, select the libraries to check, and pick a title you liked. Each mode remembers its library selection. Recommendations come from TMDB; rating and vote filters can use either TMDB or IMDb, with ascending or descending sorting.
+In **Similar**, choose **Movies** or **TV Shows**, select the libraries to check, and pick a title you liked. Each mode remembers its library selection. Recommendations come from TMDB; movie rating and vote filters can use either TMDB or IMDb, while TV uses IMDb, with ascending or descending sorting.
 
 TV seeds can have a TMDB, TVDB, or IMDb series ID. GAPS resolves external IDs through TMDB and matches ownership across those IDs and title/year. **Send to Sonarr** requires a TVDB mapping; shows without one remain visible. Similar TV recommendations use your existing TMDB API key and do not require a separate TheTVDB API key.
 
