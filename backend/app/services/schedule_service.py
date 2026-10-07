@@ -1,6 +1,8 @@
 import logging
 import threading
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from tzlocal import get_localzone
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -40,19 +42,20 @@ MOVIE_JOB_ID = 'scheduled_movie_scan'
 TV_JOB_ID = 'scheduled_tv_scan'
 
 
-def _build_trigger(preset: str, hour: int, minute: int, day_of_week: str):
+def _build_trigger(preset: str, hour: int, minute: int, day_of_week: str, time_zone: str | None = None):
     """Build a CronTrigger for a frequency at the chosen time. Hourly ignores
     the hour (runs every hour at the top); only weekly uses day_of_week."""
+    zone = ZoneInfo(time_zone) if time_zone else get_localzone()
     if preset == 'hourly':
-        return CronTrigger(minute=0)
+        return CronTrigger(minute=0, timezone=zone)
     if preset == 'daily':
-        return CronTrigger(hour=hour, minute=minute)
+        return CronTrigger(hour=hour, minute=minute, timezone=zone)
     if preset == 'weekly':
-        return CronTrigger(day_of_week=day_of_week, hour=hour, minute=minute)
+        return CronTrigger(day_of_week=day_of_week, hour=hour, minute=minute, timezone=zone)
     if preset == 'biweekly':
-        return CronTrigger(day='1,15', hour=hour, minute=minute)
+        return CronTrigger(day='1,15', hour=hour, minute=minute, timezone=zone)
     if preset == 'monthly':
-        return CronTrigger(day=1, hour=hour, minute=minute)
+        return CronTrigger(day=1, hour=hour, minute=minute, timezone=zone)
     return None
 
 
@@ -398,6 +401,7 @@ class ScheduleService:
             int(block.get('hour', DEFAULT_HOUR)),
             int(block.get('minute', DEFAULT_MINUTE)),
             block.get('dayOfWeek', DEFAULT_DOW),
+            block.get('timezone'),
         )
         if trigger is None:
             return
@@ -412,6 +416,7 @@ class ScheduleService:
         hour: int = DEFAULT_HOUR,
         minute: int = DEFAULT_MINUTE,
         day_of_week: str = DEFAULT_DOW,
+        time_zone: str | None = None,
     ) -> bool:
         """Enable a per-media-type schedule with its own cadence and time."""
         if preset not in SCHEDULE_FREQUENCIES:
@@ -431,6 +436,16 @@ class ScheduleService:
 
         key = 'tv' if media_type == 'tv' else 'movie'
         cfg = self._load_config()
+        # Older clients preserve the saved zone; legacy schedules keep the
+        # server's zone until explicitly saved from a local-time-aware client.
+        if time_zone is None:
+            time_zone = cfg.get(key, {}).get('timezone') or str(get_localzone())
+        try:
+            if not isinstance(time_zone, str) or not time_zone:
+                return False
+            ZoneInfo(time_zone)
+        except (ZoneInfoNotFoundError, ValueError):
+            return False
         # Preserve each existing job's server when saving the other schedule.
         for block in ('movie', 'tv'):
             if cfg.get(block):
@@ -441,6 +456,7 @@ class ScheduleService:
         cfg[key] = {
             'enabled': True, 'preset': preset, 'libraries': libraries, 'source': source,
             'hour': hour, 'minute': minute, 'dayOfWeek': day_of_week,
+            'timezone': time_zone,
         }
         config_store.put('schedule', cfg)
 
@@ -510,6 +526,7 @@ class ScheduleService:
             'hour': hour,
             'minute': minute,
             'dayOfWeek': day_of_week,
+            'timezone': str(job.trigger.timezone) if job else block.get('timezone') or str(get_localzone()),
             'description': _describe(preset, hour, minute, day_of_week) if preset else '',
-            'next_run': str(job.next_run_time) if job else None,
+            'next_run': job.next_run_time.astimezone(timezone.utc).isoformat() if job else None,
         }

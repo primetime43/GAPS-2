@@ -1,5 +1,6 @@
 <div class="top-margin regular-text">
   <p>Automatically scan for missing collection movies and franchise TV shows on independent schedules.</p>
+  <p class="text-muted small">Times are local to this machine ({{ localTimeZone }}). Saved schedules follow this time zone, including daylight-saving changes.</p>
 
   <div *ngIf="loading" class="text-center mt-4">
     <div class="spinner"></div>
@@ -29,13 +30,14 @@
         <h5 class="mb-2">Movies</h5>
         <div class="status-indicator mb-2">
           <span *ngIf="schedule?.movie?.enabled" class="status-ok">
-            ✓ Scheduled: {{ schedule?.movie?.description }}
+            ✓ Scheduled<span *ngIf="!usesDifferentTimeZone(schedule?.movie)">: {{ schedule?.movie?.description }}</span>
           </span>
           <span *ngIf="!schedule?.movie?.enabled" class="status-missing">✗ Not scheduled</span>
         </div>
         <div *ngIf="schedule?.movie?.enabled && schedule?.movie?.next_run" class="text-muted mb-3" style="font-size: 13px;">
-          Next scan: {{ schedule?.movie?.next_run }}
+          Next scan: {{ schedule?.movie?.next_run | date:'medium' }} (local time)
         </div>
+        <p *ngIf="usesDifferentTimeZone(schedule?.movie)" class="text-muted small">This schedule was saved in a different time zone. Review the local time and frequency below, then save to use {{ localTimeZone }} for future runs.</p>
 
         <div class="form-group mb-2">
           <label class="form-label">Movie libraries</label>
@@ -64,7 +66,7 @@
             </select>
           </div>
           <div class="col-auto" *ngIf="showTime(moviePreset)">
-            <label class="form-label">Time</label>
+            <label class="form-label">Time (local)</label>
             <input type="time" class="form-control dark-input schedule-time" [(ngModel)]="movieTime">
           </div>
         </div>
@@ -85,13 +87,14 @@
         <h5 class="mb-2">TV Shows</h5>
         <div class="status-indicator mb-2">
           <span *ngIf="schedule?.tv?.enabled" class="status-ok">
-            ✓ Scheduled: {{ schedule?.tv?.description }}
+            ✓ Scheduled<span *ngIf="!usesDifferentTimeZone(schedule?.tv)">: {{ schedule?.tv?.description }}</span>
           </span>
           <span *ngIf="!schedule?.tv?.enabled" class="status-missing">✗ Not scheduled</span>
         </div>
         <div *ngIf="schedule?.tv?.enabled && schedule?.tv?.next_run" class="text-muted mb-3" style="font-size: 13px;">
-          Next scan: {{ schedule?.tv?.next_run }}
+          Next scan: {{ schedule?.tv?.next_run | date:'medium' }} (local time)
         </div>
+        <p *ngIf="usesDifferentTimeZone(schedule?.tv)" class="text-muted small">This schedule was saved in a different time zone. Review the local time and frequency below, then save to use {{ localTimeZone }} for future runs.</p>
 
         <div class="form-group mb-2">
           <label class="form-label">TV libraries</label>
@@ -120,7 +123,7 @@
             </select>
           </div>
           <div class="col-auto" *ngIf="showTime(tvPreset)">
-            <label class="form-label">Time</label>
+            <label class="form-label">Time (local)</label>
             <input type="time" class="form-control dark-input schedule-time" [(ngModel)]="tvTime">
           </div>
         </div>

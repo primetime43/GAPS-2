@@ -24,6 +24,7 @@ export interface ScheduleBlock {
   hour: number;
   minute: number;
   dayOfWeek: string;
+  timezone?: string;
   description: string;   // human-readable, e.g. "Weekly on Wednesday at 6:00 AM"
   next_run: string | null;
 }
@@ -52,6 +53,7 @@ export interface SetScheduleRequest {
   hour: number;
   minute: number;
   dayOfWeek: string;
+  timezone: string;
 }
 
 @Injectable({
