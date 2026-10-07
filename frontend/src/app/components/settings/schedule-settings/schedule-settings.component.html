@@ -1,151 +1,167 @@
 <div class="top-margin regular-text">
-  <p>Automatically scan for missing collection movies and franchise TV shows on independent schedules.</p>
-  <p class="text-muted small">Times are local to this machine ({{ localTimeZone }}). Saved schedules follow this time zone, including daylight-saving changes.</p>
+  <p>Track missing titles over time and manage automatic scans for movies and TV shows.</p>
 
   <div *ngIf="loading" class="text-center mt-4">
     <div class="spinner"></div>
   </div>
 
   <div *ngIf="!loading">
-    <!-- Message -->
-    <div *ngIf="message"
-         class="alert"
-         [class.alert-success]="messageType === 'success'"
-         [class.alert-danger]="messageType === 'error'">
-      {{ message }}
+    <div class="scan-view-tabs nav nav-pills gap-2 mb-4" role="tablist" aria-label="Scan history and schedules" (keydown)="onTabKeydown($event)">
+      <button id="scan-history-tab" type="button" class="nav-link" role="tab"
+        [class.active]="activeTab === 'history'" [attr.aria-selected]="activeTab === 'history'"
+        [attr.tabindex]="activeTab === 'history' ? 0 : -1" aria-controls="scan-history-panel"
+        (click)="activeTab = 'history'">History &amp; trends</button>
+      <button id="scan-schedules-tab" type="button" class="nav-link" role="tab"
+        [class.active]="activeTab === 'schedules'" [attr.aria-selected]="activeTab === 'schedules'"
+        [attr.tabindex]="activeTab === 'schedules' ? 0 : -1" aria-controls="scan-schedules-panel"
+        (click)="activeTab = 'schedules'">Schedules</button>
     </div>
 
-    <!-- No libraries warning -->
-    <div *ngIf="libraries.length === 0" class="text-muted">
-      No libraries found. Configure a media server first.
-    </div>
+    <section id="scan-history-panel" role="tabpanel" aria-labelledby="scan-history-tab" tabindex="0" [hidden]="activeTab !== 'history'">
+      <app-schedule-history *ngIf="schedule" [runs]="schedule.run_history || []"
+        [retentionLimit]="schedule.historyLimit || 50" [saving]="savingHistory" [error]="historyError" [message]="historyMessage"
+        (retentionChange)="saveHistoryLimit($event)">
+      </app-schedule-history>
+    </section>
 
-    <div *ngIf="libraries.length > 0">
-      <div class="text-muted mb-3" style="font-size: 13px;">
-        Using {{ activeSource | titlecase }} server: {{ activeServerName }}
+    <section id="scan-schedules-panel" role="tabpanel" aria-labelledby="scan-schedules-tab" tabindex="0" [hidden]="activeTab !== 'schedules'">
+      <p class="text-muted small">Times are local to this machine ({{ localTimeZone }}). Saved schedules follow this time zone, including daylight-saving changes.</p>
+      <!-- Message -->
+      <div *ngIf="message"
+           class="alert"
+           [class.alert-success]="messageType === 'success'"
+           [class.alert-danger]="messageType === 'error'">
+        {{ message }}
       </div>
 
-      <!-- Movie schedule -->
-      <div class="pref-card mb-4 p-3">
-        <h5 class="mb-2">Movies</h5>
-        <div class="status-indicator mb-2">
-          <span *ngIf="schedule?.movie?.enabled" class="status-ok">
-            ✓ Scheduled<span *ngIf="!usesDifferentTimeZone(schedule?.movie)">: {{ schedule?.movie?.description }}</span>
-          </span>
-          <span *ngIf="!schedule?.movie?.enabled" class="status-missing">✗ Not scheduled</span>
-        </div>
-        <div *ngIf="schedule?.movie?.enabled && schedule?.movie?.next_run" class="text-muted mb-3" style="font-size: 13px;">
-          Next scan: {{ schedule?.movie?.next_run | date:'medium' }} (local time)
-        </div>
-        <p *ngIf="usesDifferentTimeZone(schedule?.movie)" class="text-muted small">This schedule was saved in a different time zone. Review the local time and frequency below, then save to use {{ localTimeZone }} for future runs.</p>
+      <!-- No libraries warning -->
+      <div *ngIf="libraries.length === 0" class="text-muted">
+        No libraries found. Configure a media server first.
+      </div>
 
-        <div class="form-group mb-2">
-          <label class="form-label">Movie libraries</label>
-          <div class="d-flex flex-wrap gap-3">
-            <div class="form-check" *ngFor="let lib of movieLibraries">
-              <input class="form-check-input" type="checkbox"
-                     [id]="'sched-mov-' + lib.title"
-                     [checked]="isLibrarySelected('movie', lib.title)"
-                     (change)="toggleLibrary('movie', lib.title)">
-              <label class="form-check-label" [for]="'sched-mov-' + lib.title">{{ lib.title }}</label>
+      <div *ngIf="libraries.length > 0">
+        <div class="text-muted mb-3" style="font-size: 13px;">
+          Using {{ activeSource | titlecase }} server: {{ activeServerName }}
+        </div>
+
+        <!-- Movie schedule -->
+        <div class="pref-card mb-4 p-3">
+          <h5 class="mb-2">Movies</h5>
+          <div class="status-indicator mb-2">
+            <span *ngIf="schedule?.movie?.enabled" class="status-ok">
+              ✓ Scheduled<span *ngIf="!usesDifferentTimeZone(schedule?.movie)">: {{ schedule?.movie?.description }}</span>
+            </span>
+            <span *ngIf="!schedule?.movie?.enabled" class="status-missing">✗ Not scheduled</span>
+          </div>
+          <div *ngIf="schedule?.movie?.enabled && schedule?.movie?.next_run" class="text-muted mb-3" style="font-size: 13px;">
+            Next scan: {{ schedule?.movie?.next_run | date:'medium' }} (local time)
+          </div>
+          <p *ngIf="usesDifferentTimeZone(schedule?.movie)" class="text-muted small">This schedule was saved in a different time zone. Review the local time and frequency below, then save to use {{ localTimeZone }} for future runs.</p>
+
+          <div class="form-group mb-2">
+            <label class="form-label">Movie libraries</label>
+            <div class="d-flex flex-wrap gap-3">
+              <div class="form-check" *ngFor="let lib of movieLibraries">
+                <input class="form-check-input" type="checkbox"
+                       [id]="'sched-mov-' + lib.title"
+                       [checked]="isLibrarySelected('movie', lib.title)"
+                       (change)="toggleLibrary('movie', lib.title)">
+                <label class="form-check-label" [for]="'sched-mov-' + lib.title">{{ lib.title }}</label>
+              </div>
             </div>
           </div>
-        </div>
-        <div class="form-group mb-3">
-          <label class="form-label">Frequency</label>
-          <select class="form-select dark-select" [(ngModel)]="moviePreset">
-            <option value="" disabled hidden>Select frequency...</option>
-            <option *ngFor="let key of presetKeys" [value]="key">{{ schedule?.presets?.[key] }}</option>
-          </select>
-        </div>
-        <div class="row g-2 mb-3" *ngIf="showTime(moviePreset) || showDayOfWeek(moviePreset)">
-          <div class="col-auto" *ngIf="showDayOfWeek(moviePreset)">
-            <label class="form-label">Day of week</label>
-            <select class="form-select dark-select" [(ngModel)]="movieDayOfWeek">
-              <option *ngFor="let key of dayKeys" [value]="key">{{ days[key] }}</option>
+          <div class="form-group mb-3">
+            <label class="form-label">Frequency</label>
+            <select class="form-select dark-select" [(ngModel)]="moviePreset">
+              <option value="" disabled hidden>Select frequency...</option>
+              <option *ngFor="let key of presetKeys" [value]="key">{{ schedule?.presets?.[key] }}</option>
             </select>
           </div>
-          <div class="col-auto" *ngIf="showTime(moviePreset)">
-            <label class="form-label">Time (local)</label>
-            <input type="time" class="form-control dark-input schedule-time" [(ngModel)]="movieTime">
-          </div>
-        </div>
-        <div class="d-flex gap-2">
-          <button class="btn btn-primary" (click)="save('movie')"
-                  [disabled]="saving.movie || !moviePreset || !selectedMovieLibraries.length">
-            {{ saving.movie ? 'Saving...' : 'Save Movie Schedule' }}
-          </button>
-          <button class="btn btn-outline-secondary" (click)="disable('movie')"
-                  [disabled]="saving.movie || !schedule?.movie?.enabled">
-            Disable
-          </button>
-        </div>
-      </div>
-
-      <!-- TV schedule -->
-      <div class="pref-card mb-4 p-3" *ngIf="tvLibraries.length > 0">
-        <h5 class="mb-2">TV Shows</h5>
-        <div class="status-indicator mb-2">
-          <span *ngIf="schedule?.tv?.enabled" class="status-ok">
-            ✓ Scheduled<span *ngIf="!usesDifferentTimeZone(schedule?.tv)">: {{ schedule?.tv?.description }}</span>
-          </span>
-          <span *ngIf="!schedule?.tv?.enabled" class="status-missing">✗ Not scheduled</span>
-        </div>
-        <div *ngIf="schedule?.tv?.enabled && schedule?.tv?.next_run" class="text-muted mb-3" style="font-size: 13px;">
-          Next scan: {{ schedule?.tv?.next_run | date:'medium' }} (local time)
-        </div>
-        <p *ngIf="usesDifferentTimeZone(schedule?.tv)" class="text-muted small">This schedule was saved in a different time zone. Review the local time and frequency below, then save to use {{ localTimeZone }} for future runs.</p>
-
-        <div class="form-group mb-2">
-          <label class="form-label">TV libraries</label>
-          <div class="d-flex flex-wrap gap-3">
-            <div class="form-check" *ngFor="let lib of tvLibraries">
-              <input class="form-check-input" type="checkbox"
-                     [id]="'sched-tv-' + lib.title"
-                     [checked]="isLibrarySelected('tv', lib.title)"
-                     (change)="toggleLibrary('tv', lib.title)">
-              <label class="form-check-label" [for]="'sched-tv-' + lib.title">{{ lib.title }}</label>
+          <div class="row g-2 mb-3" *ngIf="showTime(moviePreset) || showDayOfWeek(moviePreset)">
+            <div class="col-auto" *ngIf="showDayOfWeek(moviePreset)">
+              <label class="form-label">Day of week</label>
+              <select class="form-select dark-select" [(ngModel)]="movieDayOfWeek">
+                <option *ngFor="let key of dayKeys" [value]="key">{{ days[key] }}</option>
+              </select>
+            </div>
+            <div class="col-auto" *ngIf="showTime(moviePreset)">
+              <label class="form-label">Time (local)</label>
+              <input type="time" class="form-control dark-input schedule-time" [(ngModel)]="movieTime">
             </div>
           </div>
+          <div class="d-flex gap-2">
+            <button class="btn btn-primary" (click)="save('movie')"
+                    [disabled]="saving.movie || !moviePreset || !selectedMovieLibraries.length">
+              {{ saving.movie ? 'Saving...' : 'Save Movie Schedule' }}
+            </button>
+            <button class="btn btn-outline-secondary" (click)="disable('movie')"
+                    [disabled]="saving.movie || !schedule?.movie?.enabled">
+              Disable
+            </button>
+          </div>
         </div>
-        <div class="form-group mb-3">
-          <label class="form-label">Frequency</label>
-          <select class="form-select dark-select" [(ngModel)]="tvPreset">
-            <option value="" disabled hidden>Select frequency...</option>
-            <option *ngFor="let key of presetKeys" [value]="key">{{ schedule?.presets?.[key] }}</option>
-          </select>
-        </div>
-        <div class="row g-2 mb-3" *ngIf="showTime(tvPreset) || showDayOfWeek(tvPreset)">
-          <div class="col-auto" *ngIf="showDayOfWeek(tvPreset)">
-            <label class="form-label">Day of week</label>
-            <select class="form-select dark-select" [(ngModel)]="tvDayOfWeek">
-              <option *ngFor="let key of dayKeys" [value]="key">{{ days[key] }}</option>
+
+        <!-- TV schedule -->
+        <div class="pref-card mb-4 p-3" *ngIf="tvLibraries.length > 0">
+          <h5 class="mb-2">TV Shows</h5>
+          <div class="status-indicator mb-2">
+            <span *ngIf="schedule?.tv?.enabled" class="status-ok">
+              ✓ Scheduled<span *ngIf="!usesDifferentTimeZone(schedule?.tv)">: {{ schedule?.tv?.description }}</span>
+            </span>
+            <span *ngIf="!schedule?.tv?.enabled" class="status-missing">✗ Not scheduled</span>
+          </div>
+          <div *ngIf="schedule?.tv?.enabled && schedule?.tv?.next_run" class="text-muted mb-3" style="font-size: 13px;">
+            Next scan: {{ schedule?.tv?.next_run | date:'medium' }} (local time)
+          </div>
+          <p *ngIf="usesDifferentTimeZone(schedule?.tv)" class="text-muted small">This schedule was saved in a different time zone. Review the local time and frequency below, then save to use {{ localTimeZone }} for future runs.</p>
+
+          <div class="form-group mb-2">
+            <label class="form-label">TV libraries</label>
+            <div class="d-flex flex-wrap gap-3">
+              <div class="form-check" *ngFor="let lib of tvLibraries">
+                <input class="form-check-input" type="checkbox"
+                       [id]="'sched-tv-' + lib.title"
+                       [checked]="isLibrarySelected('tv', lib.title)"
+                       (change)="toggleLibrary('tv', lib.title)">
+                <label class="form-check-label" [for]="'sched-tv-' + lib.title">{{ lib.title }}</label>
+              </div>
+            </div>
+          </div>
+          <div class="form-group mb-3">
+            <label class="form-label">Frequency</label>
+            <select class="form-select dark-select" [(ngModel)]="tvPreset">
+              <option value="" disabled hidden>Select frequency...</option>
+              <option *ngFor="let key of presetKeys" [value]="key">{{ schedule?.presets?.[key] }}</option>
             </select>
           </div>
-          <div class="col-auto" *ngIf="showTime(tvPreset)">
-            <label class="form-label">Time (local)</label>
-            <input type="time" class="form-control dark-input schedule-time" [(ngModel)]="tvTime">
+          <div class="row g-2 mb-3" *ngIf="showTime(tvPreset) || showDayOfWeek(tvPreset)">
+            <div class="col-auto" *ngIf="showDayOfWeek(tvPreset)">
+              <label class="form-label">Day of week</label>
+              <select class="form-select dark-select" [(ngModel)]="tvDayOfWeek">
+                <option *ngFor="let key of dayKeys" [value]="key">{{ days[key] }}</option>
+              </select>
+            </div>
+            <div class="col-auto" *ngIf="showTime(tvPreset)">
+              <label class="form-label">Time (local)</label>
+              <input type="time" class="form-control dark-input schedule-time" [(ngModel)]="tvTime">
+            </div>
+          </div>
+          <div class="text-muted mb-2" style="font-size: 12px;">
+            TV scans require <a [routerLink]="['/settings/tvdb']" class="activeLink">TheTVDB</a> to be configured.
+          </div>
+          <div class="d-flex gap-2">
+            <button class="btn btn-primary" (click)="save('tv')"
+                    [disabled]="saving.tv || !tvPreset || !selectedTvLibraries.length">
+              {{ saving.tv ? 'Saving...' : 'Save TV Schedule' }}
+            </button>
+            <button class="btn btn-outline-secondary" (click)="disable('tv')"
+                    [disabled]="saving.tv || !schedule?.tv?.enabled">
+              Disable
+            </button>
           </div>
         </div>
-        <div class="text-muted mb-2" style="font-size: 12px;">
-          TV scans require <a [routerLink]="['/settings/tvdb']" class="activeLink">TheTVDB</a> to be configured.
-        </div>
-        <div class="d-flex gap-2">
-          <button class="btn btn-primary" (click)="save('tv')"
-                  [disabled]="saving.tv || !tvPreset || !selectedTvLibraries.length">
-            {{ saving.tv ? 'Saving...' : 'Save TV Schedule' }}
-          </button>
-          <button class="btn btn-outline-secondary" (click)="disable('tv')"
-                  [disabled]="saving.tv || !schedule?.tv?.enabled">
-            Disable
-          </button>
-        </div>
       </div>
-    </div>
 
-    <app-schedule-history *ngIf="schedule" [runs]="schedule.run_history || []"
-      [retentionLimit]="schedule.historyLimit || 50" [saving]="savingHistory" [error]="historyError" [message]="historyMessage"
-      (retentionChange)="saveHistoryLimit($event)">
-    </app-schedule-history>
+    </section>
   </div>
 </div>

@@ -12,6 +12,17 @@ type MediaType = 'movie' | 'tv';
   standalone: false
 })
 export class ScheduleSettingsComponent implements OnInit {
+  activeTab: 'history' | 'schedules' = 'history';
+
+  onTabKeydown(event: KeyboardEvent): void {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault();
+    this.activeTab = event.key === 'Home' ? 'history' : event.key === 'End' ? 'schedules'
+      : this.activeTab === 'history' ? 'schedules' : 'history';
+    const tabs = event.currentTarget as HTMLElement;
+    tabs.querySelector<HTMLButtonElement>(`#scan-${this.activeTab}-tab`)?.focus();
+  }
+
   readonly localTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   schedule: ScheduleConfig | null = null;
   libraries: MediaLibrary[] = [];
