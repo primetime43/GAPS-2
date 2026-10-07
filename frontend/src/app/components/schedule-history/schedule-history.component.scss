@@ -1,0 +1,20 @@
+.history-limit { width: 140px; }
+.trend-card { padding: 1rem; background: #272b2e; border: 1px solid #45494d; border-radius: 6px; }
+.chart-scroll { overflow-x: auto; }
+.trend-chart {
+  width: 100%;
+  min-width: 560px;
+  display: block;
+  text { fill: #bdc4cb; font-size: 12px; }
+  .axis-title { font-size: 13px; }
+  .grid-line { stroke: #45494d; stroke-width: 1; }
+  circle { cursor: crosshair; stroke: #272b2e; stroke-width: 1.5; }
+  circle:focus, circle:hover { stroke: white; stroke-width: 3; outline: none; }
+}
+.point-detail { min-height: 1.5em; }
+.trend-legend {
+  list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: .75rem 1.5rem;
+  li { display: flex; align-items: flex-start; gap: .5rem; font-size: 13px; }
+}
+.legend-swatch { width: 16px; height: 4px; margin-top: .5rem; flex-shrink: 0; }
+.history-table { font-size: 13px; td, th { padding: .45rem .35rem; } }

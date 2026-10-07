@@ -1,4 +1,5 @@
 import logging
+import threading
 from datetime import datetime, timezone
 
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -10,7 +11,11 @@ logger = logging.getLogger(__name__)
 
 HISTORY_KEY = 'schedule_run_history'
 LEGACY_LAST_RUN_KEY = 'schedule_last_run'  # 2.4.0 single-record format; migrated on first new write
-MAX_HISTORY = 50
+DEFAULT_HISTORY_LIMIT = 50
+HISTORY_LIMIT_KEY = 'schedule_history_limit'
+MIN_HISTORY_LIMIT = 10
+MAX_HISTORY_LIMIT = 500
+_HISTORY_LOCK = threading.RLock()
 
 # Schedule frequencies. The time of day (hour/minute) and, for weekly, the day
 # of week are user-configurable — only the cadence is fixed per option.
@@ -150,16 +155,19 @@ class ScheduleService:
 
     def _run_movie_scan(self, library_names: list[str], source: str):
         label = ', '.join(library_names)
+        server = ''
         try:
             logger.info("Scheduled movie scan started for libraries %s (source=%s)", library_names, source)
             tmdb = self._app.tmdb_service
             media_service = self._get_media_service(source)
+            active = media_service.get_active_server()
+            server = active.get('server', '') if isinstance(active, dict) else ''
 
             api_key = tmdb.api_key
             if not api_key:
                 logger.warning("Scheduled movie scan skipped: no TMDB API key configured")
                 self._record_last_run(
-                    status='skipped', libraries=library_names, message='no TMDB API key configured'
+                    status='skipped', libraries=library_names, source=source, server=server, message='no TMDB API key configured'
                 )
                 return
 
@@ -169,7 +177,7 @@ class ScheduleService:
             # way the Missing-page scan does.
             cache, error = load_library_cache(media_service, library_names, 'movie', refresh=True)
             if error:
-                self._record_last_run(status='error', libraries=library_names, message=error)
+                self._record_last_run(status='error', libraries=library_names, source=source, server=server, message=error)
                 return
 
             owned_movies: list[dict] = []
@@ -187,7 +195,7 @@ class ScheduleService:
             if not owned_movies:
                 logger.warning("Scheduled movie scan skipped: libraries %s have no movies", library_names)
                 self._record_last_run(
-                    status='skipped', libraries=library_names,
+                    status='skipped', libraries=library_names, source=source, server=server,
                     message='libraries have no movies (server unreachable or empty)',
                 )
                 return
@@ -197,7 +205,7 @@ class ScheduleService:
             )
             if error:
                 logger.error("Scheduled movie scan failed for %s: %s", library_names, error)
-                self._record_last_run(status='error', libraries=library_names, message=str(error))
+                self._record_last_run(status='error', libraries=library_names, source=source, server=server, message=str(error))
                 return
 
             # Persist last_scan the same way a manual scan does (shared helper), so
@@ -215,7 +223,7 @@ class ScheduleService:
                 library_names, len(missing), collections,
             )
             self._record_last_run(
-                status='success', libraries=library_names, missing=len(missing),
+                status='success', libraries=library_names, source=source, server=server, missing=len(missing),
                 collections=collections, total_owned=len(owned_ids),
                 gaps=missing,
             )
@@ -226,19 +234,22 @@ class ScheduleService:
             )
         except Exception as e:
             logger.exception("Scheduled movie scan crashed unexpectedly")
-            self._record_last_run(status='error', libraries=library_names, message=str(e))
+            self._record_last_run(status='error', libraries=library_names, source=source, server=server, message=str(e))
 
     def _run_tv_scan(self, library_names: list[str], source: str):
         label = ', '.join(library_names)
+        server = ''
         try:
             logger.info("Scheduled TV scan started for libraries %s (source=%s)", library_names, source)
             tvdb = self._app.tvdb_service
             media_service = self._get_media_service(source)
+            active = media_service.get_active_server()
+            server = active.get('server', '') if isinstance(active, dict) else ''
 
             if not tvdb.is_configured:
                 logger.warning("Scheduled TV scan skipped: TheTVDB not configured")
                 self._record_last_run(
-                    status='skipped', libraries=library_names,
+                    status='skipped', libraries=library_names, source=source, server=server,
                     message='TheTVDB not configured', media_type='tv',
                 )
                 return
@@ -247,7 +258,7 @@ class ScheduleService:
             # loaded; merge owned shows across all selected libraries.
             cache, error = load_library_cache(media_service, library_names, 'tv', refresh=True)
             if error:
-                self._record_last_run(status='error', libraries=library_names, message=error, media_type='tv')
+                self._record_last_run(status='error', libraries=library_names, source=source, server=server, message=error, media_type='tv')
                 return
 
             owned_shows: list[dict] = []
@@ -265,7 +276,7 @@ class ScheduleService:
             if not owned_ids:
                 logger.warning("Scheduled TV scan skipped: libraries %s have no shows with TheTVDB IDs", library_names)
                 self._record_last_run(
-                    status='skipped', libraries=library_names,
+                    status='skipped', libraries=library_names, source=source, server=server,
                     message='libraries have no shows with TheTVDB IDs (server unreachable or empty)',
                     media_type='tv',
                 )
@@ -290,7 +301,7 @@ class ScheduleService:
                 library_names, len(missing), franchises,
             )
             self._record_last_run(
-                status='success', libraries=library_names, missing=len(missing),
+                status='success', libraries=library_names, source=source, server=server, missing=len(missing),
                 collections=franchises, media_type='tv', total_owned=len(owned_ids),
                 gaps=missing,
             )
@@ -299,7 +310,7 @@ class ScheduleService:
             )
         except Exception as e:
             logger.exception("Scheduled TV scan crashed unexpectedly")
-            self._record_last_run(status='error', libraries=library_names, message=str(e), media_type='tv')
+            self._record_last_run(status='error', libraries=library_names, source=source, server=server, message=str(e), media_type='tv')
 
     # -- Run history --
 
@@ -313,22 +324,28 @@ class ScheduleService:
         media_type: str = 'movie',
         total_owned: int = 0,
         gaps: list[dict] | None = None,
+        source: str = '',
+        server: str = '',
     ) -> None:
         timestamp = datetime.now(timezone.utc).isoformat()
         entry = {
             'timestamp': timestamp,
             'status': status,
             'library': ', '.join(libraries),  # joined label for the history table
+            'libraries': list(libraries),
+            'source': source,
+            'server': server,
             'missing': missing,
             'collections': collections,
             'message': message,
             'mediaType': media_type,
         }
         try:
-            history = ScheduleService._load_history()
-            history.insert(0, entry)
-            del history[MAX_HISTORY:]
-            config_store.put(HISTORY_KEY, history)
+            with _HISTORY_LOCK:
+                history = ScheduleService._load_history()
+                history.insert(0, entry)
+                del history[ScheduleService.history_limit():]
+                config_store.put(HISTORY_KEY, history)
         except OSError as e:
             logger.warning("Failed to persist scheduled scan history: %s", e)
         # Mirror into the unified scan history so the dashboard sees scheduled
@@ -347,13 +364,31 @@ class ScheduleService:
 
     @staticmethod
     def _load_history() -> list[dict]:
-        history = config_store.get(HISTORY_KEY)
-        if isinstance(history, list):
-            return list(history)
-        legacy = config_store.get(LEGACY_LAST_RUN_KEY)
-        if isinstance(legacy, dict):
-            return [legacy]
-        return []
+        with _HISTORY_LOCK:
+            history = config_store.get(HISTORY_KEY)
+            if isinstance(history, list):
+                return list(history[:ScheduleService.history_limit()])
+            legacy = config_store.get(LEGACY_LAST_RUN_KEY)
+            if isinstance(legacy, dict):
+                return [legacy]
+            return []
+
+    @staticmethod
+    def history_limit() -> int:
+        limit = config_store.get(HISTORY_LIMIT_KEY, DEFAULT_HISTORY_LIMIT)
+        return limit if type(limit) is int and MIN_HISTORY_LIMIT <= limit <= MAX_HISTORY_LIMIT else DEFAULT_HISTORY_LIMIT
+
+    @staticmethod
+    def set_history_limit(limit: int) -> dict:
+        if type(limit) is not int or not MIN_HISTORY_LIMIT <= limit <= MAX_HISTORY_LIMIT:
+            raise ValueError(f'historyLimit must be a whole number between {MIN_HISTORY_LIMIT} and {MAX_HISTORY_LIMIT}')
+        with _HISTORY_LOCK:
+            # Read before changing the limit so increasing it cannot revive older
+            # records left on disk by an interrupted earlier save.
+            history = ScheduleService._load_history()[:limit]
+            config_store.put(HISTORY_LIMIT_KEY, limit)
+            config_store.put(HISTORY_KEY, history)
+            return {'historyLimit': limit, 'run_history': history}
 
     # -- Job management --
 
@@ -448,6 +483,7 @@ class ScheduleService:
             'tv': tv_block,
             'last_run': history[0] if history else None,
             'run_history': history,
+            'historyLimit': ScheduleService.history_limit(),
             'presets': dict(SCHEDULE_FREQUENCIES),
             'days': dict(DAY_NAMES),
             # Convenience fields for the dashboard (either schedule active).

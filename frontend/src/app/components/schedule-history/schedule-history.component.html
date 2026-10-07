@@ -1,0 +1,96 @@
+<section class="scan-history mt-4" aria-labelledby="scheduledHistoryTitle">
+  <hr>
+  <div class="d-flex justify-content-between align-items-end flex-wrap gap-3 mb-3">
+    <div>
+      <h5 id="scheduledHistoryTitle" class="mb-1">Scan history</h5>
+      <p class="text-muted small mb-0">Recent scheduled runs and how the number of missing titles changes.</p>
+    </div>
+    <div class="d-flex align-items-end flex-wrap gap-2">
+      <div>
+        <label class="form-label small mb-1" for="scheduleHistoryLimit">Keep last X runs</label>
+        <input id="scheduleHistoryLimit" class="form-control dark-input history-limit" type="number"
+          min="10" max="500" step="1" [(ngModel)]="draftLimit" [disabled]="saving" aria-describedby="historyLimitHelp">
+      </div>
+      <button class="btn btn-outline-primary" type="button" (click)="saveLimit()"
+        [disabled]="saving || !validLimit || draftLimit === retentionLimit">{{ saving ? 'Saving…' : 'Save limit' }}</button>
+    </div>
+  </div>
+  <p id="historyLimitHelp" class="text-muted small">Keep 10–500 scheduled runs in total (currently {{ retentionLimit }}). Saving a smaller limit removes the oldest records from this list and chart. Saved scan results have separate retention.</p>
+  <p *ngIf="error" class="text-danger" role="alert">{{ error }}</p>
+  <p *ngIf="message" class="text-success" role="status">{{ message }}</p>
+
+  <div *ngIf="runs.length; else noHistory">
+    <div class="mb-3" *ngIf="groups.length > 1">
+      <label for="scheduleHistoryGroup" class="form-label small">Scan group</label>
+      <select id="scheduleHistoryGroup" class="form-select dark-select" [(ngModel)]="groupFilter" (ngModelChange)="refresh()">
+        <option value="">All scan groups</option>
+        <option *ngFor="let group of groups" [value]="group.key">{{ group.label }}</option>
+      </select>
+    </div>
+
+    <div class="trend-card mb-3">
+      <h6 class="mb-1">Missing titles over time</h6>
+      <p class="text-muted small mb-2">Successful scans across the retained history. Each line follows the same media type, server, and library selection. Hover or focus a point for details.</p>
+      <ng-container *ngIf="series.length; else noSuccessfulRuns">
+        <div class="chart-scroll">
+          <svg class="trend-chart" viewBox="0 0 950 290" role="img" aria-labelledby="historyChartTitle historyChartDescription">
+            <title id="historyChartTitle">Missing titles over time</title>
+            <desc id="historyChartDescription">Line chart of successful scheduled scans. Counts begin at zero on the vertical axis; dates increase from left to right. The table below provides the scan values.</desc>
+            <text x="65" y="18" class="axis-title">Missing titles</text>
+            <g *ngFor="let tick of yTicks">
+              <line x1="65" x2="885" [attr.y1]="tick.y" [attr.y2]="tick.y" class="grid-line" />
+              <text x="53" [attr.y]="tick.y + 4" text-anchor="end">{{ tick.value | number }}</text>
+            </g>
+            <g *ngFor="let item of series">
+              <path [attr.d]="item.path" [attr.stroke]="item.color" fill="none" stroke-width="2.5" />
+              <circle *ngFor="let point of item.points" [attr.cx]="point.x" [attr.cy]="point.y" r="4"
+                [attr.fill]="item.color" tabindex="0" role="img"
+                [attr.aria-label]="item.label + ': ' + (point.run.timestamp | date:'medium') + ', ' + point.run.missing + ' missing'"
+                (mouseenter)="activePoint = {label: item.label, run: point.run}" (mouseleave)="activePoint = null"
+                (focus)="activePoint = {label: item.label, run: point.run}" (blur)="activePoint = null">
+                <title>{{ item.label }} · {{ point.run.timestamp | date:'medium' }} · {{ point.run.missing | number }} missing</title>
+              </circle>
+            </g>
+            <text *ngFor="let tick of xTicks" [attr.x]="tick.x" y="267" text-anchor="middle">{{ tick.time | date:'MMM d, y' }}</text>
+          </svg>
+        </div>
+        <p class="point-detail small mb-2" aria-live="polite">
+          <ng-container *ngIf="activePoint; else chartHint">{{ activePoint.label }} · {{ activePoint.run.timestamp | date:'medium' }} · <strong>{{ activePoint.run.missing | number }} missing</strong></ng-container>
+          <ng-template #chartHint><span class="text-muted">Lines connect scan observations; counts between scans are unknown.</span></ng-template>
+        </p>
+        <ul class="trend-legend">
+          <li *ngFor="let item of series">
+            <span class="legend-swatch" [style.background]="item.color" aria-hidden="true"></span>
+            <span>{{ item.label }}<br><strong>{{ item.points[item.points.length - 1].run.missing | number }} missing</strong> · {{ item.change }}<span *ngIf="item.points.length > 1"> since the first shown scan</span></span>
+          </li>
+        </ul>
+      </ng-container>
+      <ng-template #noSuccessfulRuns><p class="text-muted mb-0">No successful scans with missing-title counts to chart yet.</p></ng-template>
+    </div>
+
+    <div class="table-responsive">
+      <table class="table table-dark table-sm history-table">
+        <caption class="visually-hidden">Scheduled scans, newest first</caption>
+        <thead><tr><th scope="col">When</th><th scope="col">Type</th><th scope="col">Status</th><th scope="col">Library</th><th scope="col">Result</th></tr></thead>
+        <tbody>
+          <tr *ngFor="let run of pageRows">
+            <td>{{ run.timestamp | date:'medium' }}</td>
+            <td>{{ run.mediaType === 'tv' ? 'TV' : 'Movies' }}</td>
+            <td><span class="badge" [class.bg-success]="run.status === 'success'" [class.bg-warning]="run.status === 'skipped'" [class.bg-danger]="run.status === 'error'">{{ run.status }}</span></td>
+            <td>{{ run.library || '—' }}<small *ngIf="run.source || run.server" class="d-block text-muted">{{ run.source }}<ng-container *ngIf="run.server"> · {{ run.server }}</ng-container></small></td>
+            <td><ng-container *ngIf="run.status === 'success'; else failedRun">{{ run.missing ?? '—' }} missing across {{ run.collections }} {{ run.mediaType === 'tv' ? 'franchise(s)' : 'collection(s)' }}</ng-container><ng-template #failedRun>{{ run.message || '—' }}</ng-template></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <nav class="d-flex justify-content-between align-items-center flex-wrap gap-2" aria-label="Scheduled scan history pages">
+      <span class="text-muted small" role="status">Showing {{ firstRow }}–{{ lastRow }} of {{ filteredRuns.length }} runs</span>
+      <div class="d-flex align-items-center gap-2">
+        <button class="btn btn-sm btn-outline-secondary" type="button" (click)="page = page - 1" [disabled]="page <= 1">Previous</button>
+        <span class="small">Page {{ page }} of {{ pageCount }}</span>
+        <button class="btn btn-sm btn-outline-secondary" type="button" (click)="page = page + 1" [disabled]="page >= pageCount">Next</button>
+      </div>
+    </nav>
+  </div>
+  <ng-template #noHistory><p class="text-muted">No scheduled scans recorded yet. Completed runs will appear here.</p></ng-template>
+</section>

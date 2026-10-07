@@ -46,3 +46,16 @@ def disable_schedule():
         return jsonify(error='mediaType must be "movie" or "tv"'), 400
     current_app.schedule_service.disable_schedule(media_type)
     return jsonify(current_app.schedule_service.get_schedule())
+
+
+@schedule_bp.route('/history', methods=['PUT'])
+def set_history_limit():
+    data = request.get_json(silent=True) or {}
+    if not isinstance(data, dict):
+        return jsonify(error='Expected an object with historyLimit'), 400
+    try:
+        return jsonify(current_app.schedule_service.set_history_limit(data.get('historyLimit')))
+    except ValueError as error:
+        return jsonify(error=str(error)), 400
+    except OSError:
+        return jsonify(error='Could not save the history limit. Please try again.'), 500

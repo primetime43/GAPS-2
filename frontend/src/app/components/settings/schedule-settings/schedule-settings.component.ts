@@ -17,6 +17,9 @@ export class ScheduleSettingsComponent implements OnInit {
   activeSource: 'plex' | 'jellyfin' | 'emby' = 'plex';
   activeServerName = '';
   loading = true;
+  savingHistory = false;
+  historyError = '';
+  historyMessage = '';
 
   // Per-media-type form selections. Libraries are multi-select (checkboxes).
   moviePreset = '';
@@ -163,6 +166,24 @@ export class ScheduleSettingsComponent implements OnInit {
         this.showMessage('Failed to disable schedule.', 'error');
         this.saving[type] = false;
       }
+    });
+  }
+
+  saveHistoryLimit(limit: number): void {
+    if (this.savingHistory) return;
+    this.savingHistory = true;
+    this.historyError = '';
+    this.historyMessage = '';
+    this.scheduleService.setHistoryLimit(limit).subscribe({
+      next: result => {
+        if (this.schedule) this.schedule = { ...this.schedule, ...result };
+        this.historyMessage = `Keeping the latest ${result.historyLimit} scheduled runs.`;
+        this.savingHistory = false;
+      },
+      error: err => {
+        this.historyError = err.error?.error || 'Could not save the history limit. Please try again.';
+        this.savingHistory = false;
+      },
     });
   }
 

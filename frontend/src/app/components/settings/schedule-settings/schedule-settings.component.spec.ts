@@ -1,4 +1,4 @@
-import { of, Subject } from 'rxjs';
+import { of, Subject, throwError } from 'rxjs';
 import { ScheduleSettingsComponent } from './schedule-settings.component';
 
 describe('Schedule settings server selection', () => {
@@ -42,4 +42,33 @@ describe('Schedule settings server selection', () => {
       });
     }
   }
+  it('saving history retention preserves both unsaved schedule forms', () => {
+    const service = { setHistoryLimit: jasmine.createSpy().and.returnValue(of({ historyLimit: 25, run_history: [] })) };
+    const component = new ScheduleSettingsComponent(service as any, {} as any);
+    component.schedule = { historyLimit: 50, movie: {}, tv: {} } as any;
+    component.moviePreset = 'weekly';
+    component.selectedMovieLibraries = ['Unsaved movies'];
+    component.tvTime = '23:30';
+    component.selectedTvLibraries = ['Unsaved TV'];
+    component.saveHistoryLimit(25);
+    expect(service.setHistoryLimit).toHaveBeenCalledWith(25);
+    expect(component.schedule.historyLimit).toBe(25);
+    expect(component.moviePreset).toBe('weekly');
+    expect(component.selectedMovieLibraries).toEqual(['Unsaved movies']);
+    expect(component.tvTime).toBe('23:30');
+    expect(component.selectedTvLibraries).toEqual(['Unsaved TV']);
+    expect(component.savingHistory).toBeFalse();
+  });
+
+  it('keeps existing history visible and shows a retryable error when retention saving fails', () => {
+    const service = { setHistoryLimit: () => throwError(() => ({ error: { error: 'Storage unavailable' } })) };
+    const component = new ScheduleSettingsComponent(service as any, {} as any);
+    const before = { historyLimit: 50, run_history: [{ missing: 5 }] } as any;
+    component.schedule = before;
+    component.saveHistoryLimit(10);
+    expect(component.schedule).toBe(before);
+    expect(component.historyError).toBe('Storage unavailable');
+    expect(component.savingHistory).toBeFalse();
+  });
+
 });

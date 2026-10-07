@@ -1,3 +1,4 @@
+import { ScheduleHistoryComponent } from './components/schedule-history/schedule-history.component';
 import { DiscoveryHeaderComponent } from './components/discovery-header/discovery-header.component';
 import { NgModule } from '@angular/core';
 import { BrowserModule } from '@angular/platform-browser';
@@ -64,7 +65,7 @@ import { UpdateSettingsComponent } from './components/settings/update-settings/u
         CompactNumberPipe,
         UpdateSettingsComponent
     ],
-    bootstrap: [AppComponent], imports: [DiscoveryHeaderComponent, BrowserModule, RadarrDestinationComponent, SonarrDestinationComponent, ScanControlsComponent,
+    bootstrap: [AppComponent], imports: [ScheduleHistoryComponent, DiscoveryHeaderComponent, BrowserModule, RadarrDestinationComponent, SonarrDestinationComponent, ScanControlsComponent,
         AppRoutingModule,
         ReactiveFormsModule,
         FormsModule], providers: [
