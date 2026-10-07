@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 import subprocess
 
-VERSION = '2.14.2'
+VERSION = '2.15.0'
 
 
 def _git(*args):

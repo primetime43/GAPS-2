@@ -3,6 +3,14 @@ from flask import Blueprint, jsonify, request, current_app, redirect
 tmdb_bp = Blueprint('tmdb', __name__)
 
 
+@tmdb_bp.route('/tv/<int:tmdb_id>/imdb', methods=['GET'])
+def tv_imdb_redirect(tmdb_id):
+    imdb_id = current_app.tmdb_service.get_tv_external_ids(tmdb_id).get('imdbId')
+    if imdb_id:
+        return redirect(f"https://www.imdb.com/title/{imdb_id}/", code=302)
+    return redirect(f"https://www.themoviedb.org/tv/{tmdb_id}", code=302)
+
+
 @tmdb_bp.route('/movie/<int:tmdb_id>/imdb', methods=['GET'])
 def movie_imdb_redirect(tmdb_id):
     """Resolve a TMDB movie ID to IMDb and redirect there.

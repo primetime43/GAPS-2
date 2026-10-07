@@ -1,4 +1,6 @@
+import { DiscoveryHeaderComponent } from '../discovery-header/discovery-header.component';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 import { FormsModule } from '@angular/forms';
@@ -44,7 +46,7 @@ describe('ActorsComponent', () => {
     imdb = jasmine.createSpyObj('ImdbService', ['getRatings']);
     imdb.getRatings.and.returnValue(of({ ratings: {} }));
     await TestBed.configureTestingModule({
-      imports: [HttpClientTestingModule, RouterTestingModule, FormsModule, RadarrDestinationComponent, SonarrDestinationComponent],
+      imports: [DiscoveryHeaderComponent, HttpClientTestingModule, RouterTestingModule, FormsModule, RadarrDestinationComponent, SonarrDestinationComponent],
       declarations: [ActorsComponent, ConfirmModalComponent, CompactNumberPipe],
       providers: [
         { provide: ActorService, useValue: actors },
@@ -68,6 +70,23 @@ describe('ActorsComponent', () => {
     fixture.detectChanges();
   });
 
+  it('uses the shared search and link controls while retaining actor filters', async () => {
+    component.selectActor(actor);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const toolbar = fixture.nativeElement.querySelector('app-discovery-header:not([section="intro"])');
+    expect(toolbar.querySelector('#actorShowMinor')).toBeTruthy();
+    const search = toolbar.querySelector('.result-controls input');
+    search.value = 'No match';
+    search.dispatchEvent(new Event('input'));
+    expect(component.filteredGroups).toEqual([]);
+    const link = toolbar.querySelector('#actorLinkProvider');
+    link.value = 'imdb';
+    link.dispatchEvent(new Event('change'));
+    expect(component.externalLinkProvider).toBe('imdb');
+    expect(preferences.save).toHaveBeenCalledWith({ externalLinkProvider: 'imdb' });
+  });
+
   it('shows even a single TV library and preserves selections between tabs', () => {
     component.toggleLibrarySelection('More movies');
     component.setMediaType('tv');
@@ -80,6 +99,17 @@ describe('ActorsComponent', () => {
     expect(component.selectedLibraries).toEqual(['TV']);
     component.setMediaType('movie');
     expect(component.selectedLibraries).toEqual(['Movies']);
+  });
+
+  it('keeps the shared library picker available in results and rechecks ownership', () => {
+    component.selectActor(actor);
+    fixture.detectChanges();
+    const checkbox: HTMLInputElement = fixture.nativeElement.querySelector('[id="actor-lib-More movies"]');
+    const initiallySelected = component.selectedLibraries.includes('More movies');
+    checkbox.click();
+    expect(component.selectedLibraries.includes('More movies')).toBe(!initiallySelected);
+    expect(actors.getActorGaps.calls.mostRecent().args[1]).toEqual(component.selectedLibraries);
+    expect(fixture.nativeElement.querySelector('app-discovery-header[section="intro"] h3')).toBeTruthy();
   });
 
   it('switches a selected actor from TV to movies and back without searching again', () => {
@@ -153,7 +183,7 @@ describe('ActorsComponent', () => {
     expect(preferences.save).toHaveBeenCalledWith({ showImdbRatings: true, showTmdbRatings: true });
   });
 
-  it('loads movie ratings automatically and sorts by the enabled provider', () => {
+  it('loads movie ratings automatically and sorts by the selected source', () => {
     actors.getActorGaps.and.returnValue(of({ actor: null, gaps: [
       credit, { ...credit, tmdbId: 102, voteAverage: 6 },
     ] } as any));
@@ -161,12 +191,15 @@ describe('ActorsComponent', () => {
       '101': { imdbId: 'tt123', aggregateRating: 5, voteCount: 100 },
       '102': { imdbId: 'tt456', aggregateRating: 9, voteCount: 200 },
     } }));
-    component.showImdbRatings = true;
+    component.ratingSource = 'imdb';
+    component.showImdbRatings = false;
     component.sortBy = 'rating';
     component.selectActor(actor);
     expect(component.filteredGroups[0].gaps.map(g => g.id)).toEqual([102, 101]);
-    component.showImdbRatings = false;
+    component.showImdbRatings = true;
     component.onRatingPrefsChange();
+    expect(component.filteredGroups[0].gaps.map(g => g.id)).toEqual([102, 101]);
+    component.onRatingSourceChange('tmdb');
     expect(component.filteredGroups[0].gaps.map(g => g.id)).toEqual([101, 102]);
   });
 
@@ -181,6 +214,67 @@ describe('ActorsComponent', () => {
     fixture.nativeElement.querySelector('.imdb-status button').click();
     fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('No IMDb ratings were found.');
+  });
+
+  it('requests IMDb data for TV rating sorting even when badges are hidden', () => {
+    component.setMediaType('tv');
+    component.selectActor(actor);
+    component.showImdbRatings = false;
+    component.sortBy = 'votes';
+    component.onSortChange();
+    expect(actors.getActorGaps.calls.mostRecent().args[6]).toBeTrue();
+    expect(component.effectiveRatingSource).toBe('imdb');
+    expect(imdb.getRatings).not.toHaveBeenCalled();
+  });
+
+  for (const control of ['rating', 'votes', 'imdb'] as const) {
+    it(`preserves the Sonarr destination through a ${control} refresh and uses it when sending`, () => {
+      component.setMediaType('tv');
+      component.selectActor(actor);
+      component.sonarrRootFolderPath = '/chosen-tv';
+      const pending = new Subject<any>();
+      actors.getActorGaps.and.returnValue(pending);
+
+      if (control === 'imdb') {
+        component.showImdbRatings = true;
+        component.onRatingPrefsChange();
+      } else {
+        component.sortBy = control;
+        component.onSortChange();
+      }
+      expect(component.loadingGaps).toBeTrue();
+      expect(component.sonarrRootFolderPath).toBe('/chosen-tv');
+      expect(actors.getActorGaps.calls.mostRecent().args[6]).toBeTrue();
+
+      pending.next({ actor: null, gaps: [{ ...credit, tvdbId: 202 }] });
+      pending.complete();
+      expect(component.loadingGaps).toBeFalse();
+      expect(component.sonarrRootFolderPath).toBe('/chosen-tv');
+      fixture.detectChanges();
+      const destination = fixture.debugElement.query(By.directive(SonarrDestinationComponent)).componentInstance;
+      expect(destination.rootFolderPath).toBe('/chosen-tv');
+
+      component.downloaderEnabled = true;
+      const sonarr = TestBed.inject(SonarrService);
+      sonarr.addSeries = jasmine.createSpy('addSeries').and.returnValue(of({ message: 'Added' }));
+      component.send(component.allGaps[0], new Event('click'));
+      expect(sonarr.addSeries).toHaveBeenCalledWith(202, 'Test title', {
+        source: 'jellyfin', server: 'Test server', library_names: ['TV'], root_folder_path: '/chosen-tv',
+      });
+    });
+  }
+
+  it('still resets the Sonarr destination for a new actor or library selection', () => {
+    component.setMediaType('tv');
+    component.selectActor(actor);
+    component.sonarrRootFolderPath = '/chosen-tv';
+    component.selectActor({ ...actor, id: 2, name: 'Another actor' });
+    expect(component.sonarrRootFolderPath).toBe('');
+
+    component.sonarrRootFolderPath = '/chosen-tv';
+    component.toggleLibrarySelection('More TV');
+    expect(component.sonarrRootFolderPath).toBe('');
+    expect(component.downloaderLibraries).toEqual(['TV', 'More TV']);
   });
 
   it('cancels movie rating requests when changing media or clearing the actor', () => {
@@ -209,6 +303,7 @@ describe('ActorsComponent', () => {
     component.selectActor(actor);
     fixture.detectChanges();
     expect(component.allGaps[0].externalUrl).toBe('https://thetvdb.com/dereferrer/series/201');
+    expect(fixture.nativeElement.textContent).not.toContain('TMDB');
     expect(fixture.nativeElement.querySelector('#actorShowTmdb')).toBeNull();
     expect(fixture.nativeElement.querySelector('.rating-chip.tmdb')).toBeNull();
     expect(fixture.nativeElement.querySelector('.rating-chip.imdb')).not.toBeNull();

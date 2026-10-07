@@ -13,54 +13,30 @@
   </div>
 
   <div *ngIf="!loading && hasServer">
-    <h3 class="regular-text">Similar If You Liked</h3>
-    <p class="text-muted">
-      Pick a movie you own and browse TMDB recommendations. Results show what is already in your selected libraries.
-    </p>
-
-    <div *ngIf="libraries.length === 0" class="alert alert-info">
-      No movie libraries found on <strong>{{ activeServerName }}</strong>.
-    </div>
-
-    <div *ngIf="libraries.length > 0" class="pref-card mb-3">
-      <div class="d-flex align-items-center flex-wrap gap-2">
-        <span class="text-muted small me-1">Check ownership in:</span>
-        <div *ngFor="let library of libraries" class="form-check form-check-inline m-0">
-          <input
-            class="form-check-input"
-            type="checkbox"
-            [id]="'similar-lib-' + library.title"
-            [checked]="isLibrarySelected(library.title)"
-            (change)="toggleLibrarySelection(library.title)"
-          >
-          <label class="form-check-label text-muted small" [for]="'similar-lib-' + library.title">
-            {{ library.title }}
-          </label>
-        </div>
-      </div>
-    </div>
+    <app-discovery-header section="intro" idPrefix="similar" title="Similar If You Liked"
+      [description]="'Pick a ' + seedLabel + ' you own and browse recommendations. Results show what is already in your selected libraries.'"
+      [showMediaToggle]="true" [mediaType]="mediaType" (mediaTypeChange)="setMediaType($event)"
+      [libraries]="libraries" [selectedLibraries]="selectedLibraries" [serverName]="activeServerName"
+      (libraryToggle)="toggleLibrarySelection($event)">
+    </app-discovery-header>
 
     <div *ngIf="loadingMovies" class="text-center mt-4">
       <div class="spinner"></div>
-      <p class="text-muted mt-2">Loading your movies...</p>
+      <p class="text-muted mt-2">Loading your {{ mediaLabel }}...</p>
     </div>
 
     <div *ngIf="errorMessage" class="alert alert-danger mt-3">{{ errorMessage }}</div>
 
-    <div *ngIf="!loadingMovies && !loadingSimilar && selectedLibraries.length === 0" class="alert alert-info">
-      Select at least one movie library to continue.
-    </div>
-
     <div *ngIf="!loadingMovies && !loadingSimilar && selectedLibraries.length > 0 && movies.length === 0" class="alert alert-info">
-      No movies with TMDB IDs were found in the selected libraries.
+      No {{ mediaLabel }} with {{ mediaType === 'tv' ? 'supported provider' : 'TMDB' }} IDs were found in the selected libraries.
     </div>
 
     <div *ngIf="!loadingMovies && !loadingSimilar && movies.length > 0 && !selectedMovie">
-      <h5 class="regular-text">Choose a movie you liked</h5>
+      <h5 class="regular-text">Choose a {{ seedLabel }} you liked</h5>
       <input
         class="form-control dark-input mb-3"
         type="text"
-        placeholder="Filter your movies by name..."
+        [placeholder]="'Filter your ' + mediaLabel + ' by name...'"
         [(ngModel)]="movieFilter"
         (ngModelChange)="currentPage = 1"
       >
@@ -80,7 +56,7 @@
         </button>
       </div>
 
-      <p *ngIf="filteredMovies.length === 0" class="text-muted">No movies match your search.</p>
+      <p *ngIf="filteredMovies.length === 0" class="text-muted">No {{ mediaLabel }} match your search.</p>
 
       <div *ngIf="totalPages > 1" class="mt-3 d-flex align-items-center justify-content-center gap-3">
         <button class="btn btn-sm btn-outline-light" [disabled]="currentPage === 1" (click)="onPageChange(-1)">
@@ -94,104 +70,26 @@
     </div>
 
     <div *ngIf="selectedMovie">
-      <app-radarr-destination [(rootFolderPath)]="radarrRootFolderPath"></app-radarr-destination>
-      <div class="result-toolbar d-flex align-items-center gap-3 mb-3">
-        <button class="btn btn-sm btn-outline-light" (click)="clearResults()">&larr; Back</button>
-        <h5 class="regular-text mb-0">
-          Because you liked {{ selectedMovie.name }} ({{ selectedMovie.year }})
-        </h5>
-        <div *ngIf="!loadingSimilar" class="btn-group btn-group-sm ms-auto" role="group" aria-label="Owned or missing">
-          <button type="button" class="btn"
-                  [class.btn-primary]="view === 'all'"
-                  [class.btn-outline-secondary]="view !== 'all'"
-                  (click)="setView('all')">All ({{ allSimilar.length }})</button>
-          <button type="button" class="btn"
-                  [class.btn-primary]="view === 'owned'"
-                  [class.btn-outline-secondary]="view !== 'owned'"
-                  (click)="setView('owned')">Owned ({{ ownedCount }})</button>
-          <button type="button" class="btn"
-                  [class.btn-primary]="view === 'missing'"
-                  [class.btn-outline-secondary]="view !== 'missing'"
-                  (click)="setView('missing')">Missing ({{ missingCount }})</button>
-        </div>
-      </div>
-
-      <div *ngIf="loadingSimilar" class="text-muted small mb-3" role="status">
-        <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Finding similar movies on TMDB...
-      </div>
+      <app-radarr-destination *ngIf="mediaType === 'movie'" [(rootFolderPath)]="radarrRootFolderPath"></app-radarr-destination>
+      <app-sonarr-destination *ngIf="mediaType === 'tv'" [(rootFolderPath)]="sonarrRootFolderPath"></app-sonarr-destination>
+      <app-discovery-header idPrefix="similar" [mediaType]="mediaType"
+        [title]="'Because you liked ' + selectedMovie.name + ' (' + selectedMovie.year + ')'" (back)="clearResults()"
+        [loading]="loadingSimilar" [loadingMessage]="'Finding similar ' + mediaLabel + '...'"
+        [view]="view" (viewChange)="setView($event)" [allCount]="allSimilar.length" [ownedCount]="ownedCount" [missingCount]="missingCount"
+        [(showImdbRatings)]="showImdbRatings" (showImdbRatingsChange)="onRatingPrefsChange()"
+        [(showTmdbRatings)]="showTmdbRatings" (showTmdbRatingsChange)="onRatingPrefsChange()"
+        [(search)]="resultFilter" (searchChange)="applyFilter()" [searchPlaceholder]="'Filter similar ' + mediaLabel + '...'"
+        [(sortBy)]="sortBy" (sortByChange)="applyFilter()" [sortOptions]="sortOptions"
+        [(sortDirection)]="sortDirection" (sortDirectionChange)="applyFilter()"
+        [ratingSource]="effectiveRatingSource" (ratingSourceChange)="ratingSource = $event; onRatingSourceChange()"
+        [(minRating)]="minRating" (minRatingChange)="applyFilter()"
+        [(minVoteCount)]="minVoteCount" (minVoteCountChange)="applyFilter()"
+        [linkProvider]="effectiveLinkProvider" (linkProviderChange)="externalLinkProvider = $event; onLinkProviderChange()"
+        [linkOptions]="mediaType === 'tv' ? tvLinkOptions : movieLinkOptions"
+        [imdbState]="imdbRatings" (retryImdb)="loadImdbRatings(true)">
+      </app-discovery-header>
 
       <ng-container *ngIf="!loadingSimilar">
-      <div class="result-controls d-flex align-items-center gap-2 mb-3">
-        <input
-          class="form-control dark-input"
-          type="text"
-          placeholder="Filter similar movies..."
-          aria-label="Filter similar movies"
-          [(ngModel)]="resultFilter"
-          (ngModelChange)="applyFilter()"
-        >
-        <select class="form-select dark-select result-sort" aria-label="Sort similar movies" [(ngModel)]="sortBy" (ngModelChange)="applyFilter()">
-          <option value="relevance">TMDB relevance</option>
-          <option value="rating">Rating</option>
-          <option value="year">Year (newest)</option>
-          <option value="name">Title (A-Z)</option>
-        </select>
-
-        <div class="dropdown">
-          <button class="btn btn-outline-secondary dropdown-toggle rating-filter-button" type="button"
-                  data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
-            Ratings &amp; filters
-          </button>
-          <div class="dropdown-menu dropdown-menu-dark dropdown-menu-end p-3 rating-filter-menu">
-            <div class="form-check mb-2">
-              <input class="form-check-input" type="checkbox" id="similarShowImdb"
-                     [(ngModel)]="showImdbRatings" (ngModelChange)="onRatingPrefsChange()">
-              <label class="form-check-label" for="similarShowImdb">IMDb ratings</label>
-            </div>
-            <div class="form-check mb-3">
-              <input class="form-check-input" type="checkbox" id="similarShowTmdb"
-                     [(ngModel)]="showTmdbRatings" (ngModelChange)="onRatingPrefsChange()">
-              <label class="form-check-label" for="similarShowTmdb">TMDB ratings</label>
-            </div>
-            <label class="form-label small mb-1" for="similarMinRating">Minimum rating</label>
-            <input id="similarMinRating" class="form-control form-control-sm dark-input mb-2" type="number"
-                   min="0" max="10" step="0.1" [(ngModel)]="minRating" (ngModelChange)="applyFilter()">
-            <label class="form-label small mb-1" for="similarMinVotes">Minimum votes</label>
-            <input id="similarMinVotes" class="form-control form-control-sm dark-input" type="number"
-                   min="0" step="1" [(ngModel)]="minVoteCount" (ngModelChange)="applyFilter()">
-            <p class="text-muted small mt-2 mb-0">
-              Sorting and filters use IMDb when enabled and available, otherwise TMDB. Set either minimum to 0 to ignore it.
-            </p>
-          </div>
-        </div>
-
-        <div class="link-preference d-flex align-items-center gap-2">
-          <label for="similarLinkProvider" class="text-muted small mb-0">Open in</label>
-          <select id="similarLinkProvider" class="form-select dark-select" [(ngModel)]="externalLinkProvider" (ngModelChange)="onLinkProviderChange()">
-            <option value="tmdb">TMDB</option>
-            <option value="imdb">IMDb</option>
-          </select>
-        </div>
-      </div>
-
-      <div *ngIf="showImdbRatings && allSimilar.length" class="imdb-status text-muted small d-flex align-items-center flex-wrap gap-2 mb-3" role="status">
-        <ng-container *ngIf="imdbRatings.loading">
-          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
-          Loading IMDb ratings… You can keep browsing.
-        </ng-container>
-        <ng-container *ngIf="!imdbRatings.loading">
-          <span *ngIf="imdbRatings.error" class="text-warning">{{ imdbRatings.error }}</span>
-          <ng-container *ngIf="!imdbRatings.error && imdbRatings.loaded">
-            <span *ngIf="imdbRatings.ratingCount">IMDb ratings available for {{ imdbRatings.ratingCount }} of {{ allSimilar.length }} movies.</span>
-            <span *ngIf="!imdbRatings.ratingCount">No IMDb ratings were found.</span>
-          </ng-container>
-          <ng-container *ngIf="imdbRatings.error || (imdbRatings.loaded && imdbRatings.ratingCount < allSimilar.length)">
-            <a [routerLink]="['/settings/imdb']">IMDb settings</a>
-            <button type="button" class="btn btn-sm btn-outline-secondary" (click)="loadImdbRatings(true)">Retry IMDb ratings</button>
-          </ng-container>
-        </ng-container>
-      </div>
-
       <div *ngIf="filteredSimilar.length > 0" class="rec-grid">
         <article *ngFor="let movie of filteredSimilar; trackBy: trackByGap" class="rec-card" [class.owned]="movie.owned">
           <div class="owned-badge" *ngIf="movie.owned">Owned</div>
@@ -207,7 +105,7 @@
             <div class="rec-year">{{ movie.year }}</div>
             <div class="card-ratings">
               <a class="rating-chip imdb" [href]="movieUrl(movie.id, 'imdb', movie.imdbId)" target="_blank" rel="noopener noreferrer"
-                 [attr.aria-label]="'Open ' + movie.name + ' on IMDb (new tab)'" title="Open on IMDb (falls back to TMDB if no IMDb page is available)">
+                 [attr.aria-label]="'Open ' + movie.name + ' on IMDb (new tab)'" [title]="mediaType === 'tv' ? 'Open on IMDb' : 'Open on IMDb (falls back to TMDB if no IMDb page is available)'">
                 <img class="rating-logo" src="assets/images/imdb-logo.svg" alt="IMDb">
                 <ng-container *ngIf="showImdbRatings && movie.imdbRating != null">
                 {{ movie.imdbRating | number:'1.1-1' }}
@@ -215,7 +113,7 @@
                 </ng-container>
                 <span aria-hidden="true">↗</span>
               </a>
-              <a class="rating-chip tmdb" [href]="movieUrl(movie.id, 'tmdb')" target="_blank" rel="noopener noreferrer"
+              <a *ngIf="mediaType === 'movie'" class="rating-chip tmdb" [href]="movieUrl(movie.id, 'tmdb')" target="_blank" rel="noopener noreferrer"
                  [attr.aria-label]="'Open ' + movie.name + ' on TMDB (new tab)'" title="Open on TMDB">
                 <img class="rating-logo" src="assets/images/tmdb-logo.svg" alt="TMDB">
                 <ng-container *ngIf="showTmdbRatings && movie.tmdbRating != null">
@@ -234,12 +132,18 @@
               (click)="sendToRadarr(movie, $event)">
               {{ radarrLabel(movie.id) }}
             </button>
+            <button *ngIf="mediaType === 'tv' && sonarrEnabled && !movie.owned"
+              class="btn btn-sm radarr-btn" [class.btn-success]="sonarrStatus(movie) === 'sent'"
+              [class.btn-outline-danger]="sonarrStatus(movie) === 'error'" [class.btn-outline-primary]="!sonarrStatus(movie)"
+              [disabled]="!movie.tvdbId || sonarrStatus(movie) === 'sending' || sonarrStatus(movie) === 'sent'"
+              [title]="!movie.tvdbId ? 'Sonarr requires a TVDB ID. No TVDB mapping is available for this show.' : sonarrError(movie) || 'Add this TV show to Sonarr'"
+              (click)="sendToSonarr(movie, $event)">{{ sonarrLabel(movie) }}</button>
           </div>
         </article>
       </div>
 
       <p *ngIf="filteredSimilar.length === 0 && !errorMessage" class="text-muted">
-        {{ allSimilar.length === 0 ? 'TMDB did not return any similar movies for this title.' : 'No movies match the current filters.' }}
+        {{ allSimilar.length === 0 ? 'No similar ' + mediaLabel + ' were found for this title.' : 'No ' + mediaLabel + ' match the current filters.' }}
       </p>
       </ng-container>
     </div>

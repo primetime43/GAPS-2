@@ -1,3 +1,4 @@
+import { DiscoveryHeaderComponent } from './components/discovery-header/discovery-header.component';
 import { NgModule } from '@angular/core';
 import { BrowserModule } from '@angular/platform-browser';
 import { ReactiveFormsModule } from '@angular/forms';
@@ -63,7 +64,7 @@ import { UpdateSettingsComponent } from './components/settings/update-settings/u
         CompactNumberPipe,
         UpdateSettingsComponent
     ],
-    bootstrap: [AppComponent], imports: [BrowserModule, RadarrDestinationComponent, SonarrDestinationComponent, ScanControlsComponent,
+    bootstrap: [AppComponent], imports: [DiscoveryHeaderComponent, BrowserModule, RadarrDestinationComponent, SonarrDestinationComponent, ScanControlsComponent,
         AppRoutingModule,
         ReactiveFormsModule,
         FormsModule], providers: [

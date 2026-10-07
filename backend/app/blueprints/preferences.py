@@ -31,6 +31,8 @@ DEFAULTS = {
     # at scan time); IMDb ratings require the local dataset, so they default off.
     'showImdbRatings': False,
     'showTmdbRatings': True,
+    # Rating/vote sorting and result filters are independent of badge visibility.
+    'ratingSource': 'tmdb',
     # Remembered Missing-view display filters (owned/missing/all view, sort,
     # genre, show-future). Pure UI state for the frontend — deliberately separate
     # from hideOwnedByDefault/hideFutureReleasesByDefault (which also drive

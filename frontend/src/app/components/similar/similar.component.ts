@@ -5,16 +5,19 @@ import { ActiveServerService, MediaServerSource } from '../../services/active-se
 import { LibraryService } from '../../services/library.service';
 import { PreferencesService } from '../../services/preferences.service';
 import { RecommendationService } from '../../services/recommendation.service';
+import { SonarrService } from '../../services/sonarr.service';
+import { Show } from '../../models/show.model';
 import { RadarrService } from '../../services/radarr.service';
-import { GapViewService } from '../../services/gap-view.service';
+import { GapViewService, RatingSource, SortDirection } from '../../services/gap-view.service';
 import { ImdbRatingsLoader } from '../../services/imdb-ratings-loader';
 import { MediaLibrary } from '../../models/media-server.model';
 import { Movie } from '../../models/movie.model';
 import { Gap } from '../../models/recommendation.model';
 import { environment } from '../../../environments/environment';
 
+type Seed = Movie | Show;
 type ResultView = 'all' | 'owned' | 'missing';
-type ResultSort = 'relevance' | 'rating' | 'year' | 'name';
+type ResultSort = 'relevance' | 'rating' | 'votes' | 'year' | 'name';
 type SendState = 'sending' | 'sent' | 'error';
 
 @Component({
@@ -35,10 +38,17 @@ export class SimilarComponent implements OnInit, OnDestroy {
   radarrRootFolderPath = '';
   radarrLibraries: string[] = [];
 
+  mediaType: 'movie' | 'tv' = 'movie';
+  private allLibraries: MediaLibrary[] = [];
+  private defaultLibrary = '';
+  sonarrRootFolderPath = '';
+  sonarrEnabled = false;
+  private sonarrStates = new Map<number, SendState>();
+  private sonarrErrors = new Map<number, string>();
   libraries: MediaLibrary[] = [];
   selectedLibraries: string[] = [];
-  movies: Movie[] = [];
-  selectedMovie: Movie | null = null;
+  movies: Seed[] = [];
+  selectedMovie: Seed | null = null;
   movieFilter = '';
   currentPage = 1;
   itemsPerPage = 50;
@@ -48,11 +58,20 @@ export class SimilarComponent implements OnInit, OnDestroy {
   resultFilter = '';
   view: ResultView = 'all';
   sortBy: ResultSort = 'relevance';
+  sortDirection?: SortDirection;
+  readonly sortOptions = [
+    { value: 'relevance', label: 'TMDB relevance' },
+    { value: 'rating', label: 'Rating' },
+    { value: 'votes', label: 'Vote count' },
+    { value: 'year', label: 'Year' },
+    { value: 'name', label: 'Title' },
+  ];
   ownedCount = 0;
   missingCount = 0;
   errorMessage = '';
 
   // Load IMDb in the background only when the user enables its ratings.
+  ratingSource: RatingSource = 'tmdb';
   showImdbRatings = false;
   showTmdbRatings = true;
   readonly imdbRatings = new ImdbRatingsLoader(this.gapView);
@@ -74,10 +93,12 @@ export class SimilarComponent implements OnInit, OnDestroy {
     private recommendationService: RecommendationService,
     private radarrService: RadarrService,
     private gapView: GapViewService,
+    private sonarrService: SonarrService,
   ) {}
 
   ngOnInit(): void {
     this.refreshRadarrStatus();
+    this.refreshSonarrStatus();
     forkJoin({
       active: this.activeServerService.getActive(),
       prefs: this.preferencesService.load().pipe(catchError(() => of(null))),
@@ -90,10 +111,13 @@ export class SimilarComponent implements OnInit, OnDestroy {
       this.hasServer = true;
       this.activeSource = active.source;
       this.activeServerName = active.server;
-      this.libraries = active.libraries.filter(lib => lib.type === 'movie');
+      this.allLibraries = active.libraries;
+      this.defaultLibrary = prefs?.defaultLibrary || '';
+      this.libraries = active.libraries.filter(lib => ['movie', 'movies'].includes(lib.type));
       this.itemsPerPage = prefs?.moviesPerPage || 50;
       this.showImdbRatings = !!prefs?.showImdbRatings;
       this.showTmdbRatings = prefs?.showTmdbRatings !== false;
+      this.ratingSource = prefs?.ratingSource === 'imdb' ? 'imdb' : 'tmdb';
       this.externalLinkProvider = prefs?.externalLinkProvider || 'tmdb';
       if (prefs?.qualityFilterEnabled) {
         this.minRating = prefs.minRating || 0;
@@ -114,14 +138,33 @@ export class SimilarComponent implements OnInit, OnDestroy {
     this.destroy$.complete();
   }
 
-  get filteredMovies(): Movie[] {
+  get effectiveRatingSource(): RatingSource { return this.mediaType === 'tv' ? 'imdb' : this.ratingSource; }
+  get effectiveLinkProvider(): 'tmdb' | 'imdb' { return this.mediaType === 'tv' ? 'imdb' : this.externalLinkProvider; }
+  readonly tvLinkOptions = [{ value: 'imdb', label: 'IMDb' }];
+  readonly movieLinkOptions = [{ value: 'tmdb', label: 'TMDB' }, { value: 'imdb', label: 'IMDb' }];
+
+  get mediaLabel(): string { return this.mediaType === 'tv' ? 'TV shows' : 'movies'; }
+  get seedLabel(): string { return this.mediaType === 'tv' ? 'TV show' : 'movie'; }
+
+  setMediaType(type: 'movie' | 'tv'): void {
+    if (type === this.mediaType) return;
+    this.saveLibrarySelection();
+    this.mediaType = type;
+    const types = type === 'tv' ? ['show', 'tvshows'] : ['movie', 'movies'];
+    this.libraries = this.allLibraries.filter(lib => types.includes(lib.type));
+    this.selectedLibraries = [];
+    if (this.libraries.length) this.restoreLibrarySelection(this.defaultLibrary);
+    this.loadMovies();
+  }
+
+  get filteredMovies(): Seed[] {
     const query = this.movieFilter.trim().toLowerCase();
     return query
       ? this.movies.filter(movie => movie.name.toLowerCase().includes(query))
       : this.movies;
   }
 
-  get pagedMovies(): Movie[] {
+  get pagedMovies(): Seed[] {
     const start = (this.currentPage - 1) * this.itemsPerPage;
     return this.filteredMovies.slice(start, start + this.itemsPerPage);
   }
@@ -189,7 +232,7 @@ export class SimilarComponent implements OnInit, OnDestroy {
   }
 
   private librarySelectionContext(): string {
-    return `${this.activeSource}:${this.activeServerName}`;
+    return `${this.activeSource}:${this.activeServerName}${this.mediaType === 'tv' ? ':tv' : ''}`;
   }
 
   loadMovies(): void {
@@ -207,16 +250,19 @@ export class SimilarComponent implements OnInit, OnDestroy {
     this.loadingMovies = true;
     forkJoin(
       this.selectedLibraries.map(title =>
-        this.libraryService.getMovies(title, this.activeSource)
+        this.mediaType === 'tv'
+          ? this.libraryService.getShows(title, this.activeSource).pipe(map(result => result.shows as Seed[]))
+          : this.libraryService.getMovies(title, this.activeSource).pipe(map(result => result.movies as Seed[]))
       )
     ).pipe(takeUntil(this.librariesChanged$), takeUntil(this.destroy$)).subscribe({
       next: results => {
-        const seen = new Set<number>();
-        const merged: Movie[] = [];
+        const seen = new Set<string>();
+        const merged: Seed[] = [];
         for (const result of results) {
-          for (const movie of result.movies || []) {
-            if (!movie.tmdbId || seen.has(movie.tmdbId)) continue;
-            seen.add(movie.tmdbId);
+          for (const movie of result || []) {
+            const key = this.seedKey(movie);
+            if (!key || seen.has(key)) continue;
+            seen.add(key);
             merged.push(movie);
           }
         }
@@ -230,9 +276,10 @@ export class SimilarComponent implements OnInit, OnDestroy {
     });
   }
 
-  selectMovie(movie: Movie): void {
-    if (!movie.tmdbId) {
-      this.errorMessage = '"' + movie.name + '" has no TMDB ID and cannot be used for a similar-movie lookup.';
+  selectMovie(movie: Seed): void {
+    if (!this.seedKey(movie)) {
+      const requiredId = this.mediaType === 'tv' ? 'TMDB, TVDB, or IMDb ID' : 'TMDB ID';
+      this.errorMessage = `"${movie.name}" has no ${requiredId} for a recommendation lookup.`;
       return;
     }
 
@@ -240,6 +287,7 @@ export class SimilarComponent implements OnInit, OnDestroy {
     this.selectedMovie = movie;
     this.radarrLibraries = [...this.selectedLibraries];
     this.radarrRootFolderPath = '';
+    this.sonarrRootFolderPath = '';
     this.loadingSimilar = true;
     this.allSimilar = [];
     this.filteredSimilar = [];
@@ -249,25 +297,26 @@ export class SimilarComponent implements OnInit, OnDestroy {
     this.ownedCount = 0;
     this.missingCount = 0;
 
-    this.recommendationService.getSimilarMovies(
-      movie.tmdbId,
-      this.selectedLibraries,
-      this.activeSource,
-    ).pipe(takeUntil(this.resultsChanged$), takeUntil(this.destroy$)).subscribe({
+    const request$ = this.mediaType === 'tv'
+      ? this.recommendationService.getSimilarShows({ ...movie, tvdbId: Number(movie.tvdbId) || undefined }, this.selectedLibraries, this.activeSource)
+      : this.recommendationService.getSimilarMovies(movie.tmdbId!, this.selectedLibraries, this.activeSource);
+    request$.pipe(takeUntil(this.resultsChanged$), takeUntil(this.destroy$)).subscribe({
       next: rows => {
         this.allSimilar = (rows || []).map(row => ({
           id: row.tmdbId,
           tmdbId: row.tmdbId,
+          tvdbId: row.tvdbId,
+          imdbId: row.imdbId,
           name: row.name,
           year: row.year,
           releaseDate: row.releaseDate,
           posterUrl: row.posterUrl ?? null,
           overview: row.overview || '',
-          groupName: 'Similar Movies',
+          groupName: this.mediaType === 'tv' ? 'Similar TV Shows' : 'Similar Movies',
           owned: !!row.owned,
-          externalUrl: this.movieUrl(row.tmdbId, this.externalLinkProvider),
-          radarrEligible: !!row.tmdbId,
-          sonarrEligible: false,
+          externalUrl: this.movieUrl(row.tmdbId, this.effectiveLinkProvider, row.imdbId),
+          radarrEligible: this.mediaType === 'movie' && !!row.tmdbId,
+          sonarrEligible: this.mediaType === 'tv' && !!row.tvdbId,
           tmdbRating: row.voteAverage && row.voteAverage > 0 ? row.voteAverage : undefined,
           tmdbVotes: row.voteCount || undefined,
           genreIds: row.genreIds || [],
@@ -278,7 +327,7 @@ export class SimilarComponent implements OnInit, OnDestroy {
         this.loadImdbRatings();
       },
       error: err => {
-        this.errorMessage = err.error?.error || 'Failed to load similar movies from TMDB.';
+        this.errorMessage = err.error?.error || `Failed to load similar ${this.mediaLabel} from TMDB.`;
         this.loadingSimilar = false;
       },
     });
@@ -288,6 +337,9 @@ export class SimilarComponent implements OnInit, OnDestroy {
     this.resultsChanged$.next();
     this.loadingSimilar = false;
     this.selectedMovie = null;
+    this.radarrRootFolderPath = '';
+    this.sonarrRootFolderPath = '';
+    this.radarrLibraries = [];
     this.allSimilar = [];
     this.filteredSimilar = [];
     this.resultFilter = '';
@@ -313,8 +365,7 @@ export class SimilarComponent implements OnInit, OnDestroy {
     const query = this.resultFilter.trim().toLowerCase();
     if (query) rows = rows.filter(movie => movie.name.toLowerCase().includes(query));
 
-    // IMDb is preferred while enabled; otherwise these controls use TMDB. The
-    // rating and vote count always come from the same provider.
+    // Ratings and votes use the explicitly selected source, independently of badges.
     if (this.minRating > 0) {
       rows = rows.filter(movie => this.ratingOf(movie) >= this.minRating);
     }
@@ -322,34 +373,28 @@ export class SimilarComponent implements OnInit, OnDestroy {
       rows = rows.filter(movie => this.votesOf(movie) >= this.minVoteCount);
     }
 
-    if (this.sortBy === 'rating') {
-      rows.sort((a, b) => this.ratingOf(b) - this.ratingOf(a));
-    } else if (this.sortBy === 'year') {
-      rows.sort((a, b) => String(b.year).localeCompare(String(a.year)));
-    } else if (this.sortBy === 'name') {
-      rows.sort((a, b) => a.name.localeCompare(b.name));
-    }
-    this.filteredSimilar = rows;
+    this.filteredSimilar = this.gapView.sortGaps(rows,
+      this.sortBy === 'relevance' ? 'default' : this.sortBy, this.effectiveRatingSource, this.sortDirection);
   }
 
   private ratingOf(movie: Gap): number {
-    return this.showImdbRatings ? this.gapView.ratingOf(movie) : (movie.tmdbRating ?? 0);
+    return this.gapView.ratingOf(movie, this.effectiveRatingSource);
   }
 
   private votesOf(movie: Gap): number {
-    return this.showImdbRatings ? this.gapView.votesOf(movie) : (movie.tmdbVotes ?? 0);
+    return this.gapView.votesOf(movie, this.effectiveRatingSource);
   }
 
   movieUrl(id: number, provider: 'tmdb' | 'imdb', imdbId?: string): string {
     if (provider === 'imdb') {
-      return imdbId ? `https://www.imdb.com/title/${imdbId}/` : `${environment.apiUrl}/tmdb/movie/${id}/imdb`;
+      return imdbId ? `https://www.imdb.com/title/${imdbId}/` : `${environment.apiUrl}/tmdb/${this.mediaType}/${id}/imdb`;
     }
-    return `https://www.themoviedb.org/movie/${id}`;
+    return `https://www.themoviedb.org/${this.mediaType}/${id}`;
   }
 
   private updateMovieLinks(): void {
     for (const movie of this.allSimilar) {
-      movie.externalUrl = this.movieUrl(movie.id, this.externalLinkProvider, movie.imdbId);
+      movie.externalUrl = this.movieUrl(movie.id, this.effectiveLinkProvider, movie.imdbId);
     }
   }
 
@@ -360,11 +405,17 @@ export class SimilarComponent implements OnInit, OnDestroy {
   }
 
   loadImdbRatings(retry = false): void {
-    if (!this.showImdbRatings) return;
+    if (!this.showImdbRatings && this.effectiveRatingSource !== 'imdb') return;
     this.imdbRatings.load(this.allSimilar, () => {
       this.updateMovieLinks();
       this.applyFilter();
-    }, retry);
+    }, retry, this.mediaType);
+  }
+
+  onRatingSourceChange(): void {
+    this.applyFilter();
+    this.loadImdbRatings();
+    this.preferencesService.save({ ratingSource: this.ratingSource }).subscribe({ error: () => {} });
   }
 
   onRatingPrefsChange(): void {
@@ -380,21 +431,72 @@ export class SimilarComponent implements OnInit, OnDestroy {
     this.currentPage = Math.min(this.totalPages, Math.max(1, this.currentPage + delta));
   }
 
-  trackByMovie(_index: number, movie: Movie): number {
-    return movie.tmdbId || 0;
+  private seedKey(movie: Seed): string {
+    if (movie.tmdbId) return `tmdb:${movie.tmdbId}`;
+    if (this.mediaType === 'tv') {
+      if (movie.tvdbId) return `tvdb:${movie.tvdbId}`;
+      if (movie.imdbId) return `imdb:${movie.imdbId}`;
+    }
+    return '';
   }
+
+  trackByMovie = (_index: number, movie: Seed): string => this.seedKey(movie);
 
   trackByGap(_index: number, gap: Gap): number {
     return gap.id;
   }
 
+  private refreshSonarrStatus(): void {
+    this.sonarrService.getConfig().pipe(catchError(() => of(null)), takeUntil(this.destroy$)).subscribe(config => {
+      this.sonarrEnabled = !!config?.enabled;
+      if (!this.sonarrEnabled) return;
+      this.sonarrService.getLibraryTvdbIds().pipe(
+        catchError(() => of({ tvdb_ids: [] })), takeUntil(this.destroy$),
+      ).subscribe(response => {
+        for (const id of response.tvdb_ids) this.sonarrStates.set(id, 'sent');
+      });
+    });
+  }
+
+  sonarrStatus(movie: Gap): SendState | undefined { return this.sonarrStates.get(movie.tvdbId!); }
+  sonarrError(movie: Gap): string | undefined { return this.sonarrErrors.get(movie.tvdbId!); }
+  sonarrLabel(movie: Gap): string {
+    if (!movie.tvdbId) return 'No TVDB match';
+    switch (this.sonarrStatus(movie)) {
+      case 'sending': return 'Sending...';
+      case 'sent': return 'In Sonarr';
+      case 'error': return 'Retry';
+      default: return 'Send to Sonarr';
+    }
+  }
+
+  sendToSonarr(movie: Gap, event: Event): void {
+    event.stopPropagation();
+    event.preventDefault();
+    if (this.mediaType !== 'tv' || !this.sonarrEnabled || movie.owned || !movie.sonarrEligible || !movie.tvdbId
+        || ['sending', 'sent'].includes(this.sonarrStatus(movie) || '')) return;
+    const id = movie.tvdbId;
+    this.sonarrStates.set(id, 'sending');
+    this.sonarrErrors.delete(id);
+    this.sonarrService.addSeries(id, movie.name, {
+      source: this.activeSource, server: this.activeServerName,
+      library_names: [...this.radarrLibraries], root_folder_path: this.sonarrRootFolderPath,
+    }).pipe(takeUntil(this.destroy$)).subscribe({
+      next: () => this.sonarrStates.set(id, 'sent'),
+      error: err => {
+        this.sonarrStates.set(id, 'error');
+        this.sonarrErrors.set(id, err.error?.error || 'Failed to add to Sonarr');
+      },
+    });
+  }
+
   private refreshRadarrStatus(): void {
-    this.radarrService.getConfig().pipe(catchError(() => of(null))).subscribe(config => {
+    this.radarrService.getConfig().pipe(catchError(() => of(null)), takeUntil(this.destroy$)).subscribe(config => {
       this.radarrEnabled = !!config?.enabled;
       if (!this.radarrEnabled) return;
       this.radarrService.getLibraryTmdbIds().pipe(
         map(response => response.tmdb_ids || []),
-        catchError(() => of([] as number[])),
+        catchError(() => of([] as number[])), takeUntil(this.destroy$),
       ).subscribe(ids => {
         for (const id of ids) this.sendStatus.set(id, 'sent');
       });
@@ -402,13 +504,13 @@ export class SimilarComponent implements OnInit, OnDestroy {
   }
 
   canSendToRadarr(movie: Gap): boolean {
-    return this.radarrEnabled && movie.radarrEligible && !movie.owned;
+    return this.mediaType === 'movie' && this.radarrEnabled && movie.radarrEligible && !movie.owned;
   }
 
   sendToRadarr(movie: Gap, event: Event): void {
     event.stopPropagation();
     event.preventDefault();
-    if (!this.canSendToRadarr(movie) || this.sendStatus.get(movie.id) === 'sending') return;
+    if (!this.canSendToRadarr(movie) || ['sending', 'sent'].includes(this.sendStatus.get(movie.id) || '')) return;
 
     this.sendStatus.set(movie.id, 'sending');
     this.sendErrors.delete(movie.id);

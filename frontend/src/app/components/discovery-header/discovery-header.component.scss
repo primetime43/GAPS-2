@@ -1,0 +1,39 @@
+:host { display: block; }
+
+.library-selector {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.result-controls {
+  flex-wrap: wrap;
+
+  > input {
+    flex: 1 1 220px;
+    width: auto;
+  }
+}
+
+.result-sort { width: 190px; }
+.result-direction { width: 235px; }
+.rating-filter-button, .link-preference { white-space: nowrap; }
+.link-preference select { width: 110px; }
+.rating-filter-menu {
+  width: 280px;
+  max-width: calc(100vw - 32px);
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+@media (max-width: 767px) {
+  .library-toolbar { flex-direction: column; align-items: stretch !important; }
+  .library-selector { flex-basis: auto; }
+  .result-toolbar, .result-controls {
+    align-items: stretch !important;
+    flex-direction: column;
+  }
+
+  .result-toolbar .btn-group { margin-left: 0 !important; }
+  .result-sort, .result-direction, .result-controls > input { width: 100%; flex: none; }
+  .rating-filter-button, .result-controls > .dropdown { width: 100%; }
+}

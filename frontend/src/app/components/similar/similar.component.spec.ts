@@ -1,3 +1,4 @@
+import { DiscoveryHeaderComponent } from '../discovery-header/discovery-header.component';
 import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
 import { FormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
@@ -8,6 +9,9 @@ import { ActiveServerService, ActiveServer } from '../../services/active-server.
 import { LibraryService } from '../../services/library.service';
 import { PreferencesService, DEFAULT_PREFERENCES } from '../../services/preferences.service';
 import { RecommendationService } from '../../services/recommendation.service';
+import { SonarrService } from '../../services/sonarr.service';
+import { SonarrDestinationComponent } from '../sonarr-destination/sonarr-destination.component';
+import { Show } from '../../models/show.model';
 import { RadarrService } from '../../services/radarr.service';
 import { GapViewService } from '../../services/gap-view.service';
 import { Movie } from '../../models/movie.model';
@@ -21,6 +25,7 @@ describe('SimilarComponent', () => {
   let libraryService: jasmine.SpyObj<LibraryService>;
   let recommendationService: jasmine.SpyObj<RecommendationService>;
   let preferencesService: jasmine.SpyObj<PreferencesService>;
+  let sonarrService: jasmine.SpyObj<SonarrService>;
   let gapView: jasmine.SpyObj<GapViewService>;
   const librarySelectionsKey = 'gaps2.similar.librarySelections';
 
@@ -35,17 +40,25 @@ describe('SimilarComponent', () => {
   beforeEach(async () => {
     localStorage.removeItem(librarySelectionsKey);
     activeServerService = jasmine.createSpyObj<ActiveServerService>('ActiveServerService', ['getActive']);
-    libraryService = jasmine.createSpyObj<LibraryService>('LibraryService', ['getMovies']);
+    libraryService = jasmine.createSpyObj<LibraryService>('LibraryService', ['getMovies', 'getShows']);
     preferencesService = jasmine.createSpyObj<PreferencesService>('PreferencesService', ['load', 'save']);
-    recommendationService = jasmine.createSpyObj<RecommendationService>('RecommendationService', ['getSimilarMovies']);
+    recommendationService = jasmine.createSpyObj<RecommendationService>('RecommendationService', ['getSimilarMovies', 'getSimilarShows']);
     gapView = jasmine.createSpyObj<GapViewService>(
       'GapViewService',
-      ['ratingOf', 'votesOf', 'applyImdbRatings'],
+      ['ratingOf', 'votesOf', 'sortGaps', 'applyImdbRatings'],
     );
     const radarrService = jasmine.createSpyObj<RadarrService>(
       'RadarrService',
       ['getConfig', 'getLibraryTmdbIds', 'addMovie'],
     );
+
+    sonarrService = jasmine.createSpyObj<SonarrService>('SonarrService', ['getConfig', 'getLibraryTvdbIds', 'addSeries', 'getRootFolders']);
+    sonarrService.getConfig.and.returnValue(of({ enabled: false } as any));
+    sonarrService.getLibraryTvdbIds.and.returnValue(of({ tvdb_ids: [] }));
+    sonarrService.getRootFolders.and.returnValue(of([]));
+    sonarrService.addSeries.and.returnValue(of({ message: 'Added' }));
+    libraryService.getShows.and.returnValue(of({ shows: [] }));
+    recommendationService.getSimilarShows.and.returnValue(of([]));
 
     const active: ActiveServer = {
       source: 'plex',
@@ -54,6 +67,8 @@ describe('SimilarComponent', () => {
       libraries: [
         { title: 'Movies', type: 'movie' },
         { title: '4K Movies', type: 'movie' },
+        { title: 'TV', type: 'show' },
+        { title: 'TV 4K', type: 'tvshows' },
       ],
       response: {
         server: 'Test Plex',
@@ -67,21 +82,24 @@ describe('SimilarComponent', () => {
     activeServerService.getActive.and.returnValue(of(active));
     preferencesService.load.and.returnValue(of({ ...DEFAULT_PREFERENCES, defaultLibrary: 'Movies' }));
     preferencesService.save.and.returnValue(of({ ...DEFAULT_PREFERENCES }));
-    gapView.ratingOf.and.callFake(gap => gap.imdbRating ?? gap.tmdbRating ?? 0);
-    gapView.votesOf.and.callFake(gap => gap.imdbRating != null ? (gap.imdbVotes ?? 0) : (gap.tmdbVotes ?? 0));
+    const sorting = new GapViewService(null);
+    gapView.ratingOf.and.callFake((gap, source) => sorting.ratingOf(gap, source));
+    gapView.votesOf.and.callFake((gap, source) => sorting.votesOf(gap, source));
+    gapView.sortGaps.and.callFake((gaps, sort, source, direction) => sorting.sortGaps(gaps, sort, source, direction));
     gapView.applyImdbRatings.and.returnValue(of(undefined));
     libraryService.getMovies.and.returnValue(of({ movies: [seed] }));
     radarrService.getConfig.and.returnValue(of({ enabled: false } as any));
     recommendationService.getSimilarMovies.and.returnValue(of([]));
 
     await TestBed.configureTestingModule({
-      imports: [FormsModule, RouterTestingModule, RadarrDestinationComponent],
+      imports: [SonarrDestinationComponent, DiscoveryHeaderComponent, FormsModule, RouterTestingModule, RadarrDestinationComponent],
       declarations: [SimilarComponent, CompactNumberPipe],
       providers: [
         { provide: ActiveServerService, useValue: activeServerService },
         { provide: LibraryService, useValue: libraryService },
         { provide: PreferencesService, useValue: preferencesService },
         { provide: RecommendationService, useValue: recommendationService },
+        { provide: SonarrService, useValue: sonarrService },
         { provide: RadarrService, useValue: radarrService },
         { provide: GapViewService, useValue: gapView },
       ],
@@ -98,6 +116,35 @@ describe('SimilarComponent', () => {
     fixture.detectChanges();
     expect(component.errorMessage).toBe('Server offline');
     expect(component.loadingMovies).toBeFalse();
+  });
+
+  it('applies shared rating and sort controls without losing TMDB relevance', async () => {
+    recommendationService.getSimilarMovies.and.returnValue(of([
+      { tmdbId: 2, name: 'Older', year: 2000, voteAverage: 5, voteCount: 200 },
+      { tmdbId: 3, name: 'Newer', year: 2020, voteAverage: 8, voteCount: 200 },
+    ] as any));
+    fixture.detectChanges();
+    component.selectMovie(seed);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const toolbar = fixture.nativeElement.querySelector('app-discovery-header:not([section="intro"])');
+    const sort = toolbar.querySelector('.result-sort');
+    expect(sort.value).toBe('relevance');
+    sort.value = 'year';
+    sort.dispatchEvent(new Event('change'));
+    expect(component.filteredSimilar.map(g => g.id)).toEqual([3, 2]);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const direction = toolbar.querySelector('[aria-label="Sort direction"]');
+    direction.value = 'asc';
+    direction.dispatchEvent(new Event('change'));
+    expect(component.sortDirection).toBe('asc');
+    expect(component.filteredSimilar.map(g => g.id)).toEqual([2, 3]);
+    const minimum = toolbar.querySelector('#similarMinRating');
+    minimum.value = '6';
+    minimum.dispatchEvent(new Event('input'));
+    expect(component.minRating).toBe(6);
+    expect(component.filteredSimilar.map(g => g.id)).toEqual([3]);
   });
 
   it('ignores library results from a previous selection', () => {
@@ -230,7 +277,7 @@ describe('SimilarComponent', () => {
     });
     fixture.nativeElement.querySelector('.imdb-status button').click();
     fixture.detectChanges();
-    expect(fixture.nativeElement.textContent).toContain('IMDb ratings available for 1 of 2 movies.');
+    expect(fixture.nativeElement.textContent).toContain('IMDb ratings available for 1 of 2 titles.');
     expect(gapView.applyImdbRatings).toHaveBeenCalledTimes(2);
   });
 
@@ -348,7 +395,7 @@ describe('SimilarComponent', () => {
     expect(component.filteredSimilar.map(movie => movie.name)).toEqual(['Established']);
   }));
 
-  it('loads IMDb ratings and uses them for rating filters and sorting', () => {
+  it('uses the chosen rating source independently of badge visibility', () => {
     const lowerTmdbButBetterImdb: Gap = {
       id: 1, name: 'IMDb Winner', year: 2024, posterUrl: null, overview: '',
       groupName: 'Similar Movies', owned: false, externalUrl: '',
@@ -360,7 +407,8 @@ describe('SimilarComponent', () => {
       radarrEligible: true, sonarrEligible: false, tmdbRating: 8, tmdbVotes: 500,
     };
     component.allSimilar = [higherTmdb, lowerTmdbButBetterImdb];
-    component.showImdbRatings = true;
+    component.ratingSource = 'imdb';
+    component.showImdbRatings = false;
     component.sortBy = 'rating';
     gapView.applyImdbRatings.and.callFake(gaps => {
       gaps[0].imdbRating = 4.4;
@@ -375,8 +423,11 @@ describe('SimilarComponent', () => {
     expect(component.imdbRatings.loaded).toBeTrue();
     expect(component.filteredSimilar.map(movie => movie.name)).toEqual(['IMDb Winner', 'TMDB Winner']);
 
-    component.showImdbRatings = false;
+    component.showImdbRatings = true;
     component.onRatingPrefsChange();
+    expect(component.filteredSimilar.map(movie => movie.name)).toEqual(['IMDb Winner', 'TMDB Winner']);
+    component.ratingSource = 'tmdb';
+    component.onRatingSourceChange();
     expect(component.filteredSimilar.map(movie => movie.name)).toEqual(['TMDB Winner', 'IMDb Winner']);
     component.minRating = 7;
     component.minVoteCount = 400;
@@ -415,4 +466,157 @@ describe('SimilarComponent', () => {
     expect(component.minRating).toBe(6);
     expect(component.minVoteCount).toBe(100);
   }));
+  const tvSeed: Show = { name: 'A series', year: 2020, overview: '', posterUrl: '', tvdbId: 400 };
+
+  it('switches to TV libraries and remembers each media selection independently', () => {
+    libraryService.getShows.and.returnValue(of({ shows: [tvSeed] }));
+    fixture.detectChanges();
+    component.toggleLibrarySelection('4K Movies');
+    const movieSelection = [...component.selectedLibraries];
+    const tvButton = Array.from(fixture.nativeElement.querySelectorAll('button') as NodeListOf<HTMLButtonElement>)
+      .find(button => button.textContent.trim() === 'TV Shows');
+    tvButton.click();
+    fixture.detectChanges();
+    expect(component.mediaType).toBe('tv');
+    expect(component.libraries.map(lib => lib.title)).toEqual(['TV', 'TV 4K']);
+    expect(component.movies).toEqual([tvSeed]);
+    expect(fixture.nativeElement.textContent).toContain('Choose a TV show you liked');
+    component.toggleLibrarySelection('TV 4K');
+    component.setMediaType('movie');
+    expect(component.selectedLibraries).toEqual(movieSelection);
+    component.setMediaType('tv');
+    expect(component.selectedLibraries).toEqual(['TV', 'TV 4K']);
+  });
+
+  it('accepts TVDB-only seeds and maps TV ratings, links, and Sonarr eligibility', () => {
+    recommendationService.getSimilarShows.and.returnValue(of([
+      { tmdbId: 10, tvdbId: 20, imdbId: 'tt100', name: 'Mapped', year: '2020', voteAverage: 8, voteCount: 50 },
+      { tmdbId: 11, name: 'Unmapped', year: '2010', voteAverage: 7, voteCount: 10 },
+    ] as any));
+    fixture.detectChanges();
+    component.setMediaType('tv');
+    component.showImdbRatings = true;
+    component.selectMovie(tvSeed);
+    expect(recommendationService.getSimilarShows).toHaveBeenCalledWith(tvSeed, ['TV'], 'plex');
+    expect(recommendationService.getSimilarMovies).not.toHaveBeenCalled();
+    expect(component.allSimilar[0]).toEqual(jasmine.objectContaining({
+      tmdbId: 10, tvdbId: 20, imdbId: 'tt100', sonarrEligible: true, radarrEligible: false,
+      tmdbRating: 8, tmdbVotes: 50, externalUrl: 'https://www.imdb.com/title/tt100/',
+    }));
+    expect(component.allSimilar[1].sonarrEligible).toBeFalse();
+    expect(gapView.applyImdbRatings).toHaveBeenCalledWith(component.allSimilar, { suppressErrors: false, mediaType: 'tv' });
+    component.sortBy = 'year';
+    component.sortDirection = 'asc';
+    component.applyFilter();
+    expect(component.filteredSimilar.map(g => g.tmdbId)).toEqual([11, 10]);
+    component.externalLinkProvider = 'imdb';
+    component.onLinkProviderChange();
+    expect(component.allSimilar[0].externalUrl).toBe('https://www.imdb.com/title/tt100/');
+    expect(component.allSimilar[1].externalUrl).toContain('/tmdb/tv/11/imdb');
+  });
+
+  it('hides TMDB controls in TV mode and uses IMDb without overwriting movie preferences', async () => {
+    recommendationService.getSimilarShows.and.returnValue(of([
+      { tmdbId: 10, imdbId: 'tt100', name: 'Show A', year: '2020', voteAverage: 9, voteCount: 100 },
+      { tmdbId: 11, imdbId: 'tt101', name: 'Show B', year: '2020', voteAverage: 4, voteCount: 200 },
+    ] as any));
+    gapView.applyImdbRatings.and.callFake(gaps => {
+      gaps[0].imdbRating = 3;
+      gaps[1].imdbRating = 8;
+      return of(undefined);
+    });
+    fixture.detectChanges();
+    component.ratingSource = 'tmdb';
+    component.externalLinkProvider = 'tmdb';
+    component.setMediaType('tv');
+    component.selectMovie(tvSeed);
+    component.sortBy = 'rating';
+    component.minRating = 6;
+    component.applyFilter();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(component.filteredSimilar.map(g => g.tmdbId)).toEqual([11]);
+    expect(fixture.nativeElement.textContent).not.toContain('TMDB');
+    expect(fixture.nativeElement.querySelector('.rating-chip.tmdb')).toBeNull();
+    expect(fixture.nativeElement.querySelector('#similarShowTmdb')).toBeNull();
+    expect(fixture.nativeElement.querySelector('#similarRatingSource').value).toBe('imdb');
+    expect(fixture.nativeElement.querySelector('#similarLinkProvider').value).toBe('imdb');
+    expect(component.ratingSource).toBe('tmdb');
+    expect(component.externalLinkProvider).toBe('tmdb');
+    component.setMediaType('movie');
+    expect(component.effectiveRatingSource).toBe('tmdb');
+    expect(component.effectiveLinkProvider).toBe('tmdb');
+  });
+
+  it('sends TVDB IDs to Sonarr with the selected libraries and destination, and blocks duplicates', () => {
+    sonarrService.getConfig.and.returnValue(of({ enabled: true } as any));
+    recommendationService.getSimilarShows.and.returnValue(of([
+      { tmdbId: 10, tvdbId: 20, name: 'Mapped', year: '2020' },
+      { tmdbId: 11, name: 'Unmapped', year: '2020' },
+    ] as any));
+    fixture.detectChanges();
+    component.setMediaType('tv');
+    component.selectMovie(tvSeed);
+    component.sonarrRootFolderPath = '/tv';
+    fixture.detectChanges();
+    const buttons = fixture.nativeElement.querySelectorAll('.rec-card button');
+    expect(buttons[1].disabled).toBeTrue();
+    expect(buttons[1].textContent).toContain('No TVDB match');
+    buttons[0].click();
+    expect(sonarrService.addSeries).toHaveBeenCalledOnceWith(20, 'Mapped', {
+      source: 'plex', server: 'Test Plex', library_names: ['TV'], root_folder_path: '/tv',
+    });
+    expect(component.sonarrLabel(component.allSimilar[0])).toBe('In Sonarr');
+    component.sendToSonarr(component.allSimilar[0], new Event('click'));
+    component.sendToSonarr(component.allSimilar[1], new Event('click'));
+    expect(sonarrService.addSeries).toHaveBeenCalledTimes(1);
+    expect(component.radarrStatus(20)).toBeUndefined();
+    component.setMediaType('movie');
+    expect(component.sonarrRootFolderPath).toBe('');
+    expect(component.selectedMovie).toBeNull();
+  });
+
+  it('cancels stale recommendations and ratings when switching media', () => {
+    const pending = new Subject<any[]>();
+    recommendationService.getSimilarShows.and.returnValue(pending);
+    fixture.detectChanges();
+    component.setMediaType('tv');
+    component.selectMovie(tvSeed);
+    expect(pending.observed).toBeTrue();
+    component.setMediaType('movie');
+    expect(pending.observed).toBeFalse();
+    pending.next([{ tmdbId: 10, name: 'Stale show' }]);
+    expect(component.allSimilar).toEqual([]);
+    expect(component.loadingSimilar).toBeFalse();
+
+    const ratings = new Subject<void>();
+    gapView.applyImdbRatings.and.returnValue(ratings);
+    recommendationService.getSimilarShows.and.returnValue(of([{ tmdbId: 10, name: 'Show' }] as any));
+    component.setMediaType('tv');
+    component.showImdbRatings = true;
+    component.selectMovie(tvSeed);
+    expect(ratings.observed).toBeTrue();
+    component.setMediaType('movie');
+    expect(ratings.observed).toBeFalse();
+    expect(component.imdbRatings.loading).toBeFalse();
+  });
+
+  it('cancels pending library loads and handles a server without TV libraries', () => {
+    const pending = new Subject<{ shows: Show[] }>();
+    libraryService.getShows.and.returnValue(pending);
+    fixture.detectChanges();
+    component.setMediaType('tv');
+    expect(pending.observed).toBeTrue();
+    component.setMediaType('movie');
+    expect(pending.observed).toBeFalse();
+    expect(component.movies).toEqual([seed]);
+    (component as any).allLibraries = [{ title: 'Movies', type: 'movie' }];
+    component.setMediaType('tv');
+    fixture.detectChanges();
+    expect(component.selectedLibraries).toEqual([]);
+    expect(component.movies).toEqual([]);
+    expect(component.loadingMovies).toBeFalse();
+    expect(fixture.nativeElement.textContent).toContain('No TV libraries found');
+  });
+
 });

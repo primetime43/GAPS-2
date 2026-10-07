@@ -27,11 +27,11 @@ def refresh():
 
 @imdb_bp.route('/ratings', methods=['POST'])
 def ratings():
-    """Map a list of TMDB movie ids to their IMDb ratings.
+    """Map a list of TMDB movie or TV ids to their IMDb ratings.
 
-    Movie cards key on TMDB ids, but IMDb data is keyed by IMDb id, so we
+    Cards identify titles with TMDB ids, but IMDb data is keyed by IMDb id, so we
     resolve TMDB -> IMDb via TMDB's external_ids (cached, run concurrently)
-    and then batch-fetch ratings from imdbapi.dev. Returns
+    and then batch-fetch ratings from the local IMDb dataset. Returns
     {ratings: {tmdbId: {imdbId, aggregateRating, voteCount}}}.
 
     This is an explicit, client-initiated lookup — the frontend only calls it when
@@ -40,7 +40,11 @@ def ratings():
     """
     imdb_service = current_app.imdb_service
 
-    raw_ids = (request.get_json() or {}).get('tmdbIds') or []
+    data = request.get_json() or {}
+    media_type = data.get('mediaType', 'movie')
+    if media_type not in ('movie', 'tv'):
+        return jsonify(error='mediaType must be movie or tv'), 400
+    raw_ids = data.get('tmdbIds') or []
     tmdb_ids = []
     for value in raw_ids:
         try:
@@ -54,7 +58,8 @@ def ratings():
     tmdb_service = current_app.tmdb_service
     # Resolve TMDB->IMDb concurrently and persist newly-resolved ids (batch helper
     # owns the concurrency cap + persist so it's not duplicated per blueprint).
-    imdb_ids = tmdb_service.get_imdb_ids(tmdb_ids)
+    imdb_ids = ([ids.get('imdbId') for ids in tmdb_service.get_tv_external_ids_batch(tmdb_ids)]
+                if media_type == 'tv' else tmdb_service.get_imdb_ids(tmdb_ids))
 
     # Map each TMDB id to its resolved IMDb id, dropping the unresolved ones.
     tmdb_to_imdb = {t: i for t, i in zip(tmdb_ids, imdb_ids) if i}

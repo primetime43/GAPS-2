@@ -1,4 +1,6 @@
 export interface CollectionGap {
+  tvdbId?: number;
+  imdbId?: string;
   tmdbId: number;
   name: string;
   year: string;
@@ -18,7 +20,7 @@ export interface CollectionGap {
  * collections) and TV shows (TheTVDB franchises).
  */
 export interface Gap {
-  id: number;            // tmdbId for movies, tvdbId for shows
+  id: number;            // TMDB ID for Similar; otherwise TMDB movies / TVDB shows
   name: string;
   year: string | number;
   releaseDate?: string;  // movies only; used for "hide future releases"
@@ -34,7 +36,7 @@ export interface Gap {
   tmdbRating?: number;     // TMDB vote average (movies)
   tmdbVotes?: number;      // TMDB vote count (movies)
   genreIds?: number[];     // TMDB genre ids (movies) — used by the genre filter
-  popularity?: number;     // TMDB popularity — used by the sort control
+  popularity?: number;     // TMDB popularity metadata
   tmdbId?: number;         // TMDB id (TV gaps key on tvdbId, so id alone isn't it)
   tvdbId?: number;         // Explicit TV ID; actor credits may only have a TMDB ID
   imdbId?: string;         // IMDb id, when known (TV) — for building IMDb links

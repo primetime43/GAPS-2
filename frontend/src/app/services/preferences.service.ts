@@ -2,12 +2,15 @@ import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../environments/environment';
+import type { GapSortKey, RatingSource, SortDirection } from './gap-view.service';
 
 /** Remembered Missing-view display filters (persisted as opaque UI state,
  * separate from the scan-affecting hideOwned/hideFuture defaults). */
 export interface MissingFilters {
   view: 'all' | 'owned' | 'missing';
-  sortBy: 'default' | 'rating' | 'popularity' | 'year' | 'name';
+  // Older saved preferences may still contain the removed popularity sort.
+  sortBy: GapSortKey | 'popularity';
+  sortDirection?: SortDirection;
   genreFilter: number | null;
   showFuture: boolean;
   minRating?: number;
@@ -32,6 +35,7 @@ export interface UserPreferences {
   actorTvLinkProvider: 'tvdb' | 'imdb';
   showImdbRatings: boolean;
   showTmdbRatings: boolean;
+  ratingSource: RatingSource;
   missingFilters: MissingFilters | null;
 }
 
@@ -59,6 +63,7 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   actorTvLinkProvider: 'tvdb',
   showImdbRatings: false,
   showTmdbRatings: true,
+  ratingSource: 'tmdb',
   missingFilters: null,
 };
 

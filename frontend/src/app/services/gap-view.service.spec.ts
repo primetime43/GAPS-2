@@ -57,6 +57,47 @@ describe('GapViewService', () => {
     expect(movies[0].imdbVotes).toBe(500);
   });
 
+  it('sorts ratings and votes using only the selected provider, with unknowns last', () => {
+    const movies = [
+      gap({ id: 1, tmdbRating: 9, tmdbVotes: 900, imdbRating: 4, imdbVotes: 10 }),
+      gap({ id: 2, tmdbRating: 5, tmdbVotes: 50, imdbRating: 8, imdbVotes: 500 }),
+      gap({ id: 3, tmdbRating: 10, tmdbVotes: 1000 }),
+      gap({ id: 4, imdbRating: 0, imdbVotes: 0 }),
+    ];
+    expect(service.sortGaps(movies, 'rating', 'imdb').map(g => g.id)).toEqual([2, 1, 4, 3]);
+    expect(service.sortGaps(movies, 'rating', 'tmdb').map(g => g.id)).toEqual([3, 1, 2, 4]);
+    expect(service.sortGaps(movies, 'votes', 'imdb').map(g => g.id)).toEqual([2, 1, 4, 3]);
+    expect(service.sortGaps(movies, 'votes', 'tmdb').map(g => g.id)).toEqual([3, 1, 2, 4]);
+    expect(service.ratingOf(movies[2], 'imdb')).toBe(0);
+    expect(service.votesOf(movies[2], 'imdb')).toBe(0);
+    expect(movies.map(g => g.id)).toEqual([1, 2, 3, 4]);
+  });
+
+  it('sorts ratings and votes in both directions with unknown values last', () => {
+    const movies = [
+      gap({ id: 1, imdbRating: 8, imdbVotes: 500, tmdbRating: 4, tmdbVotes: 10 }),
+      gap({ id: 2, imdbRating: 0, imdbVotes: 0, tmdbRating: 9, tmdbVotes: 1000 }),
+      gap({ id: 3 }),
+    ];
+    for (const sort of ['rating', 'votes'] as const) {
+      expect(service.sortGaps(movies, sort, 'imdb', 'asc').map(g => g.id)).toEqual([2, 1, 3]);
+      expect(service.sortGaps(movies, sort, 'imdb', 'desc').map(g => g.id)).toEqual([1, 2, 3]);
+      expect(service.sortGaps(movies, sort, 'tmdb', 'asc').map(g => g.id)).toEqual([1, 2, 3]);
+      expect(service.sortGaps(movies, sort, 'tmdb', 'desc').map(g => g.id)).toEqual([2, 1, 3]);
+    }
+    expect(movies.map(g => g.id)).toEqual([1, 2, 3]);
+  });
+
+  it('sorts years and titles in both directions while preserving default ordering', () => {
+    const movies = [gap({ id: 1, name: 'Bravo', year: '2020' }), gap({ id: 2, name: 'Alpha', year: 1990 }), gap({ id: 3, name: 'Charlie', year: 'N/A' })];
+    expect(service.sortGaps(movies, 'year', 'tmdb', 'asc').map(g => g.id)).toEqual([2, 1, 3]);
+    expect(service.sortGaps(movies, 'year', 'tmdb', 'desc').map(g => g.id)).toEqual([1, 2, 3]);
+    expect(service.sortGaps(movies, 'name', 'tmdb', 'asc').map(g => g.id)).toEqual([2, 1, 3]);
+    expect(service.sortGaps(movies, 'name', 'tmdb', 'desc').map(g => g.id)).toEqual([3, 1, 2]);
+    expect(service.sortGaps(movies, 'default', 'tmdb', 'asc')).toBe(movies);
+    expect(service.sortGaps(movies, 'default', 'tmdb', 'desc')).toBe(movies);
+  });
+
   it('reports failures to callers with retry controls while preserving the default behavior', () => {
     const failure = new Error('offline');
     imdbService.getRatings.and.returnValue(throwError(() => failure));
@@ -68,4 +109,15 @@ describe('GapViewService', () => {
     service.applyImdbRatings([gap()], { suppressErrors: false }).subscribe({ error: reported });
     expect(reported).toHaveBeenCalledWith(failure);
   });
+  it('uses the TMDB TV ID rather than a TVDB card ID for IMDb ratings', () => {
+    const shows = [gap({ id: 300, tmdbId: 10, tvdbId: 300 })];
+    imdbService.getRatings.and.returnValue(of({ ratings: {
+      '10': { imdbId: 'tt100', aggregateRating: 8, voteCount: 500 },
+    } }));
+    service.applyImdbRatings(shows, { mediaType: 'tv' }).subscribe();
+    expect(imdbService.getRatings).toHaveBeenCalledWith([10], 'tv');
+    expect(shows[0].imdbRating).toBe(8);
+    expect(shows[0].imdbId).toBe('tt100');
+  });
+
 });

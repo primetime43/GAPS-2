@@ -1,3 +1,4 @@
+import { DiscoveryHeaderComponent } from '../discovery-header/discovery-header.component';
 import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { RouterTestingModule } from '@angular/router/testing';
@@ -97,7 +98,7 @@ describe('RecommendedComponent', () => {
     tmdbService.getGenres.and.returnValue(of([]));
 
     await TestBed.configureTestingModule({
-      imports: [HttpClientTestingModule, FormsModule, RouterTestingModule, RadarrDestinationComponent, SonarrDestinationComponent],
+      imports: [DiscoveryHeaderComponent, HttpClientTestingModule, FormsModule, RouterTestingModule, RadarrDestinationComponent, SonarrDestinationComponent],
       declarations: [RecommendedComponent, MockConfirmModalComponent, CompactNumberPipe],
       providers: [
         { provide: ActiveServerService, useValue: activeServerService },
@@ -119,6 +120,207 @@ describe('RecommendedComponent', () => {
 
   it('should create', () => {
     expect(component).toBeTruthy();
+  });
+
+  it('loads the chosen IMDb source, pairs its votes and rating, and preserves unknown/owned titles', () => {
+    fixture.detectChanges();
+    component.allGaps = [
+      gap({ id: 1, year: 2000, groupName: 'A', tmdbRating: 9, tmdbVotes: 1000 }),
+      gap({ id: 2, year: 2000, groupName: 'B', tmdbRating: 4, tmdbVotes: 1 }),
+      gap({ id: 3, year: 2000, groupName: 'Unknown' }),
+      gap({ id: 4, year: 2000, groupName: 'Owned', owned: true }),
+    ];
+    imdbService.getRatings.and.returnValue(of({ ratings: {
+      '1': { imdbId: 'tt1', aggregateRating: 9, voteCount: 10 },
+      '2': { imdbId: 'tt2', aggregateRating: 8, voteCount: 500 },
+      '4': { imdbId: 'tt4', aggregateRating: 2, voteCount: 1 },
+    } }));
+    component.ratingSource = 'imdb';
+    component.showImdbRatings = false;
+    component.minRating = 6;
+    component.minVoteCount = 100;
+    component.sortBy = 'rating';
+    component.onRatingSourceChange();
+    expect(imdbService.getRatings).toHaveBeenCalledTimes(1);
+    expect(component.filteredGroups.flatMap(g => g.gaps.map(g => g.id))).toEqual([2, 4, 3]);
+    expect(component.ratingHiddenCount).toBe(1);
+    expect(preferencesService.save).toHaveBeenCalledWith({ ratingSource: 'imdb' });
+    component.showImdbRatings = true;
+    component.onRatingPrefsChange();
+    expect(component.filteredGroups[0].gaps[0].id).toBe(2);
+    expect(imdbService.getRatings).toHaveBeenCalledTimes(1);
+    component.ratingSource = 'tmdb';
+    component.onRatingSourceChange();
+    expect(component.filteredGroups[0].gaps[0].id).toBe(1);
+  });
+
+  it('loads IMDb badges independently of TMDB filtering and sorting without duplicate requests', () => {
+    fixture.detectChanges();
+    component.ratingSource = 'tmdb';
+    component.showImdbRatings = false;
+    component.sortBy = 'rating';
+    component.minRating = 6;
+    component.allGaps = [
+      gap({ id: 1, year: 2000, groupName: 'A', tmdbRating: 9 }),
+      gap({ id: 2, year: 2000, groupName: 'B', tmdbRating: 7 }),
+      gap({ id: 3, year: 2000, groupName: 'C', tmdbRating: 4 }),
+    ];
+    component.applyFilter();
+    expect(imdbService.getRatings).not.toHaveBeenCalled();
+
+    const pending = new Subject<any>();
+    imdbService.getRatings.and.returnValue(pending);
+    component.showImdbRatings = true;
+    component.onRatingPrefsChange();
+    expect(component.imdbRatings.loading).toBeTrue();
+    expect(imdbService.getRatings).toHaveBeenCalledOnceWith([1, 2, 3]);
+    component.applyFilter();
+    expect(imdbService.getRatings).toHaveBeenCalledTimes(1);
+
+    pending.next({ ratings: {
+      '1': { imdbId: 'tt1', aggregateRating: 2, voteCount: 100 },
+      '2': { imdbId: 'tt2', aggregateRating: 8, voteCount: 200 },
+      '3': { imdbId: 'tt3', aggregateRating: 10, voteCount: 300 },
+    } });
+    pending.complete();
+    expect(component.allGaps[0].imdbRating).toBe(2);
+    expect(component.imdbRatings.ratingCount).toBe(3);
+    expect(component.ratingSource).toBe('tmdb');
+    expect(component.filteredGroups.flatMap(g => g.gaps.map(g => g.id))).toEqual([1, 2]);
+    component.showImdbRatings = false;
+    component.onRatingPrefsChange();
+    component.showImdbRatings = true;
+    component.onRatingPrefsChange();
+    expect(imdbService.getRatings).toHaveBeenCalledTimes(1);
+  });
+
+  it('loads IMDb for new results when badges were already enabled with TMDB selected', () => {
+    component.ratingSource = 'tmdb';
+    component.showImdbRatings = true;
+    component.allGaps = [gap({ id: 1, year: 2000 })];
+    component.applyFilter();
+    expect(imdbService.getRatings).toHaveBeenCalledOnceWith([1]);
+    component.allGaps = [gap({ id: 2, year: 2000 })];
+    component.applyFilter();
+    expect(imdbService.getRatings).toHaveBeenCalledTimes(2);
+    expect(imdbService.getRatings.calls.mostRecent().args).toEqual([[2]]);
+  });
+
+  for (const source of ['imdb', 'tmdb'] as const) {
+    it(`shows IMDb failures and retries while keeping the ${source} source selected`, () => {
+      component.showImdbRatings = source === 'tmdb';
+      component.ratingSource = source;
+      component.allGaps = [gap({ id: 1, year: 2000 })];
+      imdbService.getRatings.and.returnValue(throwError(() => new Error('offline')));
+      component.applyFilter();
+      expect(component.imdbRatings.error).toContain('Could not load');
+      component.applyFilter();
+      expect(imdbService.getRatings).toHaveBeenCalledTimes(1);
+      imdbService.getRatings.and.returnValue(of({ ratings: {} }));
+      component.loadImdbRatings(true);
+      expect(component.imdbRatings.loaded).toBeTrue();
+      expect(component.ratingSource).toBe(source);
+    });
+  }
+
+  it('cancels a pending IMDb source load when the results are cleared', () => {
+    const pending = new Subject<any>();
+    imdbService.getRatings.and.returnValue(pending);
+    component.ratingSource = 'imdb';
+    component.allGaps = [gap({ id: 1, year: 2000 })];
+    component.applyFilter();
+    expect(component.imdbRatings.loading).toBeTrue();
+    component.clearResults();
+    pending.next({ ratings: { '1': { aggregateRating: 9, voteCount: 200 } } });
+    expect(component.imdbRatings.loading).toBeFalse();
+    expect(component.imdbRatings.loaded).toBeFalse();
+    expect(component.filteredGroups).toEqual([]);
+  });
+
+  it('migrates a saved popularity sort to vote count using the selected rating source', () => {
+    preferencesService.load.and.returnValue(of({ ...DEFAULT_PREFERENCES, ratingSource: 'imdb', missingFilters: {
+      view: 'all', sortBy: 'popularity', genreFilter: null, showFuture: true,
+    } }));
+    fixture.detectChanges();
+    expect(component.sortBy).toBe('votes');
+    component.allGaps = [
+      gap({ id: 1, groupName: 'A', imdbVotes: 10, tmdbVotes: 500 }),
+      gap({ id: 2, groupName: 'B', imdbVotes: 200, tmdbVotes: 5 }),
+    ];
+    component.onResultFilterChange();
+    expect(component.filteredGroups.map(g => g.name)).toEqual(['B', 'A']);
+    expect(preferencesService.save).toHaveBeenCalledWith({ missingFilters: jasmine.objectContaining({ sortBy: 'votes' }) });
+  });
+
+  it('restores ascending sorting and orders collections by their first visible title', () => {
+    preferencesService.load.and.returnValue(of({ ...DEFAULT_PREFERENCES, missingFilters: {
+      view: 'all', sortBy: 'year', sortDirection: 'asc', genreFilter: null, showFuture: true,
+    } }));
+    fixture.detectChanges();
+    component.allGaps = [
+      gap({ id: 1, groupName: 'A', year: 2000, tmdbRating: 8 }),
+      gap({ id: 2, groupName: 'A', year: 1980, tmdbRating: 2 }),
+      gap({ id: 3, groupName: 'A', year: 2010, tmdbRating: 8 }),
+      gap({ id: 4, groupName: 'B', year: 1990, tmdbRating: 8 }),
+    ];
+    component.minRating = 6;
+    component.applyFilter();
+    expect(component.sortDirection).toBe('asc');
+    expect(component.filteredGroups.map(g => g.name)).toEqual(['B', 'A']);
+    expect(component.filteredGroups[1].gaps.map(g => g.year)).toEqual([2000, 2010]);
+    component.sortDirection = 'desc';
+    component.onResultFilterChange();
+    expect(component.filteredGroups.map(g => g.name)).toEqual(['A', 'B']);
+    expect(component.filteredGroups[0].gaps.map(g => g.year)).toEqual([2010, 2000]);
+    expect(preferencesService.save).toHaveBeenCalledWith({ missingFilters: jasmine.objectContaining({ sortDirection: 'desc' }) });
+  });
+
+  it('applies and remembers changes made through the shared results toolbar', async () => {
+    fixture.detectChanges();
+    component.hasServer = true;
+    component.scanMode = true;
+    component.allGaps = [
+      gap({ id: 1, name: 'Older', year: 2000, groupName: 'A' }),
+      gap({ id: 2, name: 'Newer', year: 2020, groupName: 'B' }),
+    ];
+    component.applyFilter();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const toolbar = fixture.nativeElement.querySelector('app-discovery-header:not([section="intro"])');
+    const sort = toolbar.querySelector('.result-sort');
+    sort.value = 'year';
+    sort.dispatchEvent(new Event('change'));
+    expect(component.sortBy).toBe('year');
+    expect(component.filteredGroups[0].name).toBe('B');
+    expect(preferencesService.save).toHaveBeenCalledWith({ missingFilters: jasmine.objectContaining({ sortBy: 'year' }) });
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const direction = toolbar.querySelector('[aria-label="Sort direction"]');
+    direction.value = 'asc';
+    direction.dispatchEvent(new Event('change'));
+    expect(component.filteredGroups[0].name).toBe('A');
+    expect(preferencesService.save).toHaveBeenCalledWith({ missingFilters: jasmine.objectContaining({ sortDirection: 'asc' }) });
+    const search = toolbar.querySelector('.result-controls input');
+    search.value = 'Older';
+    search.dispatchEvent(new Event('input'));
+    expect(component.filteredGroups.map(g => g.name)).toEqual(['A']);
+    expect(toolbar.querySelector('#recShowFuture')).toBeTruthy();
+  });
+
+  it('hides TMDB throughout Missing TV results even when movie preferences enable it', () => {
+    fixture.detectChanges();
+    component.hasServer = true;
+    component.scanMode = true;
+    component.mediaType = 'tv';
+    component.tvdbEnabled = true;
+    component.ratingSource = 'tmdb';
+    component.showTmdbRatings = true;
+    component.allGaps = [gap({ id: 1, name: 'Show', year: 2020, groupName: 'Franchise', tmdbRating: 8 })];
+    component.applyFilter();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('app-discovery-header:not([section="intro"])')).not.toBeNull();
+    expect(fixture.nativeElement.textContent).not.toContain('TMDB');
+    expect(fixture.nativeElement.querySelector('.rating-chip.tmdb')).toBeNull();
   });
 
   it('offers a first scan, then a quick update after a completed scan with no gaps', fakeAsync(() => {
@@ -530,6 +732,62 @@ describe('RecommendedComponent', () => {
 
     expect(component.filteredGroups.length).toBe(1);
     expect(component.filteredGroups[0].name).toBe('Alien Collection');
+  });
+
+  it('orders collections by their newest visible movie after rating and vote filters', () => {
+    component.allGaps = [
+      gap({ id: 1, groupName: 'Madea', year: '2025', tmdbRating: 5, tmdbVotes: 200 }),
+      gap({ id: 2, groupName: 'Madea', year: '2024', tmdbRating: 7, tmdbVotes: 100 }),
+      gap({ id: 3, groupName: 'Madea', year: '2006', tmdbRating: 7, tmdbVotes: 200 }),
+      gap({ id: 4, groupName: 'Madea', year: '2009', tmdbRating: 7, tmdbVotes: 200 }),
+      gap({ id: 5, groupName: 'Untold', year: 2021, tmdbRating: 7, tmdbVotes: 200 }),
+      gap({ id: 6, groupName: 'Unknown', year: 'N/A' }),
+    ];
+    component.sortBy = 'year';
+    component.minRating = 6;
+    component.minVoteCount = 110;
+    component.applyFilter();
+
+    expect(component.filteredGroups.map(g => g.name)).toEqual(['Untold', 'Madea', 'Unknown']);
+    expect(component.filteredGroups[1].gaps.map(g => g.year)).toEqual(['2009', '2006']);
+    expect(component.ratingHiddenCount).toBe(2);
+    expect(component.allGaps.map(g => g.id)).toEqual([1, 2, 3, 4, 5, 6]);
+    component.renderLimit = 1;
+    expect(component.visibleGroups[0].name).toBe('Untold');
+
+    component.minRating = 0;
+    component.minVoteCount = 0;
+    component.applyFilter();
+    expect(component.filteredGroups[0].name).toBe('Madea');
+    expect(component.ratingHiddenCount).toBe(0);
+  });
+
+  it('orders collections by their newest search match', () => {
+    component.allGaps = [
+      gap({ id: 1, name: 'Hidden', groupName: 'A', year: 2025 }),
+      gap({ id: 2, name: 'Match old', groupName: 'A', year: 2009 }),
+      gap({ id: 3, name: 'Match new', groupName: 'B', year: 2021 }),
+    ];
+    component.sortBy = 'year';
+    component.searchFilter = 'match';
+    component.applyFilter();
+    expect(component.filteredGroups.map(g => g.name)).toEqual(['B', 'A']);
+
+    component.sortBy = 'default';
+    component.applyFilter();
+    expect(component.filteredGroups.map(g => g.name)).toEqual(['A', 'B']);
+  });
+
+  it('orders collections by their highest visible rating after vote filtering', () => {
+    component.allGaps = [
+      gap({ id: 1, groupName: 'A', year: 2000, tmdbRating: 9, tmdbVotes: 10 }),
+      gap({ id: 2, groupName: 'A', year: 2000, tmdbRating: 6, tmdbVotes: 200 }),
+      gap({ id: 3, groupName: 'B', year: 2000, tmdbRating: 8, tmdbVotes: 200 }),
+    ];
+    component.sortBy = 'rating';
+    component.minVoteCount = 110;
+    component.applyFilter();
+    expect(component.filteredGroups.map(g => g.name)).toEqual(['B', 'A']);
   });
 
   it('exportResults should call exportService with filtered gaps', () => {

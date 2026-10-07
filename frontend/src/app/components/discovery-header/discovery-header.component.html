@@ -1,0 +1,135 @@
+<ng-container *ngIf="section === 'intro'; else resultsHeader">
+  <div *ngIf="showMediaToggle" class="btn-group btn-group-sm mb-3" role="group" aria-label="Media type">
+    <button type="button" class="btn" [class.btn-primary]="mediaType === 'movie'" [class.btn-outline-secondary]="mediaType !== 'movie'"
+            [attr.aria-pressed]="mediaType === 'movie'" [disabled]="mediaDisabled" (click)="mediaTypeChange.emit('movie')">Movies</button>
+    <button type="button" class="btn" [class.btn-primary]="mediaType === 'tv'" [class.btn-outline-secondary]="mediaType !== 'tv'"
+            [attr.aria-pressed]="mediaType === 'tv'" [disabled]="mediaDisabled" (click)="mediaTypeChange.emit('tv')">TV Shows</button>
+  </div>
+  <h3 class="regular-text">{{ title }}</h3>
+  <p class="text-muted">{{ description }}</p>
+  <ng-content select="[header-notice]"></ng-content>
+  <ng-container *ngIf="showLibraries">
+    <div *ngIf="!libraries.length" class="alert alert-info">
+      No {{ mediaType === 'tv' ? 'TV' : 'movie' }} libraries found on <strong>{{ serverName }}</strong>.
+    </div>
+    <div *ngIf="libraries.length" class="pref-card mb-3">
+      <div class="library-toolbar d-flex align-items-start flex-wrap gap-3">
+        <fieldset class="library-selector" [disabled]="librariesDisabled">
+          <legend class="text-muted small mb-2">{{ libraryLabel }}</legend>
+          <div class="d-flex align-items-center flex-wrap gap-2">
+            <div *ngFor="let library of libraries" class="form-check form-check-inline m-0">
+              <input class="form-check-input" type="checkbox" [id]="idPrefix + '-lib-' + library.title"
+                     [checked]="selectedLibraries.includes(library.title)"
+                     [disabled]="requireLibrary && selectedLibraries.length === 1 && selectedLibraries.includes(library.title)"
+                     (change)="libraryToggle.emit(library.title)">
+              <label class="form-check-label text-muted small" [for]="idPrefix + '-lib-' + library.title">{{ library.title }}</label>
+            </div>
+          </div>
+          <p *ngIf="!selectedLibraries.length" class="text-muted small mb-0 mt-2">Select at least one library to continue.</p>
+        </fieldset>
+        <ng-content select="[library-actions]"></ng-content>
+      </div>
+      <ng-content select="[library-details]"></ng-content>
+    </div>
+  </ng-container>
+</ng-container>
+
+<ng-template #resultsHeader>
+  <div class="result-toolbar d-flex align-items-center flex-wrap gap-3 mb-3">
+    <button type="button" class="btn btn-sm btn-outline-light" (click)="back.emit()">&larr; {{ backLabel }}</button>
+    <h5 class="regular-text mb-0">{{ title }}</h5>
+    <div *ngIf="!loading" class="btn-group btn-group-sm ms-auto" role="group" aria-label="Owned or missing">
+      <button *ngFor="let option of views" type="button" class="btn"
+              [class.btn-primary]="view === option" [class.btn-outline-secondary]="view !== option"
+              [attr.aria-pressed]="view === option"
+              (click)="viewChange.emit(option)">
+        {{ option === 'all' ? 'All' : option === 'owned' ? 'Owned' : 'Missing' }}
+        ({{ option === 'all' ? allCount : option === 'owned' ? ownedCount : missingCount }})
+      </button>
+    </div>
+    <ng-content select="[toolbar-actions]"></ng-content>
+  </div>
+
+
+  <div *ngIf="loading" class="text-muted small mb-3" role="status">
+    <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>{{ loadingMessage }}
+  </div>
+
+  <div *ngIf="!loading" class="result-controls d-flex align-items-center gap-2 mb-3">
+    <input class="form-control dark-input" type="text" [placeholder]="searchPlaceholder"
+           [attr.aria-label]="searchPlaceholder" [ngModel]="search" (ngModelChange)="searchChange.emit($event)">
+    <select class="form-select dark-select result-sort" aria-label="Sort results"
+            [ngModel]="sortBy" (ngModelChange)="sortByChange.emit($event)">
+      <option *ngFor="let option of sortOptions" [value]="option.value" [disabled]="!sortAvailable(option.value)">{{ sortLabel(option) }}</option>
+    </select>
+    <select *ngIf="sortBy !== 'default' && sortBy !== 'relevance'" class="form-select dark-select result-direction"
+            aria-label="Sort direction" [ngModel]="effectiveSortDirection" (ngModelChange)="sortDirectionChange.emit($event)">
+      <option value="asc">{{ directionLabel('asc') }}</option>
+      <option value="desc">{{ directionLabel('desc') }}</option>
+    </select>
+    <div class="dropdown">
+      <button class="btn btn-outline-secondary dropdown-toggle rating-filter-button" type="button"
+              data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
+        Ratings &amp; filters
+      </button>
+      <div class="dropdown-menu dropdown-menu-dark dropdown-menu-end p-3 rating-filter-menu">
+        <ng-container *ngIf="ratingsAvailable">
+          <label class="form-label small mb-1" [for]="idPrefix + 'RatingSource'">Rating &amp; vote source</label>
+          <select class="form-select form-select-sm dark-select mb-2" [id]="idPrefix + 'RatingSource'"
+                  [ngModel]="effectiveRatingSource" (ngModelChange)="ratingSourceChange.emit($event)">
+            <option *ngIf="mediaType === 'movie' && allowTmdbSource" value="tmdb">TMDB only</option>
+            <option value="imdb">IMDb only</option>
+          </select>
+          <p class="text-muted small mb-3">Rating and vote-count sorting{{ showRatingLimits ? ', and both minimums,' : '' }} use {{ ratingSourceLabel }} only. Missing values sort last.</p>
+        </ng-container>
+        <div *ngIf="ratingsAvailable" class="text-muted small mb-2">Show ratings on cards (display only)</div>
+        <div *ngIf="ratingsAvailable" class="form-check mb-2">
+          <input class="form-check-input" type="checkbox" [id]="idPrefix + 'ShowImdb'"
+                 [ngModel]="showImdbRatings" (ngModelChange)="showImdbRatingsChange.emit($event)">
+          <label class="form-check-label" [for]="idPrefix + 'ShowImdb'">IMDb ratings</label>
+        </div>
+        <div *ngIf="ratingsAvailable && mediaType === 'movie' && allowTmdbRatings" class="form-check mb-3">
+          <input class="form-check-input" type="checkbox" [id]="idPrefix + 'ShowTmdb'"
+                 [ngModel]="showTmdbRatings" (ngModelChange)="showTmdbRatingsChange.emit($event)">
+          <label class="form-check-label" [for]="idPrefix + 'ShowTmdb'">TMDB ratings</label>
+        </div>
+        <ng-container *ngIf="showRatingLimits">
+          <label class="form-label small mb-1" [for]="idPrefix + 'MinRating'">Minimum {{ ratingSourceLabel }} rating (0–10)</label>
+          <input [id]="idPrefix + 'MinRating'" class="form-control form-control-sm dark-input mb-2" type="number"
+                 min="0" max="10" step="0.1" [ngModel]="minRating" (ngModelChange)="changeMinRating($event)">
+          <label class="form-label small mb-1" [for]="idPrefix + 'MinVotes'">Minimum {{ ratingSourceLabel }} votes</label>
+          <input [id]="idPrefix + 'MinVotes'" class="form-control form-control-sm dark-input" type="number"
+                 min="0" step="1" [ngModel]="minVoteCount" (ngModelChange)="changeMinVotes($event)">
+        </ng-container>
+        <p *ngIf="ratingHelp" class="text-muted small mt-2 mb-0">{{ ratingHelp }}</p>
+        <ng-content select="[toolbar-filters]"></ng-content>
+      </div>
+    </div>
+    <div *ngIf="showLinkProvider" class="link-preference d-flex align-items-center gap-2">
+      <label [for]="idPrefix + 'LinkProvider'" class="text-muted small mb-0">Open in</label>
+      <select [id]="idPrefix + 'LinkProvider'" class="form-select dark-select"
+              [ngModel]="linkProvider" (ngModelChange)="linkProviderChange.emit($event)">
+        <option *ngFor="let option of visibleLinkOptions" [value]="option.value">{{ option.label }}</option>
+      </select>
+    </div>
+  </div>
+
+  <div *ngIf="!loading && (showImdbRatings || effectiveRatingSource === 'imdb') && allCount && imdbState" class="imdb-status text-muted small d-flex align-items-center flex-wrap gap-2 mb-3" role="status">
+    <ng-container *ngIf="imdbState.loading">
+      <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+      Loading IMDb ratings… You can keep browsing.
+    </ng-container>
+    <ng-container *ngIf="!imdbState.loading">
+      <span *ngIf="imdbState.error" class="text-warning">{{ imdbState.error }}</span>
+      <ng-container *ngIf="!imdbState.error && imdbState.loaded">
+        <span *ngIf="imdbState.ratingCount">IMDb ratings available for {{ imdbState.ratingCount }} of {{ allCount }} titles.</span>
+        <span *ngIf="!imdbState.ratingCount">No IMDb ratings were found.</span>
+      </ng-container>
+      <ng-container *ngIf="imdbState.error || (imdbState.loaded && imdbState.ratingCount < allCount)">
+        <a [routerLink]="['/settings/imdb']">IMDb settings</a>
+        <button type="button" class="btn btn-sm btn-outline-secondary" (click)="retryImdb.emit()">Retry IMDb ratings</button>
+      </ng-container>
+    </ng-container>
+  </div>
+
+</ng-template>

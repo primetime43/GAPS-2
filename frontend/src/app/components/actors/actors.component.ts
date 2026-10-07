@@ -9,7 +9,7 @@ import { ExportService, ExportFormat } from '../../services/export.service';
 import { RadarrService } from '../../services/radarr.service';
 import { SonarrService } from '../../services/sonarr.service';
 import { TvdbService } from '../../services/tvdb.service';
-import { GapViewService } from '../../services/gap-view.service';
+import { GapViewService, RatingSource, SortDirection } from '../../services/gap-view.service';
 import { ImdbRatingsLoader } from '../../services/imdb-ratings-loader';
 import { TmdbService, TmdbGenre } from '../../services/tmdb/tmdb.service';
 import { Gap } from '../../models/recommendation.model';
@@ -97,6 +97,7 @@ export class ActorsComponent implements OnInit, OnDestroy {
   tvLinkProvider: 'tvdb' | 'imdb' = 'tvdb';
 
   // Movie IMDb ratings load separately; TV ratings arrive with the credits.
+  ratingSource: RatingSource = 'tmdb';
   showImdbRatings = false;
   showTmdbRatings = true;
   readonly imdbRatings = new ImdbRatingsLoader(this.gapView);
@@ -105,7 +106,8 @@ export class ActorsComponent implements OnInit, OnDestroy {
   actorDetails: PersonDetails | null = null;
 
   // Results sort + genre filter (reuse fields already on each gap).
-  sortBy: 'default' | 'rating' | 'popularity' | 'year' | 'name' = 'default';
+  sortBy: 'default' | 'rating' | 'votes' | 'year' | 'name' = 'default';
+  sortDirection?: SortDirection;
   genreFilter: number | null = null;
   genres: TmdbGenre[] = [];
   availableGenres: TmdbGenre[] = [];
@@ -150,6 +152,7 @@ export class ActorsComponent implements OnInit, OnDestroy {
         this.tvLinkProvider = prefs.actorTvLinkProvider || 'tvdb';
         this.showImdbRatings = !!prefs.showImdbRatings;
         this.showTmdbRatings = prefs.showTmdbRatings !== false;
+        this.ratingSource = prefs.ratingSource === 'imdb' ? 'imdb' : 'tmdb';
       }
       this.detectActiveServer(prefs);
     });
@@ -314,6 +317,13 @@ export class ActorsComponent implements OnInit, OnDestroy {
   }
 
   selectActor(actor: PersonResult): void {
+    this.radarrRootFolderPath = '';
+    this.sonarrRootFolderPath = '';
+    this.loadActorGaps(actor);
+  }
+
+  /** Refresh the current results without changing the chosen download destination. */
+  private loadActorGaps(actor: PersonResult): void {
     this.gapsChanged$.next();
     this.imdbRatings.reset();
     this.searching = false;
@@ -328,10 +338,8 @@ export class ActorsComponent implements OnInit, OnDestroy {
 
     const libs = this.selectedLibraries.length ? this.selectedLibraries : this.libraries.map(l => l.title);
     this.downloaderLibraries = [...libs];
-    this.radarrRootFolderPath = '';
-    this.sonarrRootFolderPath = '';
     // TV gaps bundle IMDb ratings in the response; movies load them separately.
-    const wantTvImdb = this.mediaType === 'tv' && this.showImdbRatings;
+    const wantTvImdb = this.mediaType === 'tv' && (this.showImdbRatings || this.sortBy === 'rating' || this.sortBy === 'votes');
     this.actorService.getActorGaps(actor.id, libs, this.activeSource, true, this.showMinor, this.mediaType, wantTvImdb)
       .pipe(takeUntil(this.gapsChanged$), takeUntil(this.destroy$)).subscribe({
       next: (res) => {
@@ -432,6 +440,15 @@ export class ActorsComponent implements OnInit, OnDestroy {
   /**
    * Recompute links and remember independent movie and TV provider choices.
    */
+  readonly movieLinkOptions = [{ value: 'tmdb', label: 'TMDB' }, { value: 'imdb', label: 'IMDb' }];
+  readonly tvLinkOptions = [{ value: 'tvdb', label: 'TheTVDB' }, { value: 'imdb', label: 'IMDb' }];
+
+  setResultLinkProvider(provider: 'tmdb' | 'imdb' | 'tvdb'): void {
+    if (this.mediaType === 'tv' && provider !== 'tmdb') this.tvLinkProvider = provider;
+    if (this.mediaType === 'movie' && provider !== 'tvdb') this.externalLinkProvider = provider;
+    this.onLinkProviderChange();
+  }
+
   onLinkProviderChange(): void {
     for (const gap of this.allGaps) {
       gap.externalUrl = this.mediaType === 'tv'
@@ -445,6 +462,23 @@ export class ActorsComponent implements OnInit, OnDestroy {
 
   // -- Filters --
 
+  get effectiveRatingSource(): RatingSource { return this.mediaType === 'tv' ? 'imdb' : this.ratingSource; }
+
+  onRatingSourceChange(source: RatingSource): void {
+    this.ratingSource = source;
+    this.preferencesService.save({ ratingSource: source }).subscribe({ error: () => {} });
+    this.applyFilter();
+    this.loadImdbRatings();
+  }
+
+  onSortChange(): void {
+    if (this.mediaType === 'tv' && this.selectedActor && (this.sortBy === 'rating' || this.sortBy === 'votes')) {
+      this.loadActorGaps(this.selectedActor);
+    } else {
+      this.applyFilter();
+    }
+  }
+
   onFilterChange(): void { this.applyFilter(); }
 
   /** Persist the per-provider rating toggles so they stick as the new default. */
@@ -454,14 +488,14 @@ export class ActorsComponent implements OnInit, OnDestroy {
       : { showImdbRatings: this.showImdbRatings, showTmdbRatings: this.showTmdbRatings }
     ).subscribe({ next: () => {}, error: () => {} });
     if (this.mediaType === 'tv' && this.showImdbRatings && this.selectedActor) {
-      this.selectActor(this.selectedActor);
+      this.loadActorGaps(this.selectedActor);
     }
     this.applyFilter();
     this.loadImdbRatings();
   }
 
   loadImdbRatings(retry = false): void {
-    if (this.mediaType !== 'movie' || !this.showImdbRatings) return;
+    if (this.mediaType !== 'movie' || (!this.showImdbRatings && this.ratingSource !== 'imdb')) return;
     this.imdbRatings.load(this.allGaps, () => {
       this.applyFilter();
     }, retry);
@@ -585,9 +619,7 @@ export class ActorsComponent implements OnInit, OnDestroy {
     if (this.genreFilter != null) {
       filtered = filtered.filter(g => (g.genreIds || []).includes(this.genreFilter as number));
     }
-    filtered = this.sortBy === 'rating' && !this.showImdbRatings
-      ? [...filtered].sort((a, b) => (b.tmdbRating ?? 0) - (a.tmdbRating ?? 0))
-      : this.gapView.sortGaps(filtered, this.sortBy);
+    filtered = this.gapView.sortGaps(filtered, this.sortBy, this.effectiveRatingSource, this.sortDirection);
 
     const groups = new Map<string, Gap[]>();
     for (const gap of filtered) {

@@ -63,28 +63,6 @@
   font-size: 12px;
 }
 
-.result-controls {
-  flex-wrap: wrap;
-
-  > input {
-    flex: 1 1 220px;
-    width: auto;
-  }
-}
-
-.result-sort {
-  width: 190px;
-}
-
-.rating-filter-button,
-.link-preference {
-  white-space: nowrap;
-}
-
-.link-preference select {
-  width: 110px;
-}
-
 .rating-chip {
   text-decoration: none;
   min-height: 24px;
@@ -92,32 +70,5 @@
   &:hover,
   &:focus-visible {
     text-decoration: underline;
-  }
-}
-
-.rating-filter-menu {
-  min-width: 260px;
-}
-
-@media (max-width: 767px) {
-  .result-toolbar,
-  .result-controls {
-    align-items: stretch !important;
-    flex-direction: column;
-  }
-
-  .result-toolbar .btn-group {
-    margin-left: 0 !important;
-  }
-
-  .result-sort,
-  .result-controls > input {
-    width: 100%;
-    flex: none;
-  }
-
-  .rating-filter-button,
-  .result-controls .dropdown {
-    width: 100%;
   }
 }

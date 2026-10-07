@@ -122,14 +122,12 @@ def _tv_gaps(tmdb, service, names, person_id, show_existing, include_minor,
 
     owned_shows = []
     owned_ids = set()
-    seen_keys = set()
     for name in names:
         library_data = cache.get(name, {})
         for show in library_data.get('shows', []):
-            key = show.get('tmdbId') or f"{show.get('name')}|{show.get('year')}"
-            if key not in seen_keys:
-                seen_keys.add(key)
-                owned_shows.append(show)
+            # Keep provider IDs from every selected library, including records
+            # with the same title/year but different or additional IDs.
+            owned_shows.append(show)
             if show.get('tmdbId'):
                 owned_ids.add(show['tmdbId'])
 
@@ -142,15 +140,6 @@ def _tv_gaps(tmdb, service, names, person_id, show_existing, include_minor,
     )
     if error or not gaps:
         return gaps, error
-
-    # Resolve TheTVDB + IMDb ids concurrently and persist newly-resolved ids (the
-    # batch helper owns the concurrency cap + persist, shared with the movie path).
-    # TheTVDB ids power Sonarr / ignore; IMDb ids power links + the ratings below.
-    tmdb_ids = [g['tmdbId'] for g in gaps]
-    externals = tmdb.get_tv_external_ids_batch(tmdb_ids)
-    for gap, ext in zip(gaps, externals):
-        gap['tvdbId'] = ext.get('tvdbId')
-        gap['imdbId'] = ext.get('imdbId')
 
     # Attach IMDb ratings from the local dataset only when the client asked for
     # them (so we don't trigger a dataset build for users who don't want IMDb).
