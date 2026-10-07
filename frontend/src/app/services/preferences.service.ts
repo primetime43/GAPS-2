@@ -23,8 +23,6 @@ export interface UserPreferences {
   hideOwnedByDefault: boolean;
   hideFutureReleasesByDefault: boolean;
   language: string;
-  port: number;
-  autoOpenBrowser: boolean;
   posterPrefetch: boolean;
   imageCacheEnabled: boolean;
   mediaServerTimeout: number;
@@ -51,8 +49,6 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   hideOwnedByDefault: false,
   hideFutureReleasesByDefault: false,
   language: 'en',
-  port: 4277,
-  autoOpenBrowser: true,
   posterPrefetch: false,
   imageCacheEnabled: false,
   mediaServerTimeout: 30,

@@ -207,42 +207,6 @@
 
     </div><!-- /Performance & Connections body -->
 
-    <!-- ============ Application (Standalone App) ============ -->
-    <div class="pref-section" (click)="toggleSection('application')" (keydown.enter)="toggleSection('application')"
-         role="button" tabindex="0" [attr.aria-expanded]="!isCollapsed('application')">
-      <div class="pref-section-heading">
-        <h4 class="pref-section-title">Application (Standalone App)</h4>
-        <span class="pref-section-chevron" [class.collapsed]="isCollapsed('application')">▾</span>
-      </div>
-      <p class="pref-section-desc">Settings for the bundled Windows executable. These don't apply during development.</p>
-    </div>
-
-    <div class="pref-section-body" *ngIf="!isCollapsed('application')">
-
-      <!-- Port Number -->
-      <div class="pref-row">
-        <div class="pref-row-text">
-          <h5>Port Number</h5>
-          <p class="small">Server port for production/exe mode (requires restart to take effect). Does not apply during development.</p>
-        </div>
-        <div class="pref-row-control">
-          <input type="number" class="form-control dark-input pref-num" [(ngModel)]="prefs.port" min="1024" max="65535">
-        </div>
-      </div>
-
-      <!-- Auto-Open Browser -->
-      <div class="pref-row">
-        <div class="pref-row-text">
-          <h5>Auto-Open Browser</h5>
-          <p class="small">Automatically open the browser when launching the standalone exe.</p>
-        </div>
-        <div class="pref-row-control">
-          <input type="checkbox" class="pref-toggle" [(ngModel)]="prefs.autoOpenBrowser">
-        </div>
-      </div>
-
-    </div><!-- /Application body -->
-
     <!-- Save Button -->
     <div class="mt-4 mb-4">
       <button class="btn btn-success" (click)="save()" [disabled]="saving">

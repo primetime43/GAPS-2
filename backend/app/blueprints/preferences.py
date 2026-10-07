@@ -12,8 +12,6 @@ DEFAULTS = {
     'hideOwnedByDefault': False,
     'hideFutureReleasesByDefault': False,
     'language': 'en',
-    'port': 4277,
-    'autoOpenBrowser': True,
     'posterPrefetch': False,
     'imageCacheEnabled': False,
     'mediaServerTimeout': 30,
@@ -42,9 +40,17 @@ DEFAULTS = {
 }
 
 
+def _saved_preferences():
+    saved = dict(config_store.get('preferences', {}))
+    # Retired executable settings must not reappear in API responses or saves.
+    saved.pop('port', None)
+    saved.pop('autoOpenBrowser', None)
+    return saved
+
+
 @preferences_bp.route('', methods=['GET'])
 def get_preferences():
-    saved = config_store.get('preferences', {})
+    saved = _saved_preferences()
     # Migrate the legacy IMDb integration toggle (config_store 'imdb'.enabled),
     # which now lives as the showImdbRatings preference.
     if 'showImdbRatings' not in saved:
@@ -57,7 +63,7 @@ def get_preferences():
 def save_preferences():
     data = request.get_json() or {}
     # Only save known keys
-    saved = config_store.get('preferences', {})
+    saved = _saved_preferences()
     for key in DEFAULTS:
         if key in data:
             saved[key] = data[key]
