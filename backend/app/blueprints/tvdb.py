@@ -77,11 +77,20 @@ def get_gaps_for_show():
     library_names = request.args.getlist('libraryNames')
     source = request.args.get('source', default='plex', type=str)
     show_existing = request.args.get('showExisting', 'false').lower() == 'true'
+    list_id = request.args.get('listId', type=int)
 
-    if not series_id:
-        return jsonify(error='tvdbId is required'), 400
+    if not series_id or series_id < 1:
+        return jsonify(error='A positive tvdbId is required'), 400
+    if 'listId' in request.args and (list_id is None or list_id < 1):
+        return jsonify(error='listId must be a positive integer'), 400
     if not current_app.tvdb_service.is_configured:
         return jsonify(error='No TheTVDB API key configured'), 400
+
+    choices, error = current_app.tvdb_service.get_lists_for_show(series_id)
+    if error:
+        return jsonify(error=error), 502
+    if list_id is not None and not any(lst['id'] == list_id for lst in choices['customLists']):
+        return jsonify(error='Choose one of the available custom lists for this show'), 400
 
     service = _get_service(source)
     names = library_names if library_names else ([library_name] if library_name else [])
@@ -92,10 +101,11 @@ def get_gaps_for_show():
     for name in names:
         owned_ids.update(cache.get(name, {}).get('tvdbIds', []))
 
-    gaps, error = current_app.tvdb_service.find_gaps_for_show(series_id, owned_ids, show_existing)
+    kwargs = {'list_id': list_id} if list_id is not None else {}
+    gaps, error = current_app.tvdb_service.find_gaps_for_show(series_id, owned_ids, show_existing, **kwargs)
     if error:
         return jsonify(error=error), 500
-    return jsonify(gaps=gaps)
+    return jsonify(gaps=gaps, **choices)
 
 
 @tvdb_bp.route('/scan', methods=['POST'])

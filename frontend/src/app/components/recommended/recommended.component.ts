@@ -6,7 +6,7 @@ import { of } from 'rxjs';
 import { ActiveServerService } from '../../services/active-server.service';
 import { LibraryService } from '../../services/library.service';
 import { RecommendationService, ScanProgress } from '../../services/recommendation.service';
-import { TvdbService, TvdbScanProgress } from '../../services/tvdb.service';
+import { TvdbService, TvdbScanProgress, TvdbCustomList } from '../../services/tvdb.service';
 import { Gap } from '../../models/recommendation.model';
 import { MediaLibrary } from '../../models/media-server.model';
 import { PreferencesService, MissingFilters } from '../../services/preferences.service';
@@ -66,6 +66,13 @@ interface DownloaderDef {
 export class RecommendedComponent implements OnInit, OnDestroy {
   // Movies vs TV shows — swaps the data source for the whole view.
   mediaType: MediaType = 'movie';
+  customTvLists: TvdbCustomList[] = [];
+  selectedTvListId: number | null = null;
+  hasOfficialTvList: boolean | null = null;
+
+  get selectedTvList(): TvdbCustomList | undefined {
+    return this.customTvLists.find(list => list.id === this.selectedTvListId);
+  }
 
   libraries: MediaLibrary[] = [];
   // The libraries to browse + scan + count as owned (single source of truth).
@@ -320,13 +327,18 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   private resultsChanged$ = new Subject<void>();
   private mediaChanged$ = new Subject<void>();
 
-  private cancelResultRequests(): void {
+  private cancelResultRequests(resetTvLists = true): void {
     this.imdbRatings.reset();
     this.imdbGaps = null;
     this.cancelPosterPrefetch();
     this.resultsChanged$.next();
     this.stopPolling();
     this.loadingGaps = false;
+    if (resetTvLists) {
+      this.customTvLists = [];
+      this.selectedTvListId = null;
+      this.hasOfficialTvList = null;
+    }
   }
 
   // Reopening a saved scan (from the Scan History page): the id to load once the
@@ -1005,9 +1017,20 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   }
 
   recheckWithLibraries(): void {
-    this.cancelResultRequests();
+    this.cancelResultRequests(false);
     this.loadingGaps = true;
     this.errorMessage = '';
+    this.fetchGapsForSelectedItem();
+  }
+
+  selectCustomTvList(listId: number | null): void {
+    this.cancelResultRequests(false);
+    this.selectedTvListId = listId;
+    this.allGaps = [];
+    this.applyFilter();
+    this.errorMessage = '';
+    if (listId === null) return;
+    this.loadingGaps = true;
     this.fetchGapsForSelectedItem();
   }
 
@@ -1025,16 +1048,18 @@ export class RecommendedComponent implements OnInit, OnDestroy {
         return;
       }
       const libs = [...this.selectedLibraries];
-      this.tvdb.getGapsForShow(tvdbId, libs, true, this.activeSource)
+      this.tvdb.getShowGaps(tvdbId, libs, true, this.activeSource, this.selectedTvListId)
         .pipe(takeUntil(this.resultsChanged$), takeUntil(this.destroy$)).subscribe({
-        next: (gaps) => {
-          this.allGaps = this.normalizeGaps(gaps);
+        next: (result) => {
+          this.customTvLists = result.customLists;
+          this.hasOfficialTvList = result.hasOfficialList;
+          this.allGaps = this.normalizeGaps(result.gaps);
           if (this.allGaps.length > 0 && this.allGaps.every(g => g.owned)) this.view = 'all';
           this.applyFilter();
           this.loadingGaps = false;
         },
-        error: () => {
-          this.errorMessage = 'Failed to find franchise gaps.';
+        error: (err) => {
+          this.errorMessage = err.error?.error || 'Failed to find franchise gaps.';
           this.loadingGaps = false;
         }
       });

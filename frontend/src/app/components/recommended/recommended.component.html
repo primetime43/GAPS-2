@@ -173,6 +173,21 @@
       </div>
     </div>
 
+    <div *ngIf="mediaType === 'tv' && selectedItem && hasOfficialTvList === false" class="mt-4 mb-3">
+      <p class="text-muted mb-2">No official franchise list exists for {{ selectedItem.name }}.</p>
+      <ng-container *ngIf="customTvLists.length; else noCustomLists">
+        <label for="custom-tv-list" class="form-label">Custom TheTVDB list</label>
+        <select id="custom-tv-list" class="form-select dark-select" [ngModel]="selectedTvListId"
+          (ngModelChange)="selectCustomTvList($event)">
+          <option [ngValue]="null">Choose a list to find missing shows...</option>
+          <option *ngFor="let list of customTvLists" [ngValue]="list.id">{{ list.name }} (#{{ list.id }})</option>
+        </select>
+        <p class="text-muted small mt-2 mb-0">Up to 25 community lists, ranked by TheTVDB popularity. Choose one to check its TV shows against your selected libraries. Movies in a list are excluded.</p>
+        <a *ngIf="selectedTvList as list" [href]="list.url" target="_blank" rel="noopener noreferrer" class="d-inline-block mt-2">View list on TheTVDB &nearr;</a>
+      </ng-container>
+      <ng-template #noCustomLists><p class="text-muted">No custom lists are available for this show on TheTVDB.</p></ng-template>
+    </div>
+
     <!-- Loading gaps -->
     <div *ngIf="loadingGaps" class="mt-4">
       <div *ngIf="!scanMode" class="text-center">
@@ -403,7 +418,8 @@
       <button class="btn btn-sm btn-outline-light mb-2" (click)="browseLibrary()">&larr; Your Library</button>
       <p class="text-muted">
         <span *ngIf="selectedItem && mediaType === 'movie'">This movie doesn't belong to a collection, or your collection is complete!</span>
-        <span *ngIf="selectedItem && mediaType === 'tv'">This show isn't in a TheTVDB franchise, or your franchise is complete!</span>
+        <span *ngIf="selectedItem && mediaType === 'tv' && hasOfficialTvList !== false">This show isn't in a TheTVDB franchise, or your franchise is complete!</span>
+        <span *ngIf="selectedItem && mediaType === 'tv' && selectedTvListId">The selected custom list has no additional TV shows to display.</span>
         <span *ngIf="scanMode">No gaps found for the selected libraries with your current scan settings.</span>
       </p>
     </div>

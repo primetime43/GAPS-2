@@ -109,6 +109,10 @@ See the [development guide](docs/development.md) for prerequisites and local set
 6. *(Optional)* Configure **Radarr** and/or **Sonarr** in Settings to send missing titles straight to your downloaders
 7. *(Optional)* Configure **scheduled scans** (separate cadences for movies and TV) and **notifications** in Settings
 
+### Custom TV franchise lists
+
+In **Missing > TV Shows**, click a show in your library. If TheTVDB has no official franchise list for it, choose from up to 25 custom lists associated with the show, ranked by TheTVDB popularity. Selecting a list finds its missing TV shows across your selected libraries; **View list on TheTVDB** lets you inspect the list. Movies in mixed lists are excluded. The selection applies to that lookup and resets when you leave it. Library and scheduled scans continue to use official franchise lists.
+
 ### Radarr destinations
 
 In **Settings > Radarr > Library root folders**, map each movie library to the corresponding root folder configured in Radarr. Choose the path as Radarr sees it, even if Plex uses a different Docker mount path. Mappings are saved separately for each media-server type, server name, and library name; update them if you rename a server or library.

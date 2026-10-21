@@ -70,7 +70,7 @@ describe('RecommendedComponent', () => {
       'addIgnored', 'removeIgnored', 'addIgnoredBulk', 'removeIgnoredBulk',
     ]);
     tvdbService = jasmine.createSpyObj('TvdbService', [
-      'getConfig', 'getGapsForShow', 'startScan', 'getScanProgress', 'cancelScan', 'getIgnored',
+      'getConfig', 'getShowGaps', 'startScan', 'getScanProgress', 'cancelScan', 'getIgnored',
       'addIgnored', 'removeIgnored', 'addIgnoredBulk', 'removeIgnoredBulk',
     ]);
     preferencesService = jasmine.createSpyObj('PreferencesService', ['load', 'save']);
@@ -945,9 +945,99 @@ describe('RecommendedComponent', () => {
 
   it('links saved TV titles without slugs to their TVDB ID', () => {
     component.mediaType = 'tv';
-    tvdbService.getGapsForShow.and.returnValue(of([{ tvdbId: 123, name: 'TV title' }] as any));
+    tvdbService.getShowGaps.and.returnValue(of({ gaps: [{ tvdbId: 123, name: 'TV title' }], hasOfficialList: true, customLists: [] } as any));
     component.selectItem({ tvdbId: 123, name: 'TV title' } as any);
     expect(component.allGaps[0].externalUrl).toBe('https://thetvdb.com/dereferrer/series/123');
+  });
+
+  it('offers custom lists and checks the selected list using the current library context', () => {
+    component.mediaType = 'tv';
+    component.selectedLibraries = ['Anime', 'TV'];
+    component.activeSource = 'jellyfin';
+    const lists = [{ id: 17543, name: 'Digimon', url: 'https://thetvdb.com/lists/17543' }];
+    tvdbService.getShowGaps.and.returnValue(of({ gaps: [], hasOfficialList: false, customLists: lists }));
+    component.selectItem({ tvdbId: 72241, name: 'Digimon', year: 1999, posterUrl: null });
+    expect(component.customTvLists).toEqual(lists);
+    expect(component.selectedTvListId).toBeNull();
+    expect(tvdbService.getShowGaps).toHaveBeenCalledWith(72241, ['Anime', 'TV'], true, 'jellyfin', null);
+    tvdbService.getShowGaps.and.returnValue(of({ gaps: [{ tvdbId: 2, name: 'Digimon Tamers', franchiseName: 'Digimon', owned: false }], hasOfficialList: false, customLists: lists } as any));
+    component.selectCustomTvList(17543);
+    expect(tvdbService.getShowGaps).toHaveBeenCalledWith(72241, ['Anime', 'TV'], true, 'jellyfin', 17543);
+    expect(component.allGaps[0].name).toBe('Digimon Tamers');
+    expect(component.selectedTvList?.url).toBe(lists[0].url);
+    component.selectCustomTvList(null);
+    expect(component.allGaps).toEqual([]);
+    expect(component.loadingGaps).toBeFalse();
+  });
+
+  it('cancels custom-list lookups and clears the selection when switching shows or media', () => {
+    component.mediaType = 'tv';
+    tvdbService.getShowGaps.and.returnValue(of({ gaps: [], hasOfficialList: false, customLists: [{ id: 1, name: 'Custom', url: '' }] }));
+    component.selectItem({ tvdbId: 1, name: 'First', year: 2000, posterUrl: null });
+    const pending = new Subject<any>();
+    tvdbService.getShowGaps.and.returnValue(pending);
+    component.selectCustomTvList(1);
+    tvdbService.getShowGaps.and.returnValue(of({ gaps: [], hasOfficialList: true, customLists: [] }));
+    component.selectItem({ tvdbId: 2, name: 'Second', year: 2001, posterUrl: null });
+    pending.next({ gaps: [{ tvdbId: 99 }], hasOfficialList: false, customLists: [{ id: 1 }] });
+    expect(component.allGaps).toEqual([]);
+    expect(component.customTvLists).toEqual([]);
+    expect(component.selectedTvListId).toBeNull();
+    expect(component.hasOfficialTvList).toBeTrue();
+    component.setMediaType('movie');
+    expect(component.hasOfficialTvList).toBeNull();
+  });
+
+  it('keeps the custom-list selector available after a lookup failure', () => {
+    component.mediaType = 'tv';
+    const lists = [{ id: 1, name: 'Custom', url: '' }];
+    tvdbService.getShowGaps.and.returnValue(of({ gaps: [], hasOfficialList: false, customLists: lists }));
+    component.selectItem({ tvdbId: 1, name: 'Show', year: 2000, posterUrl: null });
+    tvdbService.getShowGaps.and.returnValue(throwError(() => ({ error: { error: 'Could not load the selected custom list from TheTVDB' } })));
+    component.selectCustomTvList(1);
+    expect(component.customTvLists).toEqual(lists);
+    expect(component.loadingGaps).toBeFalse();
+    expect(component.errorMessage).toContain('Could not load the selected custom list');
+  });
+
+  it('renders custom choices before there are any gaps and handles dropdown selection', () => {
+    fixture.detectChanges();
+    component.loading = false;
+    component.hasServer = true;
+    component.mediaType = 'tv';
+    const lists = [{ id: 17543, name: 'Digimon', url: 'https://thetvdb.com/lists/17543' }];
+    tvdbService.getShowGaps.and.returnValue(of({ gaps: [], hasOfficialList: false, customLists: lists }));
+    component.selectItem({ tvdbId: 72241, name: 'Digimon', year: 1999, posterUrl: null });
+    fixture.detectChanges();
+    const select: HTMLSelectElement = fixture.nativeElement.querySelector('#custom-tv-list');
+    expect(select).toBeTruthy();
+    expect(select.options.length).toBe(2);
+    expect(select.options[1].text).toContain('Digimon (#17543)');
+    select.value = select.options[1].value;
+    select.dispatchEvent(new Event('change'));
+    fixture.detectChanges();
+    expect(tvdbService.getShowGaps).toHaveBeenCalledWith(72241, [], true, 'plex', 17543);
+    const link: HTMLAnchorElement = fixture.nativeElement.querySelector('a[href="https://thetvdb.com/lists/17543"]');
+    expect(link.target).toBe('_blank');
+    expect(fixture.nativeElement.textContent).toContain('no additional TV shows');
+  });
+
+  it('distinguishes no custom lists from an official franchise with no gaps', () => {
+    fixture.detectChanges();
+    component.loading = false;
+    component.hasServer = true;
+    component.mediaType = 'tv';
+    tvdbService.getShowGaps.and.returnValue(of({ gaps: [], hasOfficialList: false, customLists: [] }));
+    component.selectItem({ tvdbId: 1, name: 'Show', year: 2000, posterUrl: null });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('#custom-tv-list')).toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('No custom lists are available');
+    tvdbService.getShowGaps.and.returnValue(of({ gaps: [], hasOfficialList: true, customLists: [] }));
+    component.selectItem({ tvdbId: 2, name: 'Official', year: 2000, posterUrl: null });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('#custom-tv-list')).toBeNull();
+    expect(fixture.nativeElement.textContent).not.toContain('No custom lists are available');
+    expect(fixture.nativeElement.textContent).toContain('franchise is complete');
   });
 
   it('restores visible results when an ignore request fails', () => {
