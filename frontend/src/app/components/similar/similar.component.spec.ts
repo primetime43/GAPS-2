@@ -4,13 +4,11 @@ import { FormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 import { of, Subject, throwError } from 'rxjs';
 import { SimilarComponent } from './similar.component';
-import { RadarrDestinationComponent } from '../radarr-destination/radarr-destination.component';
 import { ActiveServerService, ActiveServer } from '../../services/active-server.service';
 import { LibraryService } from '../../services/library.service';
 import { PreferencesService, DEFAULT_PREFERENCES } from '../../services/preferences.service';
 import { RecommendationService } from '../../services/recommendation.service';
 import { SonarrService } from '../../services/sonarr.service';
-import { SonarrDestinationComponent } from '../sonarr-destination/sonarr-destination.component';
 import { Show } from '../../models/show.model';
 import { RadarrService } from '../../services/radarr.service';
 import { GapViewService } from '../../services/gap-view.service';
@@ -92,7 +90,7 @@ describe('SimilarComponent', () => {
     recommendationService.getSimilarMovies.and.returnValue(of([]));
 
     await TestBed.configureTestingModule({
-      imports: [SonarrDestinationComponent, DiscoveryHeaderComponent, FormsModule, RouterTestingModule, RadarrDestinationComponent],
+      imports: [DiscoveryHeaderComponent, FormsModule, RouterTestingModule],
       declarations: [SimilarComponent, CompactNumberPipe],
       providers: [
         { provide: ActiveServerService, useValue: activeServerService },
@@ -439,16 +437,13 @@ describe('SimilarComponent', () => {
     fixture.detectChanges();
     component.selectMovie(seed);
     component.radarrEnabled = true;
-    component.radarrRootFolderPath = '/movies';
     component.selectedLibraries = ['Other'];
     const radarr = TestBed.inject(RadarrService) as jasmine.SpyObj<RadarrService>;
     radarr.addMovie.and.returnValue(of({ message: 'Added' }));
     component.sendToRadarr({ id: 123, name: 'Test', year: 2020, owned: false, radarrEligible: true } as Gap, new Event('click'));
     expect(radarr.addMovie).toHaveBeenCalledWith(123, 'Test', 2020, {
-      source: 'plex', server: 'Test Plex', library_names: ['Movies'], root_folder_path: '/movies',
+      source: 'plex', server: 'Test Plex', library_names: ['Movies'],
     });
-    component.selectMovie(seed);
-    expect(component.radarrRootFolderPath).toBe('');
   });
 
   it('starts with configured quality thresholds when that preference is enabled', fakeAsync(() => {
@@ -548,7 +543,7 @@ describe('SimilarComponent', () => {
     expect(component.effectiveLinkProvider).toBe('tmdb');
   });
 
-  it('sends TVDB IDs to Sonarr with the selected libraries and destination, and blocks duplicates', () => {
+  it('sends TVDB IDs to Sonarr with the selected libraries for automatic routing, and blocks duplicates', () => {
     sonarrService.getConfig.and.returnValue(of({ enabled: true } as any));
     recommendationService.getSimilarShows.and.returnValue(of([
       { tmdbId: 10, tvdbId: 20, name: 'Mapped', year: '2020' },
@@ -557,14 +552,13 @@ describe('SimilarComponent', () => {
     fixture.detectChanges();
     component.setMediaType('tv');
     component.selectMovie(tvSeed);
-    component.sonarrRootFolderPath = '/tv';
     fixture.detectChanges();
     const buttons = fixture.nativeElement.querySelectorAll('.rec-card button');
     expect(buttons[1].disabled).toBeTrue();
     expect(buttons[1].textContent).toContain('No TVDB match');
     buttons[0].click();
     expect(sonarrService.addSeries).toHaveBeenCalledOnceWith(20, 'Mapped', {
-      source: 'plex', server: 'Test Plex', library_names: ['TV'], root_folder_path: '/tv',
+      source: 'plex', server: 'Test Plex', library_names: ['TV'],
     });
     expect(component.sonarrLabel(component.allSimilar[0])).toBe('In Sonarr');
     component.sendToSonarr(component.allSimilar[0], new Event('click'));
@@ -572,7 +566,6 @@ describe('SimilarComponent', () => {
     expect(sonarrService.addSeries).toHaveBeenCalledTimes(1);
     expect(component.radarrStatus(20)).toBeUndefined();
     component.setMediaType('movie');
-    expect(component.sonarrRootFolderPath).toBe('');
     expect(component.selectedMovie).toBeNull();
   });
 

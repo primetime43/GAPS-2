@@ -35,13 +35,11 @@ export class SimilarComponent implements OnInit, OnDestroy {
   hasServer = false;
   activeSource: MediaServerSource = 'plex';
   activeServerName = '';
-  radarrRootFolderPath = '';
   radarrLibraries: string[] = [];
 
   mediaType: 'movie' | 'tv' = 'movie';
   private allLibraries: MediaLibrary[] = [];
   private defaultLibrary = '';
-  sonarrRootFolderPath = '';
   sonarrEnabled = false;
   private sonarrStates = new Map<number, SendState>();
   private sonarrErrors = new Map<number, string>();
@@ -286,8 +284,6 @@ export class SimilarComponent implements OnInit, OnDestroy {
     this.resultsChanged$.next();
     this.selectedMovie = movie;
     this.radarrLibraries = [...this.selectedLibraries];
-    this.radarrRootFolderPath = '';
-    this.sonarrRootFolderPath = '';
     this.loadingSimilar = true;
     this.allSimilar = [];
     this.filteredSimilar = [];
@@ -337,8 +333,6 @@ export class SimilarComponent implements OnInit, OnDestroy {
     this.resultsChanged$.next();
     this.loadingSimilar = false;
     this.selectedMovie = null;
-    this.radarrRootFolderPath = '';
-    this.sonarrRootFolderPath = '';
     this.radarrLibraries = [];
     this.allSimilar = [];
     this.filteredSimilar = [];
@@ -480,7 +474,7 @@ export class SimilarComponent implements OnInit, OnDestroy {
     this.sonarrErrors.delete(id);
     this.sonarrService.addSeries(id, movie.name, {
       source: this.activeSource, server: this.activeServerName,
-      library_names: [...this.radarrLibraries], root_folder_path: this.sonarrRootFolderPath,
+      library_names: [...this.radarrLibraries],
     }).pipe(takeUntil(this.destroy$)).subscribe({
       next: () => this.sonarrStates.set(id, 'sent'),
       error: err => {
@@ -520,7 +514,7 @@ export class SimilarComponent implements OnInit, OnDestroy {
       parseInt(String(movie.year), 10) || 0,
       {
         source: this.activeSource, server: this.activeServerName,
-        library_names: this.radarrLibraries, root_folder_path: this.radarrRootFolderPath,
+        library_names: this.radarrLibraries,
       },
     ).subscribe({
       next: () => this.sendStatus.set(movie.id, 'sent'),

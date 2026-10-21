@@ -8,8 +8,6 @@ import { FormsModule } from '@angular/forms';
 
 import { AppRoutingModule } from './app-routing.module';
 import { AppComponent } from './app.component';
-import { RadarrDestinationComponent } from './components/radarr-destination/radarr-destination.component';
-import { SonarrDestinationComponent } from './components/sonarr-destination/sonarr-destination.component';
 import { ScanControlsComponent } from './components/scan-controls/scan-controls.component';
 
 import { provideHttpClient, withInterceptorsFromDi } from '@angular/common/http';
@@ -65,7 +63,7 @@ import { UpdateSettingsComponent } from './components/settings/update-settings/u
         CompactNumberPipe,
         UpdateSettingsComponent
     ],
-    bootstrap: [AppComponent], imports: [ScheduleHistoryComponent, DiscoveryHeaderComponent, BrowserModule, RadarrDestinationComponent, SonarrDestinationComponent, ScanControlsComponent,
+    bootstrap: [AppComponent], imports: [ScheduleHistoryComponent, DiscoveryHeaderComponent, BrowserModule, ScanControlsComponent,
         AppRoutingModule,
         ReactiveFormsModule,
         FormsModule], providers: [
