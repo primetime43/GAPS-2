@@ -208,7 +208,7 @@ class SonarrService:
             paths = {mappings.get(name) for name in library_names}
             mapped_paths = paths - {None}
             if mapped_paths and len(paths) > 1:
-                return False, 'Selected libraries have different Sonarr destinations. Choose a Sonarr destination above the results.'
+                return False, 'Selected libraries have different Sonarr destinations. Select libraries with the same destination or update library mappings in Settings > Sonarr.'
             if mapped_paths:
                 root_folder_path = mapped_paths.pop()
 
@@ -221,7 +221,7 @@ class SonarrService:
             except requests.exceptions.RequestException:
                 return False, 'Could not verify the Sonarr destination. Check the connection and try again.'
             if not any(f['path'] == root_folder_path and f['accessible'] for f in folders):
-                return False, 'The Sonarr destination is missing or inaccessible. Update the library mapping or choose another destination.'
+                return False, 'The Sonarr destination is missing or inaccessible. Update the library mapping in Settings > Sonarr.'
 
         # Look up series metadata from Sonarr's TheTVDB proxy so the payload
         # includes images/seasons/titleSlug.

@@ -7,8 +7,6 @@ import { FormsModule } from '@angular/forms';
 import { Component, Input, Output, EventEmitter } from '@angular/core';
 import { of, Subject, throwError } from 'rxjs';
 import { RecommendedComponent } from './recommended.component';
-import { RadarrDestinationComponent } from '../radarr-destination/radarr-destination.component';
-import { SonarrDestinationComponent } from '../sonarr-destination/sonarr-destination.component';
 import { ActiveServerService, ActiveServer, MediaServerSource } from '../../services/active-server.service';
 import { MediaLibrary } from '../../models/media-server.model';
 import { LibraryService } from '../../services/library.service';
@@ -98,7 +96,7 @@ describe('RecommendedComponent', () => {
     tmdbService.getGenres.and.returnValue(of([]));
 
     await TestBed.configureTestingModule({
-      imports: [DiscoveryHeaderComponent, HttpClientTestingModule, FormsModule, RouterTestingModule, RadarrDestinationComponent, SonarrDestinationComponent],
+      imports: [DiscoveryHeaderComponent, HttpClientTestingModule, FormsModule, RouterTestingModule],
       declarations: [RecommendedComponent, MockConfirmModalComponent, CompactNumberPipe],
       providers: [
         { provide: ActiveServerService, useValue: activeServerService },
@@ -1064,7 +1062,7 @@ describe('RecommendedComponent', () => {
     expect(component.ignoredIds.has(123)).toBeFalse();
   });
 
-  it('sends the result library context and destination to Radarr', () => {
+  it('sends the result library context to Radarr for automatic routing', () => {
     radarrService.getConfig.and.returnValue(of({ enabled: true } as any));
     radarrService.getLibraryTmdbIds.and.returnValue(of({ tmdb_ids: [] }));
     radarrService.addMovie.and.returnValue(of({ message: 'Added' }));
@@ -1073,10 +1071,9 @@ describe('RecommendedComponent', () => {
     component.activeServerName = 'Plex';
     component.downloaderLibraries = ['Movies'];
     component.selectedLibraries = ['Other'];
-    component.radarrRootFolderPath = '/movies';
     component.sendToDownloader(gap({ id: 123, name: 'Test', year: 2020, radarrEligible: true }), new Event('click'));
     expect(radarrService.addMovie).toHaveBeenCalledWith(123, 'Test', 2020, {
-      source: 'plex', server: 'Plex', library_names: ['Movies'], root_folder_path: '/movies',
+      source: 'plex', server: 'Plex', library_names: ['Movies'],
     });
   });
 
@@ -1088,25 +1085,21 @@ describe('RecommendedComponent', () => {
     expect(tvdbService.addIgnored).not.toHaveBeenCalled();
   });
 
-  it('sends TV library context and a Sonarr destination without using the Radarr override', () => {
+  it('sends TV library context to Sonarr for automatic routing', () => {
     component.setMediaType('tv');
     component.activeSource = 'plex';
     component.activeServerName = 'Plex';
     component.downloaderLibraries = ['TV'];
-    component.sonarrRootFolderPath = '/tv';
-    component.radarrRootFolderPath = '/movies';
     sonarrService.getConfig.and.returnValue(of({ enabled: true } as any));
     sonarrService.getLibraryTvdbIds.and.returnValue(of({ tvdb_ids: [] }));
     sonarrService.addSeries.and.returnValue(of({ message: 'Added' }));
     component.refreshDownloaderStatus('sonarr');
     component.sendToDownloader(gap({ id: 123, name: 'Test show', sonarrEligible: true }), new Event('click'));
     expect(sonarrService.addSeries).toHaveBeenCalledWith(123, 'Test show', {
-      source: 'plex', server: 'Plex', library_names: ['TV'], root_folder_path: '/tv',
+      source: 'plex', server: 'Plex', library_names: ['TV'],
     });
     expect(radarrService.addMovie).not.toHaveBeenCalled();
     component.setMediaType('movie');
-    expect(component.sonarrRootFolderPath).toBe('');
-    expect(component.radarrRootFolderPath).toBe('');
     expect(component.downloaderLibraries).toEqual([]);
   });
   function dashboardLink(type: 'movie' | 'tv'): void {
@@ -1143,14 +1136,12 @@ describe('RecommendedComponent', () => {
     component.allGaps = [gap({ id: 1, name: 'Old results' })];
     component.activeServerName = 'Plex';
     (component as any).cacheCompletedScan(['Movies'], component.allGaps, 1);
-    component.radarrRootFolderPath = '/old';
     (component as any).captureSavedScanParam();
     (component as any).loadContext(false);
     expect(component.allGaps).toEqual([]);
     expect(component.scanMode).toBeTrue();
     expect(component.totalOwned).toBe(10);
     expect(component.loadingGaps).toBeFalse();
-    expect(component.radarrRootFolderPath).toBe('');
     expect(recommendationService.cancelScan).not.toHaveBeenCalled();
     libraryService.getMovies.and.returnValue(of({ movies: [] }));
     component.loadItems();

@@ -226,7 +226,7 @@ class RadarrService:
             paths = {mappings.get(name) for name in library_names}
             mapped_paths = paths - {None}
             if mapped_paths and len(paths) > 1:
-                return False, 'Selected libraries have different Radarr destinations. Choose a Radarr destination above the results.'
+                return False, 'Selected libraries have different Radarr destinations. Select libraries with the same destination or update library mappings in Settings > Radarr.'
             if mapped_paths:
                 root_folder_path = mapped_paths.pop()
 
@@ -239,7 +239,7 @@ class RadarrService:
             except requests.exceptions.RequestException:
                 return False, 'Could not verify the Radarr destination. Check the connection and try again.'
             if not any(f['path'] == root_folder_path and f['accessible'] for f in folders):
-                return False, 'The Radarr destination is missing or inaccessible. Update the library mapping or choose another destination.'
+                return False, 'The Radarr destination is missing or inaccessible. Update the library mapping in Settings > Radarr.'
 
         # Look up movie metadata from Radarr's TMDB proxy so payload includes images/year.
         try:

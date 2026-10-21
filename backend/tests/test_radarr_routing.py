@@ -76,7 +76,7 @@ class RadarrRoutingTests(unittest.TestCase):
                 self.context['library_names'] = ['Movies', '4K']
                 response = self.add(**self.context)
                 self.assertEqual(response.status_code, 400)
-                self.assertIn('Choose a Radarr destination', response.json['error'])
+                self.assertIn('Settings > Radarr', response.json['error'])
         self.service._request.assert_not_called()
 
     def test_unmapped_library_uses_decade_routing(self):

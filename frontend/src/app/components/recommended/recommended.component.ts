@@ -253,8 +253,6 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   // Media server source
   activeSource: 'plex' | 'jellyfin' | 'emby' = 'plex';
   activeServerName = '';
-  radarrRootFolderPath = '';
-  sonarrRootFolderPath = '';
   downloaderLibraries: string[] = [];
 
   // TheTVDB availability (TV mode)
@@ -412,8 +410,6 @@ export class RecommendedComponent implements OnInit, OnDestroy {
       this.errorMessage = '';
       this.searchFilter = '';
       this.downloaderLibraries = [];
-      this.radarrRootFolderPath = '';
-      this.sonarrRootFolderPath = '';
       return;
     }
     const scanId = qp['scan'];
@@ -487,8 +483,6 @@ export class RecommendedComponent implements OnInit, OnDestroy {
     this.mediaType = type;
     this.showAdvanced = false;
     this.showFreshScanConfirm = false;
-    this.radarrRootFolderPath = '';
-    this.sonarrRootFolderPath = '';
     this.downloaderLibraries = [];
     this.pendingIgnoreGap = null;
     this.savedScanInfo = null;
@@ -707,8 +701,6 @@ export class RecommendedComponent implements OnInit, OnDestroy {
         this.savedScanInfo = { timestamp: resp.timestamp, libraries: resp.libraries || [] };
         this.ratingFilterComplete = this.mediaType === 'tv' || !!resp.rating_filter_complete;
         this.downloaderLibraries = [];
-        this.radarrRootFolderPath = '';
-        this.sonarrRootFolderPath = '';
         if (this.mediaType === 'tv') this.genreFilter = null;
         this.allGaps = this.normalizeGaps(resp.gaps || []);
         this.totalOwned = resp.totalOwned || 0;
@@ -728,8 +720,6 @@ export class RecommendedComponent implements OnInit, OnDestroy {
 
   /** Load the browse list for the selected libraries, merged and de-duplicated. */
   loadItems(restoreScan = true): void {
-    this.radarrRootFolderPath = '';
-    this.sonarrRootFolderPath = '';
     this.downloaderLibraries = [...this.selectedLibraries];
     this.itemsChanged$.next();
     this.cancelResultRequests();
@@ -871,8 +861,6 @@ export class RecommendedComponent implements OnInit, OnDestroy {
 
     const scanLibraries = [...this.selectedLibraries];
     this.downloaderLibraries = [...scanLibraries];
-    this.radarrRootFolderPath = '';
-    this.sonarrRootFolderPath = '';
 
     if (this.mediaType === 'tv') {
       this.tvdb.startScan({
@@ -1037,8 +1025,6 @@ export class RecommendedComponent implements OnInit, OnDestroy {
   private fetchGapsForSelectedItem(): void {
     if (!this.selectedItem) return;
     this.downloaderLibraries = [...this.selectedLibraries];
-    this.radarrRootFolderPath = '';
-    this.sonarrRootFolderPath = '';
 
     if (this.mediaType === 'tv') {
       const tvdbId = this.selectedItem.tvdbId;
@@ -1541,7 +1527,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
           map(res => res.tvdb_ids || []), catchError(() => of([] as number[]))),
         add: (gap: Gap) => this.sonarrService.addSeries(gap.id, gap.name, {
           source: this.activeSource, server: this.activeServerName,
-          library_names: this.downloaderLibraries, root_folder_path: this.sonarrRootFolderPath,
+          library_names: this.downloaderLibraries,
         }),
         eligible: (gap: Gap) => gap.sonarrEligible,
       };
@@ -1554,7 +1540,7 @@ export class RecommendedComponent implements OnInit, OnDestroy {
         map(res => res.tmdb_ids || []), catchError(() => of([] as number[]))),
       add: (gap: Gap) => this.radarrService.addMovie(gap.id, gap.name, parseInt(String(gap.year), 10) || 0, {
         source: this.activeSource, server: this.activeServerName,
-        library_names: this.downloaderLibraries, root_folder_path: this.radarrRootFolderPath,
+        library_names: this.downloaderLibraries,
       }),
       eligible: (gap: Gap) => gap.radarrEligible,
     };
