@@ -1,5 +1,25 @@
 /* .dark-select is shared globally in src/styles.scss */
 
+.scan-view-tabs .nav-link {
+  color: #ddd;
+  border: 1px solid #444;
+
+  &:hover,
+  &.active {
+    background-color: #2d2d2d;
+    color: #00bc8c;
+  }
+
+  &.active {
+    border-color: #00bc8c;
+  }
+
+  &:focus-visible {
+    outline: 2px solid #00bc8c;
+    outline-offset: 3px;
+  }
+}
+
 /* Schedule keeps its own status colours: grey "missing" means "not scheduled". */
 .status-ok {
   color: #00bc8c;

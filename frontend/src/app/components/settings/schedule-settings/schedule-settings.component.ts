@@ -1,5 +1,5 @@
 import { Component, OnInit } from '@angular/core';
-import { ScheduleService, ScheduleConfig } from '../../../services/schedule.service';
+import { ScheduleService, ScheduleConfig, ScheduleBlock } from '../../../services/schedule.service';
 import { ActiveServerService } from '../../../services/active-server.service';
 import { MediaLibrary } from '../../../models/media-server.model';
 
@@ -12,11 +12,26 @@ type MediaType = 'movie' | 'tv';
   standalone: false
 })
 export class ScheduleSettingsComponent implements OnInit {
+  activeTab: 'history' | 'schedules' = 'history';
+
+  onTabKeydown(event: KeyboardEvent): void {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault();
+    this.activeTab = event.key === 'Home' ? 'history' : event.key === 'End' ? 'schedules'
+      : this.activeTab === 'history' ? 'schedules' : 'history';
+    const tabs = event.currentTarget as HTMLElement;
+    tabs.querySelector<HTMLButtonElement>(`#scan-${this.activeTab}-tab`)?.focus();
+  }
+
+  readonly localTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   schedule: ScheduleConfig | null = null;
   libraries: MediaLibrary[] = [];
   activeSource: 'plex' | 'jellyfin' | 'emby' = 'plex';
   activeServerName = '';
   loading = true;
+  savingHistory = false;
+  historyError = '';
+  historyMessage = '';
 
   // Per-media-type form selections. Libraries are multi-select (checkboxes).
   moviePreset = '';
@@ -101,14 +116,12 @@ export class ScheduleSettingsComponent implements OnInit {
     if (!type || type === 'movie') {
       this.moviePreset = config.movie?.preset || '';
       this.selectedMovieLibraries = [...(config.movie?.libraries || [])];
-      this.movieTime = this.formatTime(config.movie?.hour ?? 4, config.movie?.minute ?? 0);
-      this.movieDayOfWeek = config.movie?.dayOfWeek || 'mon';
+      [this.movieTime, this.movieDayOfWeek] = this.localFormTime(config.movie);
     }
     if (!type || type === 'tv') {
       this.tvPreset = config.tv?.preset || '';
       this.selectedTvLibraries = [...(config.tv?.libraries || [])];
-      this.tvTime = this.formatTime(config.tv?.hour ?? 4, config.tv?.minute ?? 0);
-      this.tvDayOfWeek = config.tv?.dayOfWeek || 'mon';
+      [this.tvTime, this.tvDayOfWeek] = this.localFormTime(config.tv);
     }
     this.presetKeys = Object.keys(config.presets);
     this.days = config.days || {};
@@ -117,6 +130,23 @@ export class ScheduleSettingsComponent implements OnInit {
 
   private formatTime(hour: number, minute: number): string {
     return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+  }
+
+  usesDifferentTimeZone(block?: ScheduleBlock): boolean {
+    if (!block?.timezone) return false;
+    // Canonicalize aliases such as Etc/UTC and UTC before comparing.
+    return new Intl.DateTimeFormat('en', { timeZone: block.timezone }).resolvedOptions().timeZone !== this.localTimeZone;
+  }
+
+  private localFormTime(block?: ScheduleBlock): [string, string] {
+    if (this.usesDifferentTimeZone(block) && block?.next_run) {
+      const next = new Date(block.next_run.replace(' ', 'T'));
+      if (!isNaN(next.getTime())) {
+        return [this.formatTime(next.getHours(), next.getMinutes()),
+          ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'][next.getDay()]];
+      }
+    }
+    return [this.formatTime(block?.hour ?? 4, block?.minute ?? 0), block?.dayOfWeek || 'mon'];
   }
 
   private parseTime(value: string): [number, number] {
@@ -137,6 +167,7 @@ export class ScheduleSettingsComponent implements OnInit {
     this.clearMessage();
     this.scheduleService.setSchedule({
       mediaType: type, preset, libraries: [...libraries], source: this.activeSource, hour, minute, dayOfWeek,
+      timezone: this.localTimeZone,
     }).subscribe({
       next: (config) => {
         this.applyConfig(config, type);
@@ -163,6 +194,24 @@ export class ScheduleSettingsComponent implements OnInit {
         this.showMessage('Failed to disable schedule.', 'error');
         this.saving[type] = false;
       }
+    });
+  }
+
+  saveHistoryLimit(limit: number): void {
+    if (this.savingHistory) return;
+    this.savingHistory = true;
+    this.historyError = '';
+    this.historyMessage = '';
+    this.scheduleService.setHistoryLimit(limit).subscribe({
+      next: result => {
+        if (this.schedule) this.schedule = { ...this.schedule, ...result };
+        this.historyMessage = `Keeping the latest ${result.historyLimit} scheduled runs.`;
+        this.savingHistory = false;
+      },
+      error: err => {
+        this.historyError = err.error?.error || 'Could not save the history limit. Please try again.';
+        this.savingHistory = false;
+      },
     });
   }
 

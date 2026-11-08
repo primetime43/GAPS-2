@@ -4,3 +4,4 @@ plexapi>=4.15,<5.0
 flask-cors>=5.0,<6.0
 cryptography>=42.0,<46.0
 apscheduler>=3.10,<4.0
+tzdata>=2024.1

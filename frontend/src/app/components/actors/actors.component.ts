@@ -41,8 +41,6 @@ export class ActorsComponent implements OnInit, OnDestroy {
   hasServer = false;
   activeSource: 'plex' | 'jellyfin' | 'emby' = 'plex';
   activeServerName = '';
-  radarrRootFolderPath = '';
-  sonarrRootFolderPath = '';
   downloaderLibraries: string[] = [];
 
   // Movies or TV shows — the actor's filmography is fetched accordingly.
@@ -226,8 +224,6 @@ export class ActorsComponent implements OnInit, OnDestroy {
     this.gapsChanged$.next();
     this.pendingIgnoreGap = null;
     this.mediaType = type;
-    this.radarrRootFolderPath = '';
-    this.sonarrRootFolderPath = '';
     this.downloaderLibraries = [];
     this.genreFilter = null;
     this.resultFilter = '';
@@ -317,12 +313,10 @@ export class ActorsComponent implements OnInit, OnDestroy {
   }
 
   selectActor(actor: PersonResult): void {
-    this.radarrRootFolderPath = '';
-    this.sonarrRootFolderPath = '';
     this.loadActorGaps(actor);
   }
 
-  /** Refresh the current results without changing the chosen download destination. */
+  /** Refresh the current actor's credits and library ownership. */
   private loadActorGaps(actor: PersonResult): void {
     this.gapsChanged$.next();
     this.imdbRatings.reset();
@@ -785,11 +779,11 @@ export class ActorsComponent implements OnInit, OnDestroy {
     const add$ = this.mediaType === 'tv'
       ? this.sonarrService.addSeries(gap.id, gap.name, {
         source: this.activeSource, server: this.activeServerName,
-        library_names: this.downloaderLibraries, root_folder_path: this.sonarrRootFolderPath,
+        library_names: this.downloaderLibraries,
       })
       : this.radarrService.addMovie(gap.id, gap.name, parseInt(String(gap.year), 10) || 0, {
         source: this.activeSource, server: this.activeServerName,
-        library_names: this.downloaderLibraries, root_folder_path: this.radarrRootFolderPath,
+        library_names: this.downloaderLibraries,
       });
     add$.pipe(takeUntil(this.mediaChanged$), takeUntil(this.destroy$)).subscribe({
       next: () => this.sendStatus.set(gap.id, 'sent'),

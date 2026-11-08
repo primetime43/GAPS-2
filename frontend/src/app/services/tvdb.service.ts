@@ -25,6 +25,18 @@ export interface TvdbGap {
   owned: boolean;
 }
 
+export interface TvdbCustomList {
+  id: number;
+  name: string;
+  url: string;
+}
+
+export interface TvdbShowGaps {
+  gaps: TvdbGap[];
+  hasOfficialList: boolean;
+  customLists: TvdbCustomList[];
+}
+
 export interface TvdbScanProgress {
   status: 'idle' | 'scanning' | 'done' | 'error' | 'cancelled';
   phase: 'shows' | 'franchises' | 'titles';
@@ -81,16 +93,25 @@ export class TvdbService {
     showExisting: boolean,
     source: string = 'plex',
   ): Observable<TvdbGap[]> {
+    return this.getShowGaps(tvdbId, libraryNames, showExisting, source).pipe(map(res => res.gaps));
+  }
+
+  getShowGaps(
+    tvdbId: number,
+    libraryNames: string[],
+    showExisting: boolean,
+    source: string = 'plex',
+    listId: number | null = null,
+  ): Observable<TvdbShowGaps> {
     let params = new HttpParams()
       .set('tvdbId', tvdbId.toString())
       .set('showExisting', showExisting.toString())
       .set('source', source);
+    if (listId !== null) params = params.set('listId', listId.toString());
     for (const lib of libraryNames) {
       params = params.append('libraryNames', lib);
     }
-    return this.http
-      .get<{ gaps: TvdbGap[] }>(`${environment.apiUrl}/tvdb/show`, { params })
-      .pipe(map((res) => res.gaps));
+    return this.http.get<TvdbShowGaps>(`${environment.apiUrl}/tvdb/show`, { params });
   }
 
   getScanProgress(): Observable<TvdbScanProgress> {

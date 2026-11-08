@@ -23,6 +23,7 @@ def set_schedule():
     hour = data.get('hour', 4)
     minute = data.get('minute', 0)
     day_of_week = data.get('dayOfWeek', 'mon')
+    time_zone = data.get('timezone')
 
     if media_type not in ('movie', 'tv'):
         return jsonify(error='mediaType must be "movie" or "tv"'), 400
@@ -30,10 +31,10 @@ def set_schedule():
         return jsonify(error='preset and at least one library are required'), 400
 
     success = current_app.schedule_service.set_schedule(
-        media_type, preset, libraries, source, hour, minute, day_of_week,
+        media_type, preset, libraries, source, hour, minute, day_of_week, time_zone,
     )
     if not success:
-        return jsonify(error='Invalid preset or time'), 400
+        return jsonify(error='Invalid preset, time, or time zone'), 400
 
     return jsonify(current_app.schedule_service.get_schedule())
 
@@ -46,3 +47,16 @@ def disable_schedule():
         return jsonify(error='mediaType must be "movie" or "tv"'), 400
     current_app.schedule_service.disable_schedule(media_type)
     return jsonify(current_app.schedule_service.get_schedule())
+
+
+@schedule_bp.route('/history', methods=['PUT'])
+def set_history_limit():
+    data = request.get_json(silent=True) or {}
+    if not isinstance(data, dict):
+        return jsonify(error='Expected an object with historyLimit'), 400
+    try:
+        return jsonify(current_app.schedule_service.set_history_limit(data.get('historyLimit')))
+    except ValueError as error:
+        return jsonify(error=str(error)), 400
+    except OSError:
+        return jsonify(error='Could not save the history limit. Please try again.'), 500

@@ -19,6 +19,7 @@ class LibraryWorkflowTests(unittest.TestCase):
         self.app.tmdb_service.find_similar_movies.return_value = ([], None)
         self.app.tmdb_service.start_scan.return_value = False
         self.app.tvdb_service.find_gaps_for_show.return_value = ([], None)
+        self.app.tvdb_service.get_lists_for_show.return_value = ({'hasOfficialList': True, 'customLists': []}, None)
         self.media = Mock(movies_cache={}, shows_cache={})
         self.app.plex_service = self.media
         self.app.notification_service = Mock()

@@ -1,13 +1,10 @@
 import { DiscoveryHeaderComponent } from '../discovery-header/discovery-header.component';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { By } from '@angular/platform-browser';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 import { FormsModule } from '@angular/forms';
 import { of, Subject, throwError } from 'rxjs';
 import { ActorsComponent } from './actors.component';
-import { RadarrDestinationComponent } from '../radarr-destination/radarr-destination.component';
-import { SonarrDestinationComponent } from '../sonarr-destination/sonarr-destination.component';
 import { ConfirmModalComponent } from '../confirm-modal/confirm-modal.component';
 import { CompactNumberPipe } from '../../pipes/compact-number.pipe';
 import { ActiveServerService } from '../../services/active-server.service';
@@ -46,7 +43,7 @@ describe('ActorsComponent', () => {
     imdb = jasmine.createSpyObj('ImdbService', ['getRatings']);
     imdb.getRatings.and.returnValue(of({ ratings: {} }));
     await TestBed.configureTestingModule({
-      imports: [DiscoveryHeaderComponent, HttpClientTestingModule, RouterTestingModule, FormsModule, RadarrDestinationComponent, SonarrDestinationComponent],
+      imports: [DiscoveryHeaderComponent, HttpClientTestingModule, RouterTestingModule, FormsModule],
       declarations: [ActorsComponent, ConfirmModalComponent, CompactNumberPipe],
       providers: [
         { provide: ActorService, useValue: actors },
@@ -228,10 +225,9 @@ describe('ActorsComponent', () => {
   });
 
   for (const control of ['rating', 'votes', 'imdb'] as const) {
-    it(`preserves the Sonarr destination through a ${control} refresh and uses it when sending`, () => {
+    it(`preserves TV library context through a ${control} refresh for automatic routing`, () => {
       component.setMediaType('tv');
       component.selectActor(actor);
-      component.sonarrRootFolderPath = '/chosen-tv';
       const pending = new Subject<any>();
       actors.getActorGaps.and.returnValue(pending);
 
@@ -243,37 +239,31 @@ describe('ActorsComponent', () => {
         component.onSortChange();
       }
       expect(component.loadingGaps).toBeTrue();
-      expect(component.sonarrRootFolderPath).toBe('/chosen-tv');
       expect(actors.getActorGaps.calls.mostRecent().args[6]).toBeTrue();
 
       pending.next({ actor: null, gaps: [{ ...credit, tvdbId: 202 }] });
       pending.complete();
       expect(component.loadingGaps).toBeFalse();
-      expect(component.sonarrRootFolderPath).toBe('/chosen-tv');
       fixture.detectChanges();
-      const destination = fixture.debugElement.query(By.directive(SonarrDestinationComponent)).componentInstance;
-      expect(destination.rootFolderPath).toBe('/chosen-tv');
+      expect(component.downloaderLibraries).toEqual(['TV']);
 
       component.downloaderEnabled = true;
       const sonarr = TestBed.inject(SonarrService);
       sonarr.addSeries = jasmine.createSpy('addSeries').and.returnValue(of({ message: 'Added' }));
       component.send(component.allGaps[0], new Event('click'));
       expect(sonarr.addSeries).toHaveBeenCalledWith(202, 'Test title', {
-        source: 'jellyfin', server: 'Test server', library_names: ['TV'], root_folder_path: '/chosen-tv',
+        source: 'jellyfin', server: 'Test server', library_names: ['TV'],
       });
     });
   }
 
-  it('still resets the Sonarr destination for a new actor or library selection', () => {
+  it('updates the downloader library context for a new actor or library selection', () => {
     component.setMediaType('tv');
     component.selectActor(actor);
-    component.sonarrRootFolderPath = '/chosen-tv';
     component.selectActor({ ...actor, id: 2, name: 'Another actor' });
-    expect(component.sonarrRootFolderPath).toBe('');
+    expect(component.downloaderLibraries).toEqual(['TV']);
 
-    component.sonarrRootFolderPath = '/chosen-tv';
     component.toggleLibrarySelection('More TV');
-    expect(component.sonarrRootFolderPath).toBe('');
     expect(component.downloaderLibraries).toEqual(['TV', 'More TV']);
   });
 
@@ -421,13 +411,12 @@ describe('ActorsComponent', () => {
   it('sends the filmography library context and explicit root to Radarr', () => {
     component.selectActor(actor);
     component.downloaderEnabled = true;
-    component.radarrRootFolderPath = '/movies';
     const radarr = TestBed.inject(RadarrService);
     radarr.addMovie = jasmine.createSpy('addMovie').and.returnValue(of({ message: 'Added' }));
     component.selectedLibraries = ['Other'];
     component.send(component.allGaps[0], new Event('click'));
     expect(radarr.addMovie).toHaveBeenCalledWith(101, 'Test title', 2020, {
-      source: 'jellyfin', server: 'Test server', library_names: ['Movies', 'More movies'], root_folder_path: '/movies',
+      source: 'jellyfin', server: 'Test server', library_names: ['Movies', 'More movies'],
     });
   });
 
@@ -436,24 +425,20 @@ describe('ActorsComponent', () => {
     expect(component.isFutureRelease({ ...component.allGaps[0], releaseDate: undefined, year: 2000 })).toBeFalse();
   });
 
-  it('routes TV credits to Sonarr and resets destinations when changing media', () => {
+  it('routes TV credits to Sonarr using library context and updates it when changing media', () => {
     actors.getActorGaps.and.returnValue(of({ actor: null, gaps: [
       { ...credit, tvdbId: 202, name: 'Test show' },
     ] } as any));
     component.setMediaType('tv');
     component.selectActor(actor);
     component.downloaderEnabled = true;
-    component.sonarrRootFolderPath = '/tv';
-    component.radarrRootFolderPath = '/movies';
     const sonarr = TestBed.inject(SonarrService);
     sonarr.addSeries = jasmine.createSpy('addSeries').and.returnValue(of({ message: 'Added' }));
     component.send(component.allGaps[0], new Event('click'));
     expect(sonarr.addSeries).toHaveBeenCalledWith(202, 'Test show', {
-      source: 'jellyfin', server: 'Test server', library_names: ['TV'], root_folder_path: '/tv',
+      source: 'jellyfin', server: 'Test server', library_names: ['TV'],
     });
     component.setMediaType('movie');
-    expect(component.sonarrRootFolderPath).toBe('');
-    expect(component.radarrRootFolderPath).toBe('');
     expect(component.downloaderLibraries).toEqual(['Movies', 'More movies']);
   });
 });

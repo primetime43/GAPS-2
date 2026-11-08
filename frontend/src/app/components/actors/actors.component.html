@@ -118,8 +118,6 @@
 
       <!-- Results -->
       <div *ngIf="!loadingGaps && selectedActor">
-        <app-radarr-destination *ngIf="mediaType === 'movie'" [(rootFolderPath)]="radarrRootFolderPath"></app-radarr-destination>
-        <app-sonarr-destination *ngIf="mediaType === 'tv'" [(rootFolderPath)]="sonarrRootFolderPath"></app-sonarr-destination>
         <app-discovery-header idPrefix="actor" [mediaType]="mediaType" [title]="selectedActor.name" (back)="clearActor()"
           [view]="view" (viewChange)="setView($event)" [allCount]="allGaps.length" [ownedCount]="ownedCount" [missingCount]="missingCount"
           [(showImdbRatings)]="showImdbRatings" (showImdbRatingsChange)="onRatingPrefsChange()"

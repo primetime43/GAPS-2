@@ -70,8 +70,6 @@
     </div>
 
     <div *ngIf="selectedMovie">
-      <app-radarr-destination *ngIf="mediaType === 'movie'" [(rootFolderPath)]="radarrRootFolderPath"></app-radarr-destination>
-      <app-sonarr-destination *ngIf="mediaType === 'tv'" [(rootFolderPath)]="sonarrRootFolderPath"></app-sonarr-destination>
       <app-discovery-header idPrefix="similar" [mediaType]="mediaType"
         [title]="'Because you liked ' + selectedMovie.name + ' (' + selectedMovie.year + ')'" (back)="clearResults()"
         [loading]="loadingSimilar" [loadingMessage]="'Finding similar ' + mediaLabel + '...'"

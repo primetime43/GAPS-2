@@ -30,6 +30,7 @@ _CACHE_TTL_SECONDS = 7 * 24 * 60 * 60
 # Tokens are valid for ~1 month; refresh well before that. Re-login also
 # happens automatically on any 401.
 _TOKEN_TTL_SECONDS = 20 * 24 * 60 * 60
+_CUSTOM_LIST_LIMIT = 25
 
 
 class TvdbService:
@@ -282,8 +283,9 @@ class TvdbService:
         """
         with self._cache_lock:
             cached = self._series_cache.get(series_id)
-            # Re-fetch entries cached before 'firstAired' was tracked (migration).
-            if cached is not None and 'firstAired' in cached:
+            # Re-fetch older entries missing release dates or list popularity.
+            if (cached is not None and 'firstAired' in cached
+                    and all('score' in lst for lst in cached.get('lists', []))):
                 return cached
 
         resp = self._request(f'/series/{series_id}/extended', params={'short': 'true'})
@@ -305,6 +307,7 @@ class TvdbService:
                     'image': lst.get('image'),
                     'url': lst.get('url'),
                     'isOfficial': bool(lst.get('isOfficial')),
+                    'score': lst.get('score') or 0,
                 }
                 for lst in (data.get('lists') or [])
                 if lst.get('id') is not None
@@ -325,9 +328,11 @@ class TvdbService:
             return None
         data = (resp.json() or {}).get('data') or {}
         series_ids = []
+        seen_series = set()
         for ent in (data.get('entities') or []):
             sid = ent.get('seriesId')
-            if isinstance(sid, int) and sid > 0:
+            if isinstance(sid, int) and sid > 0 and sid not in seen_series:
+                seen_series.add(sid)
                 series_ids.append(sid)
         info = {
             'name': data.get('name', 'Unknown franchise'),
@@ -475,26 +480,63 @@ class TvdbService:
             })
         return out
 
+    @staticmethod
+    def _lists_for_show(meta: dict) -> dict:
+        """Offer the most popular custom lists only without an official list."""
+        lists = {lst['id']: lst for lst in meta.get('lists', [])}
+        has_official = any(lst.get('isOfficial') for lst in lists.values())
+        custom = [] if has_official else sorted(
+            lists.values(),
+            key=lambda lst: (-(lst.get('score') or 0), (lst.get('name') or '').casefold(), lst['id']),
+        )[:_CUSTOM_LIST_LIMIT]
+        return {
+            'hasOfficialList': has_official,
+            'customLists': [
+                {'id': lst['id'], 'name': lst.get('name') or 'Unnamed list',
+                 'url': f"https://thetvdb.com/lists/{lst['id']}"}
+                for lst in custom
+            ],
+        }
+
+    def get_lists_for_show(self, series_id: int) -> tuple[dict | None, str | None]:
+        meta = self._get_series_extended(series_id)
+        if not meta:
+            return None, 'Could not load this show from TheTVDB'
+        return self._lists_for_show(meta), None
+
     def find_gaps_for_show(
         self,
         series_id: int,
         owned_series_ids: set[int],
         show_existing: bool = False,
+        list_id: int | None = None,
     ) -> tuple[list[dict] | None, str | None]:
         """Find franchise gaps for a single owned series (click-through lookup)."""
         meta = self._get_series_extended(series_id)
         if not meta:
             return None, 'Could not load this show from TheTVDB'
 
+        if list_id is not None:
+            choices = self._lists_for_show(meta)
+            if not any(lst['id'] == list_id for lst in choices['customLists']):
+                return None, 'Choose one of the available custom lists for this show'
+            members = self._get_list_members(list_id)
+            if members is None:
+                return None, 'Could not load the selected custom list from TheTVDB'
+            if series_id not in members.get('series', []):
+                return None, 'The selected custom list no longer contains this show'
+
         gaps: list[dict] = []
         seen_lists: set[int] = set()
         for lst in meta.get('lists', []):
-            if not lst.get('isOfficial'):
+            if list_id is None and not lst.get('isOfficial'):
                 continue
-            list_id = lst.get('id')
-            if list_id in seen_lists:
+            if list_id is not None and lst['id'] != list_id:
                 continue
-            seen_lists.add(list_id)
+            member_list_id = lst['id']
+            if member_list_id in seen_lists:
+                continue
+            seen_lists.add(member_list_id)
             gaps.extend(self._collect_list_gaps(lst, owned_series_ids, show_existing))
 
         self._save_cache()
