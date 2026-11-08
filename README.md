@@ -74,6 +74,39 @@ docker pull ghcr.io/primetime43/gaps-2:develop
 
 To switch between Stable, Develop, and a specific version from **Settings > Updates**, see the [in-app release switching guide](docs/release-switching.md).
 
+### Screenshots — v2.16.0
+
+Captured from the running v2.16.0 app. Click an image to view it at full size.
+
+**Dashboard** — service connections, independent movie and TV schedules, and recent scan activity.
+
+![Dashboard with connected services, scheduled scans, recent activity, and quick actions](docs/screenshots/dashboard.png)
+
+<details>
+  <summary>Explore missing titles, actor discovery, similar movies, and scan history</summary>
+
+**Missing movies** — browse collection gaps with ratings, filters, and Radarr actions.
+
+![Missing movie results filtered to The Conjuring collection, with IMDb ratings and Radarr actions](docs/screenshots/missing-movies.png)
+
+**Missing TV shows** — find franchise gaps and send missing series to Sonarr.
+
+![Missing TV results showing NCIS franchise titles and Send to Sonarr buttons](docs/screenshots/missing-tv.png)
+
+**Actor discovery** — compare an actor's filmography with your libraries.
+
+![Tom Holland filmography with owned and missing movies, ratings, and library selection](docs/screenshots/actors.png)
+
+**Similar movies** — discover recommendations from a movie you already own.
+
+![Similar movie recommendations based on Interstellar, with ownership status and ratings](docs/screenshots/similar-movies.png)
+
+**Scheduled scan history** — track missing-title trends and review previous runs.
+
+![Scheduled scan history with movie and TV trends, retention controls, and recent runs](docs/screenshots/scheduled-history.png)
+
+</details>
+
 ### Images of v2.8.0
 <details>
   <summary>Click to view screenshots of version 2.8.0</summary>
