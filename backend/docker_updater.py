@@ -19,6 +19,9 @@ from update_protocol import image_for, read_json, selection, write_json
 log = logging.getLogger('gaps-updater')
 MANAGED = 'io.gaps.updates.enabled'
 DATA_FILES = ('config.enc', '.config.key', 'last_scan.json', 'last_tv_scan.json', 'scan_history.json')
+IDENTITY_ATTEMPTS = 4
+START_ATTEMPTS = 4
+TRANSIENT_START_ERRORS = ('port is already allocated', 'address already in use')
 
 
 class DockerError(RuntimeError):
@@ -84,18 +87,31 @@ class Docker:
         # preserve it when recreating a container. Match the configured hostname
         # among running containers instead of interpreting it as an ID or name.
         hostname = socket.gethostname()
-        matches = []
-        for summary in self.call('GET', '/containers/json'):
-            candidate = self.container(summary['Id'])
+        for attempt in range(IDENTITY_ATTEMPTS):
+            matches = []
+            for summary in self.call('GET', '/containers/json'):
+                candidate = self.container(summary['Id'])
+                if (candidate and candidate.get('State', {}).get('Running')
+                        and candidate.get('Config', {}).get('Hostname') == hostname):
+                    matches.append(candidate)
+            if len(matches) > 1:
+                raise DockerError('Multiple running containers share the updater hostname. Give the updater a unique hostname.')
+            if matches:
+                self._own_container_id = matches[0]['Id']
+                return matches[0]
+
+            # Synology can briefly omit a starting container from the collection
+            # endpoint even though direct inspection by its configured hostname
+            # already succeeds. Prefer that exact match before waiting to retry.
+            candidate = self.container(hostname)
             if (candidate and candidate.get('State', {}).get('Running')
                     and candidate.get('Config', {}).get('Hostname') == hostname):
-                matches.append(candidate)
-        if not matches:
-            raise DockerError('Could not identify the running updater container. Recreate the updater with a unique hostname.')
-        if len(matches) != 1:
-            raise DockerError('Multiple running containers share the updater hostname. Give the updater a unique hostname.')
-        self._own_container_id = matches[0]['Id']
-        return matches[0]
+                self._own_container_id = candidate['Id']
+                return candidate
+            if attempt + 1 < IDENTITY_ATTEMPTS:
+                time.sleep(0.25)
+
+        raise DockerError('Could not identify the running updater container. Recreate the updater with a unique hostname.')
 
     def image(self, name):
         return self.call('GET', f'/images/{quote(name, safe="")}/json')
@@ -112,8 +128,30 @@ class Docker:
         self.call('DELETE', f'/containers/{quote(name, safe="")}?force=true')
 
     def create(self, name, payload):
+        # Also repair specs saved by older updaters in an interrupted journal.
+        payload = copy.deepcopy(payload)
+        host = payload.get('HostConfig', {})
+        if 'PortBindings' in host:
+            host['PortBindings'] = normalize_port_bindings(host['PortBindings'])
         self.call('POST', '/containers/create?' + urlencode({'name': name}), payload)
-        self.call('POST', f'/containers/{quote(name, safe="")}/start')
+        try:
+            for attempt in range(START_ATTEMPTS):
+                try:
+                    self.call('POST', f'/containers/{quote(name, safe="")}/start')
+                    return
+                except DockerError as exc:
+                    transient = any(message in str(exc).lower() for message in TRANSIENT_START_ERRORS)
+                    if not transient or attempt + 1 == START_ATTEMPTS:
+                        raise
+                    # Older Synology Docker builds can return from container
+                    # removal before libnetwork releases the published port.
+                    time.sleep(attempt + 1)
+        except Exception:
+            try:
+                self.remove(name)
+            except Exception:
+                log.exception('Could not remove container after startup failed: %s', name)
+            raise
 
     def healthy(self, name):
         container = self.container(name)
@@ -125,6 +163,19 @@ class Docker:
                         {'Cmd': command, 'AttachStdout': True, 'AttachStderr': True})
         self.call('POST', f'/exec/{job["Id"]}/start', {'Detach': False, 'Tty': False})
         return self.call('GET', f'/exec/{job["Id"]}/json').get('ExitCode') == 0
+
+
+def normalize_port_bindings(ports):
+    """An unspecified host address already asks Docker to bind both families."""
+    result = copy.deepcopy(ports)
+    for bindings in result.values():
+        if not bindings:
+            continue
+        wildcard_ports = {b.get('HostPort') for b in bindings if not b.get('HostIp')
+                          and b.get('HostPort') not in (None, '', '0')}
+        bindings[:] = [b for b in bindings if not (
+            b.get('HostIp') == '::' and b.get('HostPort') in wildcard_ports)]
+    return result
 
 
 def create_spec(container, image, previous_image=None):
@@ -148,10 +199,21 @@ def create_spec(container, image, previous_image=None):
         spec['Labels'][MANAGED] = 'true'
     spec['Image'] = image
     spec['HostConfig'] = copy.deepcopy(container['HostConfig'])
-    if container['NetworkSettings'].get('Ports'):
-        spec['HostConfig']['PortBindings'] = {
-            port: bindings for port, bindings in container['NetworkSettings']['Ports'].items() if bindings
-        }
+    # NetworkSettings reports effective bindings, which may expand one wildcard
+    # publication into IPv4 and IPv6 entries. Recreate the configured bindings;
+    # use runtime values only to retain dynamically assigned host ports.
+    runtime_ports = container['NetworkSettings'].get('Ports') or {}
+    ports = spec['HostConfig'].get('PortBindings') or {}
+    for port, bindings in ports.items():
+        for binding in bindings or []:
+            if binding.get('HostPort') in (None, '', '0'):
+                address = binding.get('HostIp') or '0.0.0.0'
+                effective = next((b for b in runtime_ports.get(port) or []
+                                  if (b.get('HostIp') or '0.0.0.0') == address), None)
+                if effective:
+                    binding['HostPort'] = effective['HostPort']
+    if ports:
+        spec['HostConfig']['PortBindings'] = normalize_port_bindings(ports)
     endpoints = {}
     for name, network in container['NetworkSettings']['Networks'].items():
         endpoint = {key: copy.deepcopy(network[key]) for key in ('IPAMConfig', 'DriverOpts') if network.get(key)}

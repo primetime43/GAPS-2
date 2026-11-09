@@ -177,9 +177,23 @@ class DockerIdentityTests(unittest.TestCase):
         with patch('docker_updater.socket.gethostname', return_value='gaps2-updater'):
             self.assertEqual(self.docker.own_container(), self.helper)
 
+    def test_direct_hostname_lookup_recovers_when_collection_omits_helper(self):
+        self.helper['Config']['Hostname'] = 'gaps2-updater'
+        self.docker.call.return_value = []
+        self.docker.container.side_effect = lambda name: self.helper if name == 'gaps2-updater' else None
+        with patch('docker_updater.socket.gethostname', return_value='gaps2-updater'):
+            self.assertEqual(self.docker.own_container(), self.helper)
+
+    def test_container_collection_is_retried_while_helper_becomes_visible(self):
+        self.docker.call.side_effect = [[], [{'Id': self.helper['Id']}]]
+        with patch('docker_updater.time.sleep') as sleep:
+            self.assertEqual(self.docker.own_container(), self.helper)
+        sleep.assert_called_once_with(0.25)
+
     def test_missing_helper_reports_identity_error_instead_of_volume_error(self):
         self.docker.call.return_value = [{'Id': 'app'}]
-        with self.assertRaisesRegex(DockerError, 'Could not identify the running updater'):
+        with patch('docker_updater.time.sleep'), self.assertRaisesRegex(
+                DockerError, 'Could not identify the running updater'):
             self.docker.own_container()
 
     def test_duplicate_hostnames_are_rejected_without_caching_a_guess(self):
@@ -195,6 +209,43 @@ class DockerIdentityTests(unittest.TestCase):
         self.docker.container.side_effect = lambda name: stopped if name == stopped['Id'] else self.helper
         self.assertEqual(self.docker.own_container(), self.helper)
 
+
+class DockerLifecycleTests(unittest.TestCase):
+    def setUp(self):
+        with patch.object(Docker, 'call', return_value={'ApiVersion': '1.41'}):
+            self.docker = Docker()
+
+    def test_create_retries_transient_port_allocation_failure(self):
+        self.docker.call = Mock(side_effect=[None, DockerError('port is already allocated'), None])
+        with patch('docker_updater.time.sleep') as sleep:
+            self.docker.create('gaps2', {'Image': 'sha256:new'})
+        sleep.assert_called_once_with(1)
+        self.assertEqual(self.docker.call.call_count, 3)
+
+    def test_create_repairs_overlapping_bindings_from_legacy_rollback_journal(self):
+        payload = {'HostConfig': {'PortBindings': {'4277/tcp': [
+            {'HostIp': '', 'HostPort': '4277'}, {'HostIp': '::', 'HostPort': '4277'}]}}}
+        self.docker.call = Mock()
+        self.docker.create('gaps2', payload)
+        created = self.docker.call.call_args_list[0].args[2]
+        self.assertEqual(created['HostConfig']['PortBindings']['4277/tcp'],
+                         [{'HostIp': '', 'HostPort': '4277'}])
+        self.assertEqual(len(payload['HostConfig']['PortBindings']['4277/tcp']), 2)
+
+    def test_create_removes_partial_container_after_start_failure(self):
+        self.docker.call = Mock(side_effect=[None, DockerError('permission denied'), None])
+        with self.assertRaisesRegex(DockerError, 'permission denied'):
+            self.docker.create('gaps2', {'Image': 'sha256:new'})
+        self.docker.call.assert_called_with('DELETE', '/containers/gaps2?force=true')
+
+    def test_create_cleans_up_after_transient_port_retries_are_exhausted(self):
+        failure = DockerError('Bind for :::4277 failed: port is already allocated')
+        self.docker.call = Mock(side_effect=[None, failure, failure, failure, failure, None])
+        with patch('docker_updater.time.sleep') as sleep, self.assertRaisesRegex(
+                DockerError, 'port is already allocated'):
+            self.docker.create('gaps2', {'Image': 'sha256:new'})
+        self.assertEqual([call.args[0] for call in sleep.call_args_list], [1, 2, 3])
+        self.docker.call.assert_called_with('DELETE', '/containers/gaps2?force=true')
 
 class DockerUpdaterTests(unittest.TestCase):
     def setUp(self):
@@ -226,6 +277,36 @@ class DockerUpdaterTests(unittest.TestCase):
         self.assertEqual(spec['Env'], ['FLASK_ENV=production', 'PUID=1234'])
         self.assertNotIn('Cmd', spec)
         self.assertNotIn('Entrypoint', spec)
+
+    def test_runtime_dual_stack_expansion_does_not_replace_configured_binding(self):
+        self.current['NetworkSettings']['Ports'] = {'4277/tcp': [
+            {'HostIp': '0.0.0.0', 'HostPort': '4277'}, {'HostIp': '::', 'HostPort': '4277'}]}
+        spec = create_spec(self.current, 'sha256:new')
+        self.assertEqual(spec['HostConfig']['PortBindings'], self.current['HostConfig']['PortBindings'])
+
+    def test_recreation_repairs_overlapping_wildcard_bindings(self):
+        self.current['HostConfig']['PortBindings']['4277/tcp'] = [
+            {'HostIp': '', 'HostPort': '4277'}, {'HostIp': '::', 'HostPort': '4277'}]
+        spec = create_spec(self.current, 'sha256:new')
+        self.assertEqual(spec['HostConfig']['PortBindings']['4277/tcp'],
+                         [{'HostIp': '', 'HostPort': '4277'}])
+        self.assertEqual(len(self.current['HostConfig']['PortBindings']['4277/tcp']), 2)
+
+    def test_explicit_address_bindings_are_preserved(self):
+        bindings = [{'HostIp': '127.0.0.1', 'HostPort': '4277'},
+                    {'HostIp': '::1', 'HostPort': '4277'},
+                    {'HostIp': '::', 'HostPort': '5277'}]
+        self.current['HostConfig']['PortBindings']['4277/tcp'] = bindings
+        spec = create_spec(self.current, 'sha256:new')
+        self.assertEqual(spec['HostConfig']['PortBindings']['4277/tcp'], bindings)
+
+    def test_dynamic_host_port_is_preserved_without_copying_extra_runtime_addresses(self):
+        self.current['HostConfig']['PortBindings']['4277/tcp'] = [{'HostIp': '', 'HostPort': ''}]
+        self.current['NetworkSettings']['Ports'] = {'4277/tcp': [
+            {'HostIp': '0.0.0.0', 'HostPort': '32777'}, {'HostIp': '::', 'HostPort': '32777'}]}
+        spec = create_spec(self.current, 'sha256:new')
+        self.assertEqual(spec['HostConfig']['PortBindings']['4277/tcp'],
+                         [{'HostIp': '', 'HostPort': '32777'}])
 
     def test_success_persists_choice_and_backs_up_settings(self):
         self.updater.switch({'channel': 'develop'}, 'a' * 32)
