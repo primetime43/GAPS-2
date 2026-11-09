@@ -112,7 +112,7 @@ sudo "$@" primetime43/gaps-2:develop /app/docker_updater.py
 
 Then retry **Get latest Develop** under **Settings > Updates**. A previous error can remain displayed until the next update request succeeds.
 
-Older updater builds use their hostname as a Docker container ID or name. Synology can retain an old hostname when recreating a container, causing a misleading shared-data-volume error even when both mounts match. The fixed hostname above works around that behavior. Current source identifies the running helper by its configured hostname and reports identification failures separately from mount mismatches.
+Older updater builds use their hostname as a Docker container ID or name. Synology can retain an old hostname when recreating a container, causing a misleading shared-data-volume error even when both mounts match. The fixed hostname above works around that behavior. Current source identifies the running helper by its configured hostname, tolerates delayed container visibility during startup, and reports identification failures separately from mount mismatches.
 
 ## Switch builds
 
@@ -120,6 +120,8 @@ Older updater builds use their hostname as a Docker container ID or name. Synolo
 2. Click **Apply and restart**. Active scans stop during the restart.
 3. The updater pulls the image, stops GAPS, backs up settings and saved scans, and starts the replacement with the existing ports, volumes, and network settings.
 4. The page reconnects and reloads after the startup check passes. A failed startup restores the previous image and settings automatically.
+
+On Synology, container removal can finish before the published port is released. The updater briefly retries that startup condition and removes an incomplete replacement before attempting rollback.
 
 Updates are applied on demand, not automatically whenever a new build appears. The chosen image is saved by immutable image ID. If Compose recreates the original bootstrap image later, the updater reapplies that saved image. To intentionally go back to Stable, use the selector before changing the deployment externally.
 
