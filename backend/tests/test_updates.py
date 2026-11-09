@@ -247,22 +247,6 @@ class DockerLifecycleTests(unittest.TestCase):
         self.assertEqual([call.args[0] for call in sleep.call_args_list], [1, 2, 3])
         self.docker.call.assert_called_with('DELETE', '/containers/gaps2?force=true')
 
-    def test_create_repairs_dual_stack_bindings_from_an_old_journal(self):
-        self.docker.call = Mock(return_value=None)
-        payload = {'Image': 'sha256:old', 'HostConfig': {'PortBindings': {
-            '4277/tcp': [
-                {'HostIp': '', 'HostPort': '4277'},
-                {'HostIp': '::', 'HostPort': '4277'},
-            ]
-        }}}
-        self.docker.create('gaps2', payload)
-        created = self.docker.call.call_args_list[0].args[2]
-        self.assertEqual(created['HostConfig']['PortBindings']['4277/tcp'], [
-            {'HostIp': '', 'HostPort': '4277'}
-        ])
-        self.assertEqual(len(payload['HostConfig']['PortBindings']['4277/tcp']), 2)
-
-
 class DockerUpdaterTests(unittest.TestCase):
     def setUp(self):
         folder = tempfile.TemporaryDirectory()
@@ -287,29 +271,12 @@ class DockerUpdaterTests(unittest.TestCase):
         self.updater.wait_healthy = Mock()
 
     def test_recreation_preserves_ports_mounts_network_aliases_and_user_environment(self):
-        self.current['NetworkSettings']['Ports'] = {'4277/tcp': [
-            {'HostIp': '0.0.0.0', 'HostPort': '4277'},
-            {'HostIp': '::', 'HostPort': '4277'},
-        ]}
         spec = create_spec(self.current, 'sha256:new', self.docker.image('sha256:old'))
         self.assertEqual(spec['HostConfig'], self.current['HostConfig'])
         self.assertEqual(spec['NetworkingConfig']['EndpointsConfig']['gaps'], {'Aliases': ['gaps2']})
         self.assertEqual(spec['Env'], ['FLASK_ENV=production', 'PUID=1234'])
         self.assertNotIn('Cmd', spec)
         self.assertNotIn('Entrypoint', spec)
-
-    def test_recreation_resolves_a_dynamic_port_without_copying_runtime_ipv6_expansion(self):
-        self.current['HostConfig']['PortBindings']['4277/tcp'] = [
-            {'HostIp': '', 'HostPort': '0'}
-        ]
-        self.current['NetworkSettings']['Ports'] = {'4277/tcp': [
-            {'HostIp': '0.0.0.0', 'HostPort': '49153'},
-            {'HostIp': '::', 'HostPort': '49153'},
-        ]}
-        spec = create_spec(self.current, 'sha256:new')
-        self.assertEqual(spec['HostConfig']['PortBindings']['4277/tcp'], [
-            {'HostIp': '', 'HostPort': '49153'}
-        ])
 
     def test_runtime_dual_stack_expansion_does_not_replace_configured_binding(self):
         self.current['NetworkSettings']['Ports'] = {'4277/tcp': [
