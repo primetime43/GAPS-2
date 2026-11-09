@@ -128,6 +128,11 @@ class Docker:
         self.call('DELETE', f'/containers/{quote(name, safe="")}?force=true')
 
     def create(self, name, payload):
+        # Also repair specs saved by older updaters in an interrupted journal.
+        payload = copy.deepcopy(payload)
+        host = payload.get('HostConfig', {})
+        if 'PortBindings' in host:
+            host['PortBindings'] = normalize_port_bindings(host['PortBindings'])
         self.call('POST', '/containers/create?' + urlencode({'name': name}), payload)
         try:
             for attempt in range(START_ATTEMPTS):
@@ -160,6 +165,19 @@ class Docker:
         return self.call('GET', f'/exec/{job["Id"]}/json').get('ExitCode') == 0
 
 
+def normalize_port_bindings(ports):
+    """An unspecified host address already asks Docker to bind both families."""
+    result = copy.deepcopy(ports)
+    for bindings in result.values():
+        if not bindings:
+            continue
+        wildcard_ports = {b.get('HostPort') for b in bindings if not b.get('HostIp')
+                          and b.get('HostPort') not in (None, '', '0')}
+        bindings[:] = [b for b in bindings if not (
+            b.get('HostIp') == '::' and b.get('HostPort') in wildcard_ports)]
+    return result
+
+
 def create_spec(container, image, previous_image=None):
     """Preserve deployment settings, while taking new defaults from the image."""
     config = container['Config']
@@ -181,10 +199,21 @@ def create_spec(container, image, previous_image=None):
         spec['Labels'][MANAGED] = 'true'
     spec['Image'] = image
     spec['HostConfig'] = copy.deepcopy(container['HostConfig'])
-    if container['NetworkSettings'].get('Ports'):
-        spec['HostConfig']['PortBindings'] = {
-            port: bindings for port, bindings in container['NetworkSettings']['Ports'].items() if bindings
-        }
+    # NetworkSettings reports effective bindings, which may expand one wildcard
+    # publication into IPv4 and IPv6 entries. Recreate the configured bindings;
+    # use runtime values only to retain dynamically assigned host ports.
+    runtime_ports = container['NetworkSettings'].get('Ports') or {}
+    ports = spec['HostConfig'].get('PortBindings') or {}
+    for port, bindings in ports.items():
+        for binding in bindings or []:
+            if binding.get('HostPort') in (None, '', '0'):
+                address = binding.get('HostIp') or '0.0.0.0'
+                effective = next((b for b in runtime_ports.get(port) or []
+                                  if (b.get('HostIp') or '0.0.0.0') == address), None)
+                if effective:
+                    binding['HostPort'] = effective['HostPort']
+    if ports:
+        spec['HostConfig']['PortBindings'] = normalize_port_bindings(ports)
     endpoints = {}
     for name, network in container['NetworkSettings']['Networks'].items():
         endpoint = {key: copy.deepcopy(network[key]) for key in ('IPAMConfig', 'DriverOpts') if network.get(key)}

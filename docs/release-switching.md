@@ -121,7 +121,9 @@ Older updater builds use their hostname as a Docker container ID or name. Synolo
 3. The updater pulls the image, stops GAPS, backs up settings and saved scans, and starts the replacement with the existing ports, volumes, and network settings.
 4. The page reconnects and reloads after the startup check passes. A failed startup restores the previous image and settings automatically.
 
-On Synology, container removal can finish before the published port is released. The updater briefly retries that startup condition and removes an incomplete replacement before attempting rollback.
+On Synology, container removal can finish before the published port is released. Docker may also report one wildcard publication as separate IPv4 and IPv6 runtime bindings. The updater preserves the original publication, collapses that duplicate runtime expansion, briefly retries delayed port release, and removes an incomplete replacement before attempting rollback.
+
+A persistent port-allocation failure can also come from overlapping bindings, even when no other container or host process owns the port. Older updaters copied Docker's expanded runtime port list into replacement and rollback specifications. An unspecified host address plus an explicit `::` binding for the same host port can then conflict. Current source preserves configured bindings, retains dynamically allocated host ports, and removes that overlap when creating replacements, including specifications saved in an older rollback journal. Refresh the separate updater container to install this fix; updating the app alone does not refresh the updater.
 
 Updates are applied on demand, not automatically whenever a new build appears. The chosen image is saved by immutable image ID. If Compose recreates the original bootstrap image later, the updater reapplies that saved image. To intentionally go back to Stable, use the selector before changing the deployment externally.
 
